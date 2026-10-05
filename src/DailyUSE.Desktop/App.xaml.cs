@@ -103,6 +103,8 @@ public partial class App : Application
             if (e.Args.Contains("--details") || e.Args.Contains("--software"))
                 window.ShowPreviewDetails(e.Args.Contains("--software"));
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+            await window.WaitForLensPreviewAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
             var content = window.PreviewContent;
             // An exported bitmap has no physical LCD subpixels; avoid colored fringes when it is scaled.
             TextOptions.SetTextRenderingMode(content, TextRenderingMode.Grayscale);

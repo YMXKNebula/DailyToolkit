@@ -1,5 +1,6 @@
 * text=auto eol=lf
 *.png binary
+*.jpg binary
 *.exe binary
 *.zip binary
 *.rtf binary

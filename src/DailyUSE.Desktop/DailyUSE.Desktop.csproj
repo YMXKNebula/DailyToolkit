@@ -13,6 +13,7 @@
     <ProjectReference Include="../DailyUSE.Core/DailyUSE.Core.csproj" />
     <EmbeddedResource Include="Environment/HardwareProbe.ps1" />
     <EmbeddedResource Include="Gaming/Lens.hlsl" />
+    <EmbeddedResource Include="Assets/lens-preview.jpg" LogicalName="DailyUSE.Desktop.Assets.lens-preview.jpg" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
     <InternalsVisibleTo Include="DailyUSE.Desktop.Tests" />

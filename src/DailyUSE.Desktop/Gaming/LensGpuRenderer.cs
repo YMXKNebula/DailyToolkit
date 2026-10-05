@@ -22,7 +22,7 @@ internal sealed class LensGpuRenderer : IDisposable
     private ID3D11VertexShader? _vertex;
     private ID3D11PixelShader? _pixel;
     private Buffer? _parameters;
-    private readonly int _width, _height;
+    private int _width, _height;
     public long FramesRendered { get; private set; }
 
     public LensGpuRenderer(IntPtr window, int width, int height, bool software = false)
@@ -40,23 +40,45 @@ internal sealed class LensGpuRenderer : IDisposable
             _vertex = Device.CreateVertexShader(Compiler.Compile(shader, "VS", "Lens.hlsl", "vs_5_0", ShaderFlags.OptimizationLevel3).Span);
             _pixel = Device.CreatePixelShader(Compiler.Compile(shader, "PS", "Lens.hlsl", "ps_5_0", ShaderFlags.OptimizationLevel3).Span);
             _parameters = Device.CreateBuffer(new BufferDescription(48, BindFlags.ConstantBuffer, ResourceUsage.Default));
-            using var dxgiDevice = Device.QueryInterface<IDXGIDevice>();
-            using var adapter = dxgiDevice.GetAdapter();
-            using var factory = adapter.GetParent<IDXGIFactory2>();
-            _swapChain = factory.CreateSwapChainForHwnd(Device, window, new SwapChainDescription1
+            if (window != IntPtr.Zero)
             {
-                Width = (uint)width, Height = (uint)height, Format = Format.B8G8R8A8_UNorm,
-                SampleDescription = new(1,0), BufferUsage = Usage.RenderTargetOutput, BufferCount = 2,
-                SwapEffect = SwapEffect.Discard, Scaling = Scaling.Stretch, AlphaMode = AlphaMode.Ignore
-            });
-            factory.MakeWindowAssociation(window, WindowAssociationFlags.IgnoreAltEnter);
-            _backBuffer = _swapChain.GetBuffer<ID3D11Texture2D>(0);
-            var description = _backBuffer.Description;
-            description.BindFlags = BindFlags.RenderTarget;
-            _output = Device.CreateTexture2D(description);
-            _target = Device.CreateRenderTargetView(_output);
+                using var dxgiDevice = Device.QueryInterface<IDXGIDevice>();
+                using var adapter = dxgiDevice.GetAdapter();
+                using var factory = adapter.GetParent<IDXGIFactory2>();
+                _swapChain = factory.CreateSwapChainForHwnd(Device, window, new SwapChainDescription1
+                {
+                    Width = (uint)width, Height = (uint)height, Format = Format.B8G8R8A8_UNorm,
+                    SampleDescription = new(1,0), BufferUsage = Usage.RenderTargetOutput, BufferCount = 2,
+                    SwapEffect = SwapEffect.Discard, Scaling = Scaling.Stretch, AlphaMode = AlphaMode.Ignore
+                });
+                factory.MakeWindowAssociation(window, WindowAssociationFlags.IgnoreAltEnter);
+                _backBuffer = _swapChain.GetBuffer<ID3D11Texture2D>(0);
+            }
+            CreateOutput();
         }
         catch { Dispose(); throw; }
+    }
+
+    private void CreateOutput()
+    {
+        _output = Device.CreateTexture2D(new Texture2DDescription
+        {
+            Width=(uint)_width, Height=(uint)_height, MipLevels=1, ArraySize=1,
+            Format=Format.B8G8R8A8_UNorm, SampleDescription=new(1,0),
+            Usage=ResourceUsage.Default, BindFlags=BindFlags.RenderTarget
+        });
+        _target = Device.CreateRenderTargetView(_output);
+    }
+
+    public void ResizePreview(int width, int height)
+    {
+        if (_swapChain is not null) throw new InvalidOperationException("Only offscreen previews can be resized.");
+        if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
+        if (_width == width && _height == height) return;
+        _context.ClearState();
+        _target?.Dispose(); _target=null; _output?.Dispose(); _output=null;
+        _width=width; _height=height;
+        CreateOutput();
     }
 
     public void Render(ID3D11Texture2D texture, SourceArea source, double sharpening, bool present = true)
@@ -73,6 +95,13 @@ internal sealed class LensGpuRenderer : IDisposable
             _sourceView = Device.CreateShaderResourceView(_source);
         }
         _context.CopyResource(_source, texture);
+        RenderLast(source,sharpening,present);
+    }
+
+    public void RenderLast(SourceArea source, double sharpening, bool present = true)
+    {
+        if (_source is null) return;
+        var description=_source.Description;
         var parameters = new Parameters
         {
             Source = new((float)source.Left, (float)source.Top, (float)source.Width, (float)source.Height),

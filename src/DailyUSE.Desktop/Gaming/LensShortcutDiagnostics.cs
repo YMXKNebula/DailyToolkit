@@ -19,7 +19,7 @@ internal static class LensShortcutDiagnostics
         });
         using var gaming = new GamingViewModel(new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")))
         {
-            FrameWidth=320
+            FrameWidth=320,FrameHeight=240
         };
         using var controller = new LensShortcutController(source);
         controller.ToggleRequested += gaming.Toggle;
@@ -48,6 +48,24 @@ internal static class LensShortcutDiagnostics
             if (gaming.IsActive || GetForegroundWindow()==source.Handle) throw new InvalidOperationException("The check did not begin in the background with capture off.");
             Key(true); Key(false);
             await Wait(() => gaming.IsVisible,"The first background shortcut did not start and display the lens.");
+            var initial=gaming.ActiveBounds ?? throw new InvalidOperationException("The visible lens has no bounds.");
+            if (initial.Width != 320 || initial.Height != 240) throw new InvalidOperationException("The live lens did not use independent width and height.");
+            var pointer=gaming.PointerForDiagnostics ?? throw new InvalidOperationException("The native mouse hook was not installed.");
+            if (!pointer.Process(0x201,initial.Left+2,initial.Top+2) ||
+                !pointer.Process(0x200,initial.Left+42,initial.Top+22) || !pointer.Process(0x202,initial.Left+42,initial.Top+22))
+                throw new InvalidOperationException("The live lens did not accept a border drag.");
+            await Wait(() =>
+            {
+                if (!GetWindowRect(gaming.LensHandle,out var rect)) return false;
+                return rect.Left == initial.Left+40 && rect.Top == initial.Top+20 && rect.Right-rect.Left == 320 && rect.Bottom-rect.Top == 240;
+            },"The live native window did not move without resizing.");
+            var moved=gaming.ActiveBounds!;
+            for (var i=0;i<40;i++) pointer.Process(0x20A,moved.Left+20,moved.Top+20,120);
+            if (gaming.Zoom != 8 || !gaming.IsVisible) throw new InvalidOperationException("Wheel zoom hid the lens at its upper limit.");
+            for (var i=0;i<40;i++) pointer.Process(0x20A,moved.Left+20,moved.Top+20,-120);
+            if (gaming.Zoom != 1 || !gaming.IsVisible) throw new InvalidOperationException("Wheel zoom hid the lens at its lower limit.");
+            await Task.Delay(120);
+            if (!gaming.IsVisible) throw new InvalidOperationException("Rendering failed after dragging or repeated wheel changes.");
             Key(true); Key(false);
             await Wait(() => !gaming.IsRequestedVisible,"The same shortcut did not hide the lens.");
             if (GetForegroundWindow()==source.Handle) throw new InvalidOperationException("Shortcut handling activated its background window.");
@@ -68,7 +86,8 @@ internal static class LensShortcutDiagnostics
             await File.WriteAllTextAsync(outputPath,JsonSerializer.Serialize(new
             {
                 BackgroundRegistration=true,FirstShortcutStartsCapture=true,SingleShortcutToggles=true,
-                HoldShows=true,ReleaseHides=true,ReleasedBeforeStartupStaysHidden=true,EmptyShortcutUnregistered=true
+                HoldShows=true,ReleaseHides=true,ReleasedBeforeStartupStaysHidden=true,EmptyShortcutUnregistered=true,
+                IndependentLiveDimensions=true,NativeWindowDrag=true,WheelLimitsRemainVisible=true,FollowCaptureFrames=gaming.FrameRate == 0
             }));
         }
         finally
@@ -102,4 +121,6 @@ internal static class LensShortcutDiagnostics
     [DllImport("user32.dll",SetLastError=true)] private static extern uint SendInput(uint count,Input[] input,int size);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+    [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left,Top,Right,Bottom; }
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window,out NativeRect bounds);
 }

@@ -1,6 +1,7 @@
 <Window x:Class="DailyUSE.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:DailyUSE.Desktop.Controls"
         Title="DailyUSE" Width="1040" Height="800" MinWidth="680" MinHeight="540"
         FontFamily="Microsoft YaHei UI" FontSize="14"
         Foreground="{DynamicResource TextBrush}" Background="{DynamicResource WindowBrush}"
@@ -23,7 +24,7 @@
         <StackPanel DockPanel.Dock="Bottom" Margin="12,0,0,0">
           <TextBlock Text="本机运行" Style="{StaticResource MutedText}" />
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.1</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.2</Hyperlink>
           </TextBlock>
         </StackPanel>
         <StackPanel>
@@ -187,30 +188,56 @@
               <Border x:Name="LensDetailsPanel" Visibility="Collapsed">
                 <StackPanel Margin="0,16,0,0">
                   <TextBlock Text="软件最小化或其他窗口在前台时，快捷键同样可用。点击快捷键框可以修改，按 Esc 退出输入。" Style="{StaticResource MutedText}" Margin="0,0,0,18" />
-                  <StackPanel IsEnabled="{Binding CanConfigure}">
+                  <Grid x:Name="LensSettingsGrid" SizeChanged="LensSettingsSizeChanged">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                  <StackPanel x:Name="LensSettingsControls">
+                    <StackPanel IsEnabled="{Binding CanConfigure}">
                     <TextBlock Text="显示器" FontWeight="SemiBold" Margin="0,0,0,8" />
                     <ComboBox ItemsSource="{Binding Monitors}" SelectedItem="{Binding SelectedMonitor}" Padding="8" Margin="0,0,0,18" />
+                    </StackPanel>
                     <Grid>
                       <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                       <TextBlock Text="放大倍率" FontWeight="SemiBold" />
                       <TextBlock Grid.Column="1" Text="{Binding ZoomText}" />
                     </Grid>
-                    <Slider Minimum="1.5" Maximum="4" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding Zoom}" Margin="0,10,0,18" AutomationProperties.Name="放大倍率" />
-                    <CheckBox Content="跟随鼠标（默认固定在屏幕中央）" IsChecked="{Binding FollowMouse}" Margin="0,0,0,18" />
+                    <Slider Minimum="1" Maximum="8" TickFrequency="0.25" IsSnapToTickEnabled="True" Value="{Binding Zoom}" Margin="0,10,0,18" AutomationProperties.Name="放大倍率" />
+                    <StackPanel IsEnabled="{Binding CanConfigure}">
+                    <TextBlock Text="放大框大小" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding FrameSizeText}" Style="{StaticResource MutedText}" Margin="0,6,0,10" />
                     <Grid>
                       <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                      <TextBlock Text="框的大小" FontWeight="SemiBold" />
-                      <TextBlock Grid.Column="1" Text="{Binding FrameSizeText}" />
+                      <TextBlock Text="宽度（像素）" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Text="{Binding FrameWidth, StringFormat=F0}" Width="68" Padding="6,4"
+                               LostFocus="CommitLensSize" PreviewKeyDown="LensSizeKeyDown"
+                               GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur"
+                               Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                               AutomationProperties.Name="输入放大框宽度" />
                     </Grid>
-                    <Slider Minimum="320" Maximum="1000" TickFrequency="40" IsSnapToTickEnabled="True" Value="{Binding FrameWidth}" Margin="0,10,0,18" AutomationProperties.Name="放大框宽度" />
+                    <Slider Minimum="160" Maximum="1600" TickFrequency="8" IsSnapToTickEnabled="True" Value="{Binding FrameWidth}" Margin="0,10,0,12" AutomationProperties.Name="放大框宽度" />
+                    <Grid>
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                      <TextBlock Text="高度（像素）" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Text="{Binding FrameHeight, StringFormat=F0}" Width="68" Padding="6,4"
+                               LostFocus="CommitLensSize" PreviewKeyDown="LensSizeKeyDown"
+                               GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur"
+                               Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                               AutomationProperties.Name="输入放大框高度" />
+                    </Grid>
+                    <Slider Minimum="120" Maximum="1200" TickFrequency="8" IsSnapToTickEnabled="True" Value="{Binding FrameHeight}" Margin="0,10,0,18" AutomationProperties.Name="放大框高度" />
                     <TextBlock Text="锐化强度" FontWeight="SemiBold" />
                     <Slider Minimum="0" Maximum="1" TickFrequency="0.05" Value="{Binding Sharpening}" Margin="0,10,0,18" AutomationProperties.Name="锐化强度" />
                     <Grid Margin="0,0,0,18">
                       <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                      <TextBlock Text="帧率上限" FontWeight="SemiBold" VerticalAlignment="Center" />
-                      <ComboBox Grid.Column="1" ItemsSource="{Binding FrameRates}" SelectedItem="{Binding FrameRate}" Width="90" Padding="6" />
+                      <TextBlock Text="帧率" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      <ComboBox Grid.Column="1" ItemsSource="{Binding FrameRates}" DisplayMemberPath="Label" SelectedValuePath="Value"
+                                SelectedValue="{Binding FrameRate}" Width="126" Padding="6" />
                     </Grid>
+                    </StackPanel>
+                    <TextBlock Text="拖拽放大框边缘移动位置，鼠标在框内时用滚轮调倍率（1–8×）。框内点击仍能操作下面的窗口。" Style="{StaticResource MutedText}" Margin="0,0,0,14" />
                   </StackPanel>
+                  <controls:LensPreview x:Name="LensPhotoPreview" Grid.Column="1" VerticalAlignment="Top" Margin="18,0,0,18" />
+                  </Grid>
                   <WrapPanel>
                     <Button Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" Margin="0,0,8,8" />
                     <Button Content="停止捕获" Command="{Binding StopCommand}" Margin="0,0,0,8" />

@@ -60,6 +60,30 @@ public partial class MainWindow : Window
     }
 
     internal FrameworkElement PreviewContent => RootContent;
+    internal Task WaitForLensPreviewAsync() => LensPhotoPreview.IsVisible ? LensPhotoPreview.Ready : Task.CompletedTask;
+
+    private void CommitLensSize(object sender,RoutedEventArgs e)
+    {
+        var binding=((System.Windows.Controls.TextBox)sender).GetBindingExpression(System.Windows.Controls.TextBox.TextProperty);
+        binding?.UpdateSource();
+        binding?.UpdateTarget();
+    }
+
+    private void LensSizeKeyDown(object sender,KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        CommitLensSize(sender,e); e.Handled=true;
+    }
+
+    private void LensSettingsSizeChanged(object sender,SizeChangedEventArgs e)
+    {
+        var sideBySide=e.NewSize.Width >= 600;
+        LensSettingsGrid.ColumnDefinitions[0].Width=sideBySide ? new GridLength(260) : new GridLength(1,GridUnitType.Star);
+        LensSettingsGrid.ColumnDefinitions[1].Width=sideBySide ? new GridLength(1,GridUnitType.Star) : new GridLength(0);
+        System.Windows.Controls.Grid.SetColumn(LensPhotoPreview,sideBySide ? 1 : 0);
+        System.Windows.Controls.Grid.SetRow(LensPhotoPreview,sideBySide ? 0 : 1);
+        LensPhotoPreview.Margin=sideBySide ? new Thickness(18,0,0,18) : new Thickness(0,8,0,18);
+    }
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {

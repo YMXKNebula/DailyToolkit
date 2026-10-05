@@ -96,6 +96,21 @@ Test("Magnifier supports a single empty or custom shortcut and validated activat
     Require(!new KeyboardShortcut(0,0x10,"Shift").IsValid && !new KeyboardShortcut(0x100,0x5A,"Z").IsValid);
 });
 
+Test("Frame pacing follows high-rate input and does not halve capped output at timing jitter", () =>
+{
+    var follow=new LensFramePacer(0,120000);
+    var cap=new LensFramePacer(60,120000);
+    var rendered=0;
+    for (var frame=0;frame<240;frame++)
+    {
+        var tick=frame*1000+(frame%3-1)*8;
+        Require(follow.ShouldRender(tick),"Follow mode dropped an incoming 120 Hz frame");
+        if (cap.ShouldRender(tick)) rendered++;
+    }
+    Require(rendered is >= 119 and <= 121,$"60 Hz cap rendered {rendered} frames in two seconds");
+    Require(cap.ShouldRender(1_000_000),"Pacing did not resume after a pause");
+});
+
 Test("Weather uses only valid Windows temperature labels", () =>
 {
     Require(WindowsWeatherText.Parse("天气，18°C，多云").Available);

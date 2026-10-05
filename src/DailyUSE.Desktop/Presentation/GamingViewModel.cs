@@ -10,11 +10,15 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     private LensNativeWindow? _window;
     private LensGpuRenderer? _renderer;
     private LensCapture? _capture;
+    private LensPointerController? _pointer;
+    private LensLayout? _layout;
+    private CaptureMonitor? _activeMonitor;
+    private int _centerX,_centerY;
     private CaptureMonitor? _monitor;
-    private double _zoom = 2, _width = 640, _sharpening = 0.35;
-    private bool _followMouse, _active, _hidden;
+    private double _zoom = 2, _width = 640, _height = 384, _sharpening = 0.35;
+    private bool _active, _hidden;
     private bool _favorite;
-    private int _fps = 60, _generation;
+    private int _fps, _generation;
     private string _status = "未开启";
     private readonly GamingPreferencesStore _preferencesStore;
     private GamingPreferences _preferences;
@@ -41,19 +45,24 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         Notify(nameof(Monitors));
         SelectedMonitor=Monitors.FirstOrDefault(m => m.Handle == selected) ?? Monitors.FirstOrDefault();
     }
-    public IReadOnlyList<int> FrameRates { get; } = new[] { 30,60 };
+    public IReadOnlyList<LensFrameRate> FrameRates { get; } = new LensFrameRate[] { new(0,"跟随画面"),new(30,"30 帧/秒"),new(60,"60 帧/秒"),new(120,"120 帧/秒"),new(144,"144 帧/秒"),new(240,"240 帧/秒") };
     public CaptureMonitor? SelectedMonitor { get => _monitor; set { if (Set(ref _monitor,value)) { StartCommand.Refresh(); ToggleCommand.Refresh(); } } }
-    public double Zoom { get => _zoom; set { if (double.IsFinite(value) && Set(ref _zoom,Math.Clamp(value,1.5,4))) Notify(nameof(ZoomText)); } }
-    public double FrameWidth { get => _width; set { if (double.IsFinite(value) && Set(ref _width,Math.Clamp(value,320,1000))) Notify(nameof(FrameSizeText)); } }
+    public double Zoom { get => _zoom; set { if (double.IsFinite(value) && Set(ref _zoom,Math.Clamp(value,1,8))) { Notify(nameof(ZoomText)); Reposition(); } } }
+    public double FrameWidth { get => _width; set { if (double.IsFinite(value) && Set(ref _width,Math.Round(Math.Clamp(value,160,1600)))) Notify(nameof(FrameSizeText)); } }
+    public double FrameHeight { get => _height; set { if (double.IsFinite(value) && Set(ref _height,Math.Round(Math.Clamp(value,120,1200)))) Notify(nameof(FrameSizeText)); } }
     public double Sharpening { get => _sharpening; set { if (double.IsFinite(value)) Set(ref _sharpening,Math.Clamp(value,0,1)); } }
-    public int FrameRate { get => _fps; set => Set(ref _fps,value == 30 ? 30 : 60); }
-    public bool FollowMouse { get => _followMouse; set => Set(ref _followMouse,value); }
+    public int FrameRate { get => _fps; set => Set(ref _fps,FrameRates.Any(rate => rate.Value == value) ? value : 0); }
+    public string FrameRateText => FrameRates.First(rate => rate.Value == FrameRate).Label;
+    public void AdjustZoom(int wheelDelta) => Zoom += wheelDelta/120d*0.25;
     public bool IsActive => _active;
+    internal PixelBounds? ActiveBounds => _layout?.Output;
+    internal LensPointerController? PointerForDiagnostics => _pointer;
+    internal IntPtr LensHandle => _window?.Handle ?? IntPtr.Zero;
     public bool IsRequestedVisible => _active && !_hidden;
     public bool IsVisible => IsRequestedVisible && _capture is { FramesRendered: > 0 };
     public bool CanConfigure => !IsActive;
-    public string ZoomText => $"{Zoom:0.#}×";
-    public string FrameSizeText => $"{Math.Round(FrameWidth)} × {Math.Round(FrameWidth*0.6)} 像素";
+    public string ZoomText => $"{Zoom:0.##}×";
+    public string FrameSizeText => $"{FrameWidth:0} × {FrameHeight:0} 像素";
     public string Status { get => _status; private set => Set(ref _status,value); }
     public string ToggleText => IsRequestedVisible ? "隐藏放大框" : "显示放大框";
     public RelayCommand StartCommand { get; }
@@ -106,26 +115,24 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         {
             if (!GraphicsCaptureSession.IsSupported()) { Status = "当前 Windows 图形环境不支持屏幕捕获。"; return; }
             var width = (int)Math.Round(FrameWidth);
-            var height = (int)Math.Round(FrameWidth*0.6);
+            var height = (int)Math.Round(FrameHeight);
             var layout = LensLayout.Calculate(monitor.Bounds,width,height,Zoom,
                 monitor.Bounds.Left+monitor.Bounds.Width/2,monitor.Bounds.Top+monitor.Bounds.Height/2);
+            _activeMonitor=monitor;
+            _layout=layout;
+            _centerX=layout.Output.Left+layout.Output.Width/2;
+            _centerY=layout.Output.Top+layout.Output.Height/2;
             _window = new(layout.Output);
             _renderer = new(_window.Handle,layout.Output.Width,layout.Output.Height);
             var item = CaptureInterop.ForMonitor(monitor.Handle);
             var generation = ++_generation;
-            SourceArea MovingSource()
-            {
-                var cursor = LensNativeWindow.Cursor();
-                var moving = LensLayout.Calculate(monitor.Bounds,width,height,Zoom,cursor.X,cursor.Y);
-                _window?.Move(moving.Output);
-                return moving.Source;
-            }
-            _capture = new(_renderer,item,layout.Source,Sharpening,FrameRate,FollowMouse ? MovingSource : null);
+            _capture = new(_renderer,item,layout.Source,Sharpening,FrameRate);
+            _pointer = new(() => IsVisible ? _layout?.Output : null,MoveFrame,AdjustZoom);
             _capture.FirstFrame += () => Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 if (generation != _generation || !IsActive) return;
                 _startupTimer?.Stop();
-                if (!_hidden) { _window?.Show(); Status = $"已显示 · {ZoomText} · {(FollowMouse ? "跟随鼠标" : "屏幕中央")}"; }
+                if (!_hidden) { _window?.Show(); Status = $"已显示 · {ZoomText} · 拖拽边缘移动，框内滚轮调倍率"; }
                 Notify(nameof(IsVisible));
             });
             _capture.Failed += reason => Application.Current.Dispatcher.BeginInvoke(() =>
@@ -153,6 +160,24 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void MoveFrame(int left,int top)
+    {
+        if (_layout is null || _activeMonitor is null) return;
+        var bounds=_activeMonitor.Bounds;
+        _centerX=Math.Clamp(left,bounds.Left,bounds.Left+bounds.Width-_layout.Output.Width)+_layout.Output.Width/2;
+        _centerY=Math.Clamp(top,bounds.Top,bounds.Top+bounds.Height-_layout.Output.Height)+_layout.Output.Height/2;
+        Reposition();
+    }
+
+    private void Reposition()
+    {
+        if (_layout is null || _activeMonitor is null || !IsActive) return;
+        _layout=LensLayout.Calculate(_activeMonitor.Bounds,_layout.Output.Width,_layout.Output.Height,Zoom,_centerX,_centerY);
+        _window?.Move(_layout.Output);
+        _capture?.UpdateSource(_layout.Source,Sharpening);
+        if (IsRequestedVisible) Status=$"已显示 · {ZoomText} · 拖拽边缘移动，框内滚轮调倍率";
+    }
+
     public void Toggle()
     {
         if (IsRequestedVisible) Hide(); else Show();
@@ -162,6 +187,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         if (!IsActive) { Start(); return; }
         _hidden = false;
         if (_capture is not null) _capture.Paused = false;
+        if (_layout is not null) _capture?.UpdateSource(_layout.Source,Sharpening);
         if (_capture is { FramesRendered: > 0 }) { _window?.Show(); Status=$"已显示 · {ZoomText}"; }
         else { Status="正在读取屏幕画面…"; _startupTimer?.Start(); }
         RefreshVisibility();
@@ -170,6 +196,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     {
         if (!IsActive) return;
         _hidden = true;
+        _pointer?.CancelDrag();
         if (_capture is not null) _capture.Paused = true;
         _startupTimer?.Stop();
         _window?.Hide();
@@ -179,11 +206,13 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public void Stop()
     {
         _generation++;
+        _pointer?.Dispose(); _pointer=null;
         _startupTimer?.Stop(); _startupTimer=null;
         _window?.Hide();
         _capture?.Dispose(); _capture = null;
         _renderer?.Dispose(); _renderer = null;
         _window?.Dispose(); _window = null;
+        _layout=null; _activeMonitor=null;
         _active = false; _hidden = false;
         Status = "未开启";
         RefreshState();
@@ -200,3 +229,5 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     }
     public void Dispose() => Stop();
 }
+
+public sealed record LensFrameRate(int Value,string Label);

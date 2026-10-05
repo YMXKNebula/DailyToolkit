@@ -48,6 +48,9 @@ internal static class Program
         await CheckBackgroundShortcutAsync();
         LensDiagnostics.CheckShader();
         Console.WriteLine("PASS Actual Direct3D shader preserves colors and reconstructs subpixel edges");
+        await CheckPhotoPreviewAsync();
+        CheckLensPointer();
+        await CheckPreviewLayoutAsync();
         var display = new DisplayInfo(1920, 1080, 1, 1920, 1040, false);
         var probe = new ControlledProbe(display);
         var clock = new ManualClock();
@@ -131,7 +134,89 @@ internal static class Program
         Require(closingProbe.WasCanceled && closingStatus.WasCanceled && closingModel.PendingWork.IsCompleted,
             "Closing did not cancel pending computer and weather detection");
         Console.WriteLine("PASS Closing cancels detection before releasing the window");
-        Console.WriteLine("13/13 desktop checks passed");
+        Console.WriteLine("16/16 desktop checks passed");
+    }
+
+    private static async Task CheckPhotoPreviewAsync()
+    {
+        await Task.Run(() =>
+        {
+            using var renderer=new LensPhotoPreviewRenderer(software:true);
+            var settings=new LensPreviewSettings(2560,1440,320,192,2,0,0);
+            var first=renderer.Render(settings);
+            Require(first.Photo.IsFrozen && first.Magnified.IsFrozen && first.Photo.PixelWidth == 1920,"Local photo was not loaded safely for background rendering");
+            byte[] Pixels(System.Windows.Media.Imaging.BitmapSource bitmap)
+            {
+                var pixels=new byte[bitmap.PixelWidth*bitmap.PixelHeight*4];
+                bitmap.CopyPixels(pixels,bitmap.PixelWidth*4,0);
+                return pixels;
+            }
+            var original=Pixels(first.Magnified);
+            var sharp=Pixels(renderer.Render(settings with { Sharpening=1 }).Magnified);
+            Require(!original.SequenceEqual(sharp),"Sharpening did not change the actual photo shader output");
+            var zoom=renderer.Render(settings with { Zoom=8 });
+            Require(!original.SequenceEqual(Pixels(zoom.Magnified)),"Zoom did not change the crop");
+            var resized=renderer.Render(settings with { Width=480,Height=640,PointerX=1,PointerY=1 });
+            Require(resized.Magnified.PixelWidth == 480 && resized.Magnified.PixelHeight == 640 &&
+                resized.Layout.Output == new PixelBounds(2080,800,480,640),"Independent size or edge-constrained dragging was incorrect");
+            var clamped=renderer.Render(settings with { ScreenWidth=200,ScreenHeight=100,Width=480,Height=640,Zoom=1 });
+            Require(clamped.Magnified.PixelWidth == 200 && clamped.Magnified.PixelHeight == 100,"Preview did not match monitor size limits");
+        });
+        Console.WriteLine("PASS Bundled photo preview runs the real shader, with zoom, sharpening, independent dimensions and monitor clipping");
+    }
+
+    private static void CheckLensPointer()
+    {
+        PixelBounds? bounds=new(10,20,320,192);
+        var moved=(0,0); var wheel=0;
+        using var controller=new LensPointerController(() => bounds,(x,y) => moved=(x,y),delta => wheel+=delta,install:false);
+        Require(!controller.Process(0x201,100,100),"Interior clicks were intercepted");
+        Require(!controller.Process(0x20A,0,0,120),"Wheel outside the lens was intercepted");
+        Require(controller.Process(0x201,12,22) && controller.Process(0x200,52,82) && moved == (50,80),"Border dragging lost its pointer offset");
+        Require(controller.Process(0x202,900,900),"Drag release outside the frame was not consumed");
+        Require(controller.Process(0x20A,100,100,120) && wheel == 120,"Wheel inside the lens did not adjust zoom");
+        Require(controller.Process(0x201,12,22),"Second drag did not begin");
+        bounds=null;
+        Require(!controller.Process(0x200,60,60) && controller.Process(0x202,60,60) &&
+            !controller.Process(0x20A,100,100,120),"Hiding retained a drag or intercepted unrelated input");
+        using var gaming=new GamingViewModel();
+        gaming.FrameWidth=800; gaming.FrameHeight=240;
+        Require(gaming.FrameSizeText == "800 × 240 像素","Changing width changed the height");
+        for (var i=0;i<100;i++) gaming.AdjustZoom(120);
+        Require(gaming.Zoom == 8 && !gaming.IsActive,"Wheel upper limit changed activation state");
+        for (var i=0;i<100;i++) gaming.AdjustZoom(-120);
+        Require(gaming.Zoom == 1 && !gaming.IsActive,"Wheel lower limit changed activation state");
+        Console.WriteLine("PASS Border dragging and wheel routing preserve interior clicks, outside input, hiding and safe zoom limits");
+    }
+
+    private static async Task CheckPreviewLayoutAsync()
+    {
+        var display=new DisplayInfo(1920,1080,1,1920,1040,false);
+        var probe=new ControlledProbe(display);
+        probe.Finish.TrySetResult();
+        var model=new MainViewModel(probe,display,new LocalProbe());
+        model.Page="gaming";
+        var window=new MainWindow(model,enableShortcuts:false)
+        {
+            ShowActivated=false,ShowInTaskbar=false,WindowStartupLocation=WindowStartupLocation.Manual,Left=-20000,Top=-20000
+        };
+        try
+        {
+            window.Show();
+            var preview=(DailyUSE.Desktop.Controls.LensPreview)window.FindName("LensPhotoPreview");
+            Require(preview.CurrentFrame is null && !model.Gaming.IsActive,"Collapsed tool decoded the photo or started capture");
+            window.ShowPreviewDetails(false);
+            await window.WaitForLensPreviewAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            window.UpdateLayout();
+            Require(preview.CurrentFrame is not null && !model.Gaming.IsActive && System.Windows.Controls.Grid.GetColumn(preview) == 1,
+                "Expanded preview was missing or did not sit beside settings");
+            window.Width=680;
+            window.UpdateLayout();
+            Require(System.Windows.Controls.Grid.GetRow(preview) == 1 && System.Windows.Controls.Grid.GetColumn(preview) == 0,
+                "Narrow layout did not place the preview below the settings");
+        }
+        finally { window.Close(); await model.PendingWork; }
+        Console.WriteLine("PASS Preview loads only when expanded, stays offline, leaves capture off and adapts to narrow windows");
     }
 
     private static void CheckFavorites()
