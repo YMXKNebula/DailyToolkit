@@ -81,7 +81,8 @@ internal sealed class LensGpuRenderer : IDisposable
         CreateOutput();
     }
 
-    public void Render(ID3D11Texture2D texture, SourceArea source, double sharpening, bool present = true)
+    public void Render(ID3D11Texture2D texture, SourceArea source, double sharpening, bool present = true,
+        bool verticalGuide = false, bool horizontalGuide = false)
     {
         var description = texture.Description;
         if (_source is null || _source.Description.Width != description.Width || _source.Description.Height != description.Height)
@@ -95,10 +96,11 @@ internal sealed class LensGpuRenderer : IDisposable
             _sourceView = Device.CreateShaderResourceView(_source);
         }
         _context.CopyResource(_source, texture);
-        RenderLast(source,sharpening,present);
+        RenderLast(source,sharpening,present,verticalGuide,horizontalGuide);
     }
 
-    public void RenderLast(SourceArea source, double sharpening, bool present = true)
+    public void RenderLast(SourceArea source, double sharpening, bool present = true,
+        bool verticalGuide = false, bool horizontalGuide = false)
     {
         if (_source is null) return;
         var description=_source.Description;
@@ -106,7 +108,7 @@ internal sealed class LensGpuRenderer : IDisposable
         {
             Source = new((float)source.Left, (float)source.Top, (float)source.Width, (float)source.Height),
             Dimensions = new(description.Width, description.Height, _width, _height),
-            Options = new((float)Math.Clamp(sharpening,0,1),2,0,0)
+            Options = new((float)Math.Clamp(sharpening,0,1),2,verticalGuide ? 1 : 0,horizontalGuide ? 1 : 0)
         };
         _context.UpdateSubresource(in parameters, _parameters!);
         _context.OMSetRenderTargets(_target!);

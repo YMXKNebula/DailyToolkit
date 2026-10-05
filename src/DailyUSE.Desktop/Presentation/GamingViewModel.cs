@@ -21,6 +21,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     private bool _active;
     private bool _favorite;
     private int _fps, _generation;
+    private int _positionResetVersion;
+    private bool _verticalGuide,_horizontalGuide;
     private string _status = "未开启";
     private readonly GamingPreferencesStore _preferencesStore;
     private GamingPreferences _preferences;
@@ -36,6 +38,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         StopCommand = new(_ => Stop(), () => IsActive);
         ToggleCommand = new(_ => Toggle(), () => IsActive || SelectedMonitor is not null);
         ToggleFavoriteCommand = new(_ => IsFavorite = !IsFavorite);
+        CenterCommand = new(_ => CenterFrame());
+        ResetDefaultsCommand = new(_ => ResetDefaults());
     }
 
     public IReadOnlyList<CaptureMonitor> Monitors { get; private set; }
@@ -59,6 +63,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public bool IsActive => _active;
     internal PixelBounds? ActiveBounds => _layout?.Output;
     internal LensPointerController? PointerForDiagnostics => _pointer;
+    internal bool VerticalGuide => _verticalGuide;
+    internal bool HorizontalGuide => _horizontalGuide;
     internal IntPtr LensHandle => _window?.Handle ?? IntPtr.Zero;
     internal bool HasCaptureResources => _window is not null || _renderer is not null || _capture is not null || _pointer is not null || _startupTimer is not null;
     public bool IsRequestedVisible => IsActive;
@@ -72,6 +78,26 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public RelayCommand StopCommand { get; }
     public RelayCommand ToggleCommand { get; }
     public RelayCommand ToggleFavoriteCommand { get; }
+    public RelayCommand CenterCommand { get; }
+    public RelayCommand ResetDefaultsCommand { get; }
+    public int PositionResetVersion => _positionResetVersion;
+    public LensMovementMode MovementMode
+    {
+        get => _preferences.MovementMode;
+        set
+        {
+            if (value == MovementMode || value is not (LensMovementMode.Movable or LensMovementMode.Fixed)) return;
+            SavePreferences(_preferences with { MovementMode=value });
+            Notify(nameof(MovementMode)); Notify(nameof(IsFixedMode)); Notify(nameof(IsMovableMode)); Notify(nameof(MovementHint));
+            if (IsFixedMode) CenterFrame();
+            if (IsVisible) UpdateActiveStatus();
+        }
+    }
+    public bool IsFixedMode { get => MovementMode == LensMovementMode.Fixed; set { if (value) MovementMode=LensMovementMode.Fixed; } }
+    public bool IsMovableMode { get => MovementMode == LensMovementMode.Movable; set { if (value) MovementMode=LensMovementMode.Movable; } }
+    public string MovementHint => IsFixedMode
+        ? "固定在屏幕中央。框内滚轮调倍率（1–8×），点击可操作下面的窗口。"
+        : "拖拽边缘移动，靠近屏幕中心时吸附并显示辅助线。框内滚轮调倍率（1–8×），点击可操作下面的窗口。";
     public bool IsFavorite
     {
         get => _favorite;
@@ -119,8 +145,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             if (!GraphicsCaptureSession.IsSupported()) { Status = "当前 Windows 图形环境不支持屏幕捕获。"; return; }
             var width = (int)Math.Round(FrameWidth);
             var height = (int)Math.Round(FrameHeight);
-            var centerX=monitor.Bounds.Left+(int)Math.Round(monitor.Bounds.Width*(_positionMonitor == monitor.Handle ? _positionX : 0.5));
-            var centerY=monitor.Bounds.Top+(int)Math.Round(monitor.Bounds.Height*(_positionMonitor == monitor.Handle ? _positionY : 0.5));
+            var centerX=monitor.Bounds.Left+(int)Math.Round(monitor.Bounds.Width*(!IsFixedMode && _positionMonitor == monitor.Handle ? _positionX : 0.5));
+            var centerY=monitor.Bounds.Top+(int)Math.Round(monitor.Bounds.Height*(!IsFixedMode && _positionMonitor == monitor.Handle ? _positionY : 0.5));
             var layout = LensLayout.Calculate(monitor.Bounds,width,height,Zoom,centerX,centerY);
             _activeMonitor=monitor;
             _centerX=layout.Output.Left+layout.Output.Width/2;
@@ -132,12 +158,13 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             var item = CaptureInterop.ForMonitor(monitor.Handle);
             var generation = ++_generation;
             _capture = new(_renderer,item,layout.Source,Sharpening,FrameRate);
-            _pointer = new(() => IsVisible ? _layout?.Output : null,MoveFrame,AdjustZoom);
+            _pointer = new(() => IsVisible ? _layout?.Output : null,MoveFrame,AdjustZoom,
+                canMove:() => IsMovableMode,dragEnded:ClearGuides);
             _capture.FirstFrame += () => Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 if (generation != _generation || !IsActive) return;
                 _startupTimer?.Stop();
-                _window?.Show(); Status = $"已开启 · {ZoomText} · 拖拽边缘移动，框内滚轮调倍率";
+                _window?.Show(); UpdateActiveStatus();
                 Notify(nameof(IsVisible));
             });
             _capture.Failed += reason => Application.Current.Dispatcher.BeginInvoke(() =>
@@ -167,23 +194,62 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
 
     private void MoveFrame(int left,int top)
     {
-        if (_layout is null || _activeMonitor is null) return;
+        if (_layout is null || _activeMonitor is null || !IsMovableMode) return;
         var bounds=_activeMonitor.Bounds;
-        _centerX=Math.Clamp(left,bounds.Left,bounds.Left+bounds.Width-_layout.Output.Width)+_layout.Output.Width/2;
-        _centerY=Math.Clamp(top,bounds.Top,bounds.Top+bounds.Height-_layout.Output.Height)+_layout.Output.Height/2;
+        var placement=LensPlacement.Snap(bounds,_layout.Output.Width,_layout.Output.Height,left,top);
+        _centerX=placement.Bounds.Left+placement.Bounds.Width/2;
+        _centerY=placement.Bounds.Top+placement.Bounds.Height/2;
+        _verticalGuide=placement.VerticalGuide; _horizontalGuide=placement.HorizontalGuide;
         _positionMonitor=_activeMonitor.Handle;
         _positionX=(_centerX-bounds.Left)/(double)bounds.Width;
         _positionY=(_centerY-bounds.Top)/(double)bounds.Height;
         Reposition();
     }
 
+    public void CenterFrame()
+    {
+        _pointer?.CancelDrag();
+        _verticalGuide=_horizontalGuide=false;
+        var monitor=_activeMonitor ?? SelectedMonitor;
+        _positionMonitor=monitor?.Handle ?? IntPtr.Zero;
+        _positionX=_positionY=0.5;
+        if (monitor is not null)
+        {
+            _centerX=monitor.Bounds.Left+monitor.Bounds.Width/2;
+            _centerY=monitor.Bounds.Top+monitor.Bounds.Height/2;
+        }
+        _positionResetVersion++;
+        Notify(nameof(PositionResetVersion));
+        Reposition();
+    }
+
+    public void ResetDefaults()
+    {
+        Stop();
+        Zoom=2; FrameWidth=640; FrameHeight=384; Sharpening=0.35; FrameRate=0;
+        SelectedMonitor=Monitors.FirstOrDefault();
+        MovementMode=LensMovementMode.Movable;
+        CenterFrame();
+        Status="已恢复默认画面设置，快捷键、按住／切换模式和收藏保留。";
+    }
+
+    private void ClearGuides()
+    {
+        if (!_verticalGuide && !_horizontalGuide) return;
+        _verticalGuide=_horizontalGuide=false;
+        Reposition();
+    }
+
+    private void UpdateActiveStatus() => Status=$"已开启 · {ZoomText} · " +
+        (IsFixedMode ? "固定居中，框内滚轮调倍率" : "拖拽边缘移动，框内滚轮调倍率");
+
     private void Reposition()
     {
         if (_layout is null || _activeMonitor is null || !IsActive) return;
         _layout=LensLayout.Calculate(_activeMonitor.Bounds,_layout.Output.Width,_layout.Output.Height,Zoom,_centerX,_centerY);
         _window?.Move(_layout.Output);
-        _capture?.UpdateSource(_layout.Source,Sharpening);
-        Status=$"已开启 · {ZoomText} · 拖拽边缘移动，框内滚轮调倍率";
+        _capture?.UpdateSource(_layout.Source,Sharpening,_verticalGuide,_horizontalGuide);
+        UpdateActiveStatus();
     }
 
     public void Toggle()
@@ -200,6 +266,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         _renderer?.Dispose(); _renderer = null;
         _window?.Dispose(); _window = null;
         _layout=null; _activeMonitor=null;
+        _verticalGuide=_horizontalGuide=false;
         _active = false;
         Status = "未开启";
         RefreshState();

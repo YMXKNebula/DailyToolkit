@@ -8,7 +8,8 @@ using Vortice.DXGI;
 namespace DailyUSE.Desktop.Gaming;
 
 internal sealed record LensPreviewSettings(int ScreenWidth, int ScreenHeight, int Width, int Height,
-    double Zoom, double Sharpening, int FrameRate, double PointerX=0.5, double PointerY=0.5);
+    double Zoom, double Sharpening, int FrameRate, double PointerX=0.5, double PointerY=0.5,
+    bool VerticalGuide=false, bool HorizontalGuide=false);
 
 internal sealed record LensPreviewFrame(BitmapSource Photo, BitmapSource Magnified, LensLayout Layout,
     LensPreviewSettings Settings);
@@ -65,7 +66,8 @@ internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposa
             var offsetY = (monitor.Height-photo.PixelHeight*scale)/2;
             var source = new SourceArea((layout.Source.Left-offsetX)/scale,(layout.Source.Top-offsetY)/scale,
                 layout.Source.Width/scale,layout.Source.Height/scale);
-            _renderer.Render(_texture!,source,settings.Sharpening,present:false);
+            _renderer.Render(_texture!,source,settings.Sharpening,present:false,
+                verticalGuide:settings.VerticalGuide,horizontalGuide:settings.HorizontalGuide);
             var output = BitmapSource.Create(layout.Output.Width,layout.Output.Height,96,96,
                 PixelFormats.Bgra32,null,_renderer.ReadOutput(),layout.Output.Width*4);
             output.Freeze();

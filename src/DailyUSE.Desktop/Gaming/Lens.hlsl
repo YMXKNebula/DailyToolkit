@@ -2,7 +2,7 @@ cbuffer LensParameters : register(b0)
 {
     float4 SourceRect; // x/y/width/height in source pixels
     float4 Dimensions; // source width/height, output width/height
-    float4 Options;    // sharpening, border width, unused, unused
+    float4 Options;    // sharpening, border width, vertical/horizontal center guide
 };
 Texture2D<float4> Source : register(t0);
 
@@ -49,6 +49,10 @@ float4 PS(VertexOutput input) : SV_TARGET
     float strength = Options.x * (1-saturate(contrast));
     float3 color = clamp(center + strength * (center - (up+down+left+right)*0.25), low, high);
     float2 edge = min(input.position.xy, Dimensions.zw-input.position.xy);
+    float2 fromCenter = abs(input.position.xy - Dimensions.zw*0.5);
+    bool guide = (Options.z > 0 && fromCenter.x < 1 && fmod(input.position.y,12) < 7) ||
+                 (Options.w > 0 && fromCenter.y < 1 && fmod(input.position.x,12) < 7);
+    if (guide) color = float3(1.0,0.83,0.35);
     if (min(edge.x,edge.y) < Options.y) color = float3(0.20,0.70,0.54);
     return float4(saturate(color),1);
 }

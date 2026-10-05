@@ -69,7 +69,8 @@ internal sealed class LensCapture : IDisposable
                 if (!_pacer.ShouldRender(now)) return;
                 using var texture = CaptureInterop.Texture(frame.Surface);
                 var settings=Volatile.Read(ref _settings);
-                _renderer.Render(texture,settings.Source,settings.Sharpening);
+                _renderer.Render(texture,settings.Source,settings.Sharpening,
+                    verticalGuide:settings.VerticalGuide,horizontalGuide:settings.HorizontalGuide);
                 if (_renderer.FramesRendered == 1) FirstFrame?.Invoke();
             }
             catch (Exception)
@@ -80,9 +81,9 @@ internal sealed class LensCapture : IDisposable
         }
     }
 
-    public void UpdateSource(SourceArea source,double sharpening)
+    public void UpdateSource(SourceArea source,double sharpening,bool verticalGuide=false,bool horizontalGuide=false)
     {
-        Volatile.Write(ref _settings,new(source,sharpening));
+        Volatile.Write(ref _settings,new(source,sharpening,verticalGuide,horizontalGuide));
         Interlocked.Exchange(ref _refreshRequested,1);
         if (Interlocked.CompareExchange(ref _refreshWorker,1,0) != 0) return;
         _=Task.Run(() =>
@@ -95,7 +96,8 @@ internal sealed class LensCapture : IDisposable
                     {
                         if (_stopped || _failed || Paused) return;
                         var settings=Volatile.Read(ref _settings);
-                        _renderer.RenderLast(settings.Source,settings.Sharpening);
+                        _renderer.RenderLast(settings.Source,settings.Sharpening,
+                            verticalGuide:settings.VerticalGuide,horizontalGuide:settings.HorizontalGuide);
                     }
                 }
             }
@@ -106,13 +108,13 @@ internal sealed class LensCapture : IDisposable
                 if (Volatile.Read(ref _refreshRequested) != 0 && !_stopped)
                 {
                     var settings=Volatile.Read(ref _settings);
-                    UpdateSource(settings.Source,settings.Sharpening);
+                    UpdateSource(settings.Source,settings.Sharpening,settings.VerticalGuide,settings.HorizontalGuide);
                 }
             }
         });
     }
 
-    private sealed record RenderSettings(SourceArea Source,double Sharpening);
+    private sealed record RenderSettings(SourceArea Source,double Sharpening,bool VerticalGuide=false,bool HorizontalGuide=false);
 
     private void OnClosed(GraphicsCaptureItem item, object args) => Failed?.Invoke("放大的画面已关闭。");
     public byte[] ReadOutput() { lock (_gate) return _renderer.ReadOutput(); }

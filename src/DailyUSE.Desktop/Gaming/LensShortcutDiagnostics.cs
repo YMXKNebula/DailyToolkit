@@ -44,6 +44,7 @@ internal static class LensShortcutDiagnostics
                 throw new InvalidOperationException("Release modifier keys and F24 before running the developer check.");
             // F24 is reserved by this test before input is generated. No text or modifier keys are sent.
             var binding = new KeyboardShortcut(0,0x87,"F24");
+            gaming.SetShortcut(binding);
             if (!controller.Configure(binding,LensActivationMode.Toggle)) throw new InvalidOperationException("F24 is unavailable for this developer check.");
             if (gaming.IsActive || GetForegroundWindow()==source.Handle) throw new InvalidOperationException("The check did not begin in the background with capture off.");
             Key(true); Key(false);
@@ -53,12 +54,12 @@ internal static class LensShortcutDiagnostics
             if (initial.Width != 320 || initial.Height != 240) throw new InvalidOperationException("The live lens did not use independent width and height.");
             var pointer=gaming.PointerForDiagnostics ?? throw new InvalidOperationException("The native mouse hook was not installed.");
             if (!pointer.Process(0x201,initial.Left+2,initial.Top+2) ||
-                !pointer.Process(0x200,initial.Left+42,initial.Top+22) || !pointer.Process(0x202,initial.Left+42,initial.Top+22))
+                !pointer.Process(0x200,initial.Left+82,initial.Top+72) || !pointer.Process(0x202,initial.Left+82,initial.Top+72))
                 throw new InvalidOperationException("The live lens did not accept a border drag.");
             await Wait(() =>
             {
                 if (!GetWindowRect(gaming.LensHandle,out var rect)) return false;
-                return rect.Left == initial.Left+40 && rect.Top == initial.Top+20 && rect.Right-rect.Left == 320 && rect.Bottom-rect.Top == 240;
+                return rect.Left == initial.Left+80 && rect.Top == initial.Top+70 && rect.Right-rect.Left == 320 && rect.Bottom-rect.Top == 240;
             },"The live native window did not move without resizing.");
             var moved=gaming.ActiveBounds!;
             for (var i=0;i<40;i++) pointer.Process(0x20A,moved.Left+20,moved.Top+20,120);
@@ -79,6 +80,37 @@ internal static class LensShortcutDiagnostics
             Key(true); Key(false);
             await Wait(() => !gaming.IsActive,"The restarted lens could not close.");
             RequireReleased(restartedHandle);
+
+            gaming.Start();
+            await Wait(() => gaming.IsVisible,"Movement checks did not start.");
+            gaming.IsFixedMode=true;
+            await Wait(() => At(initial),"Fixed mode did not center the native window.");
+            pointer=gaming.PointerForDiagnostics!;
+            if (pointer.Process(0x201,initial.Left+2,initial.Top+2) || pointer.Process(0x200,initial.Left+82,initial.Top+72))
+                throw new InvalidOperationException("Fixed mode still allowed dragging.");
+            pointer.Process(0x20A,initial.Left+20,initial.Top+20,120);
+            if (gaming.Zoom != 1.25 || !gaming.IsVisible) throw new InvalidOperationException("Fixed mode disabled wheel zoom.");
+            gaming.IsMovableMode=true;
+            pointer.Process(0x201,initial.Left+2,initial.Top+2);
+            pointer.Process(0x200,initial.Left+82,initial.Top+72);
+            pointer.Process(0x200,initial.Left+12,initial.Top+12);
+            await Wait(() => At(initial),"Center assistance did not snap the native window.");
+            if (!gaming.VerticalGuide || !gaming.HorizontalGuide) throw new InvalidOperationException("Snapping did not activate center guides.");
+            pointer.Process(0x202,initial.Left+12,initial.Top+12);
+            if (gaming.VerticalGuide || gaming.HorizontalGuide) throw new InvalidOperationException("Releasing the drag left center guides enabled.");
+            pointer.Process(0x201,initial.Left+2,initial.Top+2);
+            pointer.Process(0x200,initial.Left+82,initial.Top+72);
+            pointer.Process(0x202,initial.Left+82,initial.Top+72);
+            gaming.CenterCommand.Execute(null);
+            await Wait(() => At(initial),"Recenter button did not move the live native window.");
+            var resetHandle=gaming.LensHandle;
+            gaming.IsFavorite=true;
+            gaming.ResetDefaultsCommand.Execute(null);
+            RequireReleased(resetHandle);
+            if (gaming.Zoom != 2 || gaming.FrameWidth != 640 || gaming.FrameHeight != 384 || gaming.Sharpening != 0.35 ||
+                gaming.FrameRate != 0 || !gaming.IsMovableMode || !gaming.ToggleShortcut!.Matches(binding) ||
+                !gaming.IsToggleMode || !gaming.IsFavorite || !controller.IsRegistered)
+                throw new InvalidOperationException("Reset did not restore picture defaults while preserving personal choices and the background shortcut.");
 
             // Stop before the UI can process the first-frame callback. A stale callback must not reopen the window.
             gaming.Start();
@@ -107,7 +139,8 @@ internal static class LensShortcutDiagnostics
                 BackgroundRegistration=true,FirstShortcutStartsCapture=true,SingleShortcutToggles=true,
                 HoldStartsCapture=true,ReleaseStopsCapture=true,ReleasedBeforeStartupStaysClosed=true,EmptyShortcutUnregistered=true,
                 ToggleReleasesResources=true,ReopensAfterFullStop=true,PendingStartupCanClose=true,PositionAndZoomPreserved=true,
-                IndependentLiveDimensions=true,NativeWindowDrag=true,WheelLimitsRemainVisible=true,FollowCaptureFrames=gaming.FrameRate == 0
+                IndependentLiveDimensions=true,NativeWindowDrag=true,WheelLimitsRemainVisible=true,FollowCaptureFrames=gaming.FrameRate == 0,
+                FixedCentersAndBlocksDrag=true,FixedWheelZoom=true,CenterSnapAndGuideRelease=true,RecenterButton=true,ResetDefaultsPreservesPersonalChoices=true
             }));
         }
         finally
@@ -125,6 +158,8 @@ internal static class LensShortcutDiagnostics
                 gaming.ActiveBounds is not null || !gaming.CanConfigure || IsWindow(previousHandle))
                 throw new InvalidOperationException("Closing did not release the capture, renderer, pointer hook and native window.");
         }
+        bool At(PixelBounds expected) => gaming.ActiveBounds == expected && GetWindowRect(gaming.LensHandle,out var rect) &&
+            rect.Left == expected.Left && rect.Top == expected.Top && rect.Right-rect.Left == expected.Width && rect.Bottom-rect.Top == expected.Height;
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct Input { public uint Type; public InputData Data; }

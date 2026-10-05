@@ -11,6 +11,10 @@
             ToolTip="拖拽照片中的放大框移动位置，在照片上滚动鼠标调整倍率。">
         <Image x:Name="BackgroundPhoto" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" />
         <Canvas x:Name="Overlay" ClipToBounds="True">
+          <Line x:Name="VerticalGuide" Stroke="#FFD459" StrokeThickness="1" StrokeDashArray="5,3"
+                Visibility="Collapsed" IsHitTestVisible="False" />
+          <Line x:Name="HorizontalGuide" Stroke="#FFD459" StrokeThickness="1" StrokeDashArray="5,3"
+                Visibility="Collapsed" IsHitTestVisible="False" />
           <Border x:Name="FrameBorder" BorderBrush="#48CCB0" BorderThickness="1" Visibility="Collapsed"
                   MouseLeftButtonDown="BeginDrag" Cursor="SizeAll">
             <Image x:Name="FrameImage" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality" />

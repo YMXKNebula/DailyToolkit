@@ -10,13 +10,17 @@ internal sealed class LensPointerController : IDisposable
     private readonly Func<PixelBounds?> _visibleBounds;
     private readonly Action<int,int> _move;
     private readonly Action<int> _zoom;
+    private readonly Func<bool> _canMove;
+    private readonly Action? _dragEnded;
     private IntPtr _hook;
     private bool _dragging,_consumedDown;
     private int _offsetX,_offsetY;
 
-    public LensPointerController(Func<PixelBounds?> visibleBounds, Action<int,int> move, Action<int> zoom, bool install=true)
+    public LensPointerController(Func<PixelBounds?> visibleBounds, Action<int,int> move, Action<int> zoom, bool install=true,
+        Func<bool>? canMove=null, Action? dragEnded=null)
     {
         _visibleBounds=visibleBounds; _move=move; _zoom=zoom;
+        _canMove=canMove ?? (() => true); _dragEnded=dragEnded;
         _procedure=OnMouse;
         if (!install) return;
         _hook=SetWindowsHookEx(14,_procedure,GetModuleHandle(null),0);
@@ -37,26 +41,32 @@ internal sealed class LensPointerController : IDisposable
 
     internal bool Process(int message,int x,int y,int delta=0)
     {
-        if (message == 0x202 && _consumedDown) { _dragging=_consumedDown=false; return true; }
+        if (message == 0x202 && _consumedDown) { CancelDrag(); _consumedDown=false; return true; }
         var bounds=_visibleBounds();
-        if (bounds is null) { _dragging=false; return false; }
+        if (bounds is null || !_canMove()) CancelDrag();
+        if (bounds is null) return false;
         if (_dragging && message == 0x200) { _move(x-_offsetX,y-_offsetY); return true; }
         var inside=x >= bounds.Left && y >= bounds.Top && x < bounds.Left+bounds.Width && y < bounds.Top+bounds.Height;
         if (!inside) return false;
         if (message == 0x20A) { _zoom(delta); return true; }
         var edge=x-bounds.Left < 8 || y-bounds.Top < 8 || bounds.Left+bounds.Width-x <= 8 || bounds.Top+bounds.Height-y <= 8;
-        if (message != 0x201 || !edge) return false;
+        if (message != 0x201 || !edge || !_canMove()) return false;
         _offsetX=x-bounds.Left; _offsetY=y-bounds.Top;
         _dragging=_consumedDown=true;
         return true;
     }
 
-    public void CancelDrag() => _dragging=false;
+    public void CancelDrag()
+    {
+        if (!_dragging) return;
+        _dragging=false;
+        _dragEnded?.Invoke();
+    }
 
     public void Dispose()
     {
         if (_hook != IntPtr.Zero) { UnhookWindowsHookEx(_hook); _hook=IntPtr.Zero; }
-        _dragging=false;
+        CancelDrag();
     }
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate IntPtr HookProcedure(int code,IntPtr message,IntPtr data);
     [StructLayout(LayoutKind.Sequential)] private struct Point { public int X,Y; }

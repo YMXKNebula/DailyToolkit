@@ -87,12 +87,28 @@ Test("Lens stays inside monitors including negative origins and edge-following",
     var small=LensLayout.Calculate(new(0,0,200,100),640,384,2,0,0);
     Require(small.Output.Width == 200 && small.Output.Height == 100);
 });
+Test("Center assistance snaps each axis, releases outside its range and clamps negative-origin monitors", () =>
+{
+    var monitor=new PixelBounds(-1920,-200,1920,1080);
+    var centered=new PixelBounds(-1280,148,640,384);
+    var both=LensPlacement.Snap(monitor,640,384,centered.Left+24,centered.Top-24);
+    Require(both.Bounds == centered && both.VerticalGuide && both.HorizontalGuide);
+    var one=LensPlacement.Snap(monitor,640,384,centered.Left+25,centered.Top+10);
+    Require(one.Bounds.Left == centered.Left+25 && one.Bounds.Top == centered.Top && !one.VerticalGuide && one.HorizontalGuide);
+    var free=LensPlacement.Snap(monitor,640,384,centered.Left+25,centered.Top-25);
+    Require(!free.VerticalGuide && !free.HorizontalGuide && free.Bounds.Top == centered.Top-25);
+    var edge=LensPlacement.Snap(monitor,640,384,-4000,5000);
+    Require(edge.Bounds == new PixelBounds(-1920,496,640,384) && !edge.VerticalGuide && !edge.HorizontalGuide);
+    var small=LensPlacement.Snap(new(0,0,201,101),640,384,200,300);
+    Require(small.Bounds == new PixelBounds(0,0,201,101));
+});
 Test("Magnifier supports a single empty or custom shortcut and validated activation modes", () =>
 {
     Require(new GamingPreferences { ToggleShortcut=null,ActivationMode=LensActivationMode.Hold }.IsValid);
     var custom=new KeyboardShortcut(3,0x5A,"Ctrl + Alt + Z");
     Require(custom.IsValid && new GamingPreferences { ToggleShortcut=custom }.IsValid);
     Require(!new GamingPreferences { ActivationMode=(LensActivationMode)99 }.IsValid);
+    Require(!new GamingPreferences { MovementMode=(LensMovementMode)99 }.IsValid);
     Require(!new KeyboardShortcut(0,0x10,"Shift").IsValid && !new KeyboardShortcut(0x100,0x5A,"Z").IsValid);
 });
 
