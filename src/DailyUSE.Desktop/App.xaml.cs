@@ -1,12 +1,14 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DailyUSE.Desktop.Environment;
 using DailyUSE.Desktop.Presentation;
+using DailyUSE.Core.Environment;
 
 namespace DailyUSE.Desktop;
 
@@ -17,6 +19,15 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (e.Args is ["--read-windows-weather"])
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            Console.OutputEncoding = new UTF8Encoding(false);
+            var weather = await Task.Run(WindowsTaskbarWeatherReader.Read);
+            Console.Write(JsonSerializer.Serialize(weather, MachineReport.JsonOptions));
+            Shutdown();
+            return;
+        }
         ApplyAccessibilityColors();
         var viewModel = new MainViewModel(new WindowsEnvironmentProbe(), NativeWindowsInfo.ReadDisplay());
         try
@@ -44,22 +55,32 @@ public partial class App : Application
             if (preview)
             {
                 window.ShowActivated = false;
+                window.ShowInTaskbar = false;
                 window.WindowStartupLocation = WindowStartupLocation.Manual;
                 window.Left = -20000;
                 window.Top = -20000;
                 window.Width = ReadDimension(e.Args, "--width", 1040, 680);
-                window.Height = ReadDimension(e.Args, "--height", 760, 540);
+                window.Height = ReadDimension(e.Args, "--height", 800, 540);
             }
             window.Show();
             if (!preview) return;
 
             await firstFrame.Task;
             await viewModel.CurrentProbeTask;
+            // A second local counter sample provides a rate without sending any traffic.
+            await Task.Delay(250);
+            viewModel.QueueLocalRefresh();
+            await viewModel.CurrentLocalStatusTask;
             viewModel.Page = ReadArgument(e.Args, "--page") ?? "home";
+            if (e.Args.Contains("--details") || e.Args.Contains("--software"))
+                window.ShowPreviewDetails(e.Args.Contains("--software"));
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
             var content = window.PreviewContent;
-            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth),
-                (int)Math.Ceiling(content.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+            // An exported bitmap has no physical LCD subpixels; avoid colored fringes when it is scaled.
+            TextOptions.SetTextRenderingMode(content, TextRenderingMode.Grayscale);
+            var dpi = VisualTreeHelper.GetDpi(content);
+            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth * dpi.DpiScaleX),
+                (int)Math.Ceiling(content.ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
             bitmap.Render(content);
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));

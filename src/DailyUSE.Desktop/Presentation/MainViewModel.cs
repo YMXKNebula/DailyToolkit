@@ -1,9 +1,10 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Data;
 using DailyUSE.Core.Environment;
-using DailyUSE.Core.Tools;
+using DailyUSE.Desktop.Environment;
 
 namespace DailyUSE.Desktop.Presentation;
 
@@ -14,8 +15,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 {
     private readonly IEnvironmentProbe _probe;
     private readonly DisplayInfo _display;
+    private readonly ILocalStatusProbe _localStatus;
+    private readonly TimeProvider _clock;
     private readonly CancellationTokenSource _lifetime = new();
-    private readonly ToolCatalog _catalog = new();
     private MachineReport _report;
     private string _page = "home";
     private string _softwareSearch = "";
@@ -24,11 +26,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private double _viewportWidth = 1040;
     private double? _firstFrameMilliseconds;
     private ICollectionView _softwareView;
+    private DateTimeOffset _now;
+    private DateTimeOffset? _lastWeatherRead;
+    private NetworkInfo _network = NetworkInfo.Unknown;
+    private WeatherInfo _weather = WeatherInfo.Unavailable("正在读取 Windows 天气文字");
+    private bool _isReadingStatus;
 
-    public MainViewModel(IEnvironmentProbe probe, DisplayInfo display)
+    public MainViewModel(IEnvironmentProbe probe, DisplayInfo display, ILocalStatusProbe? localStatus = null,
+        TimeProvider? clock = null)
     {
         _probe = probe;
         _display = display;
+        _localStatus = localStatus ?? new WindowsLocalStatusProbe();
+        _clock = clock ?? TimeProvider.System;
+        _now = _clock.GetLocalNow();
         _report = new()
         {
             System = new("读取中…", "", 0, "—", "—", System.Environment.Version.ToString(), ""),
@@ -36,35 +47,41 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Power = new(null, null)
         };
         _softwareView = CreateSoftwareView();
-        _catalog.Register(new("computer-info", "电脑信息", "查看系统、硬件和运行环境", new()));
         NavigateCommand = new(parameter => Page = parameter as string ?? "home");
-        RefreshCommand = new(_ => CurrentProbeTask = RefreshAsync(), () => !IsRefreshing);
-        OpenComputerCommand = new(_ => Page = "computer");
+        RefreshCommand = new(_ => _ = InitializeAsync(), () => !IsRefreshing && !_isReadingStatus);
     }
 
     public RelayCommand NavigateCommand { get; }
     public RelayCommand RefreshCommand { get; }
-    public RelayCommand OpenComputerCommand { get; }
     public Task CurrentProbeTask { get; private set; } = Task.CompletedTask;
+    public Task CurrentLocalStatusTask { get; private set; } = Task.CompletedTask;
+    public Task PendingWork => Task.WhenAll(CurrentProbeTask, CurrentLocalStatusTask);
     public MachineReport Report => _report;
-    public IReadOnlyList<ToolDefinition> Tools => _catalog.Tools;
     public ICollectionView SoftwareView => _softwareView;
 
     public string Page
     {
         get => _page;
-        set { if (Set(ref _page, value)) Notify(""); }
+        set { if (Set(ref _page, value == "tools" ? "tools" : "home")) Notify(""); }
     }
     public bool IsHome => Page == "home";
     public bool IsTools => Page == "tools";
-    public bool IsComputer => Page == "computer";
-    public string PageTitle => Page switch { "tools" => "工具", "computer" => "电脑信息", _ => "首页" };
-    public string PageDescription => Page switch
+    public string PageTitle => IsTools ? "工具" : "首页";
+    public string PageDescription => IsTools ? "把常用的小工具放在一起。" : "今天和这台电脑的状态。";
+    public string TimeText => _now.ToString("HH:mm");
+    public string DateText => _now.ToString("yyyy年M月d日 dddd", CultureInfo.GetCultureInfo("zh-CN"));
+    public NetworkInfo Network => _network;
+    public WeatherInfo Weather => _weather;
+    public string WeatherText => Weather.Summary;
+    public string WeatherNote => Weather.Available ? "来自 Windows 任务栏" : Weather.Reason ?? "Windows 天气暂时不可用";
+    public string NetworkText => Network.State switch
     {
-        "tools" => "把常用的小工具放在一起。",
-        "computer" => "这些信息用于选择合适的工具和运行方式。",
-        _ => "工具和这台电脑的状态，都在这里。"
+        NetworkState.Internet => "已联网", NetworkState.LocalNetwork => "仅本地网络",
+        NetworkState.Disconnected => "未连接", _ => "未确认"
     };
+    public string NetworkDetail => string.IsNullOrWhiteSpace(Network.ConnectionType)
+        ? "Windows 网络状态" : $"{Network.ConnectionType} · Windows 状态";
+    public string TrafficText => $"↓ {FormatRate(Network.ReceivedBytesPerSecond)}   ↑ {FormatRate(Network.SentBytesPerSecond)}";
 
     public bool IsRefreshing
     {
@@ -87,8 +104,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ProbeStage.Partial => "部分信息暂时不可用",
         _ => "基础信息已就绪"
     };
-    public string StatusDetail => IsRefreshing ? "可以先使用界面，详细信息会自动补齐。" :
-        $"更新于 {Report.CapturedAt:HH:mm} · 详细检测 {Report.DetailReadMilliseconds / 1000:0.0} 秒";
     public string CpuName => Report.Cpu.Name;
     public string CpuDetail => Report.Cpu.PhysicalCores is int cores
         ? $"{cores} 核 · {Report.Cpu.LogicalProcessors} 个逻辑处理器"
@@ -101,6 +116,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string DisplayDetail => $"{Report.Display.PixelWidth} × {Report.Display.PixelHeight} · 缩放 {Report.Display.Scale:P0}";
     public string GraphicsText => Report.Graphics.Count == 0 ? "暂未读取" :
         string.Join(" / ", Report.Graphics.Select(x => x.Name));
+    public string GraphicsSummary
+    {
+        get
+        {
+            var names = Report.Graphics.Where(graphics => !graphics.Name.Contains("Virtual", StringComparison.OrdinalIgnoreCase))
+                .Select(graphics => graphics.Name).ToArray();
+            return names.Length == 0 ? GraphicsText : string.Join(" / ", names);
+        }
+    }
     public string SoftwareCount => Report.SoftwareInventoryCompleted ? Report.Software.Count.ToString() : "—";
     public string SoftwareHeader => Report.SoftwareInventoryCompleted
         ? $"已安装软件 · {Report.Software.Count}" : "已安装软件";
@@ -112,13 +136,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     };
 
     public AdaptationProfile Profile => AdaptationPolicy.Evaluate(Report, _viewportWidth);
-    public bool ReducedEffects => Profile.ReducedEffects;
     public Thickness ContentPadding => new(Profile.CompactLayout ? 22 : 32);
-    public double CardHeight => Profile.CompactLayout ? 150 : 138;
-    public string LayoutText => Profile.CompactLayout ? "紧凑布局" : "标准布局";
-    public string TaskLimitText => $"最多 {Profile.WorkerLimit} 个后台任务";
-    public string ProfileNote => Profile.Reasons.Count > 0 ? string.Join("；", Profile.Reasons) : "按这台电脑的配置安排后台任务。";
-    public string StartupText => _firstFrameMilliseconds is double time ? $"界面就绪 {time:0} ms" : "本机运行";
+    public string PowerDetail => Report.Power.BatteryPercent is int percent ? $"电池电量 {percent}%" : "电量未确认";
+    public string LocalSourceText => "读取 Windows 本机数据";
+
+    public IReadOnlyList<InformationRow> ComputerSummaryRows =>
+    [
+        new("系统", $"{SystemName} · {SystemDetail} · {Architecture}"),
+        new("处理器", $"{CpuName} · {CpuDetail}"),
+        new("内存", $"{MemoryTotal} · 可用 {FormatBytes(Report.Memory.AvailableBytes)}"),
+        new("显卡", GraphicsSummary)
+    ];
 
     public IReadOnlyList<InformationRow> SystemRows =>
     [
@@ -155,20 +183,71 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void SetFirstFrameTime(double milliseconds)
     {
         _firstFrameMilliseconds = milliseconds;
-        Notify(nameof(StartupText));
     }
 
     public Task InitializeAsync()
     {
         if (!CurrentProbeTask.IsCompleted) return CurrentProbeTask;
-        CurrentProbeTask = RefreshAsync();
+        UpdateClock();
+        QueueLocalRefresh(forceWeather: true);
+        CurrentProbeTask = Task.WhenAll(RefreshAsync(), CurrentLocalStatusTask);
         return CurrentProbeTask;
+    }
+
+    public void UpdateClock()
+    {
+        _now = _clock.GetLocalNow();
+        Notify(nameof(TimeText));
+        Notify(nameof(DateText));
+    }
+
+    public void QueueLocalRefresh(bool forceWeather = false)
+    {
+        if (_isReadingStatus || _lifetime.IsCancellationRequested) return;
+        CurrentLocalStatusTask = RefreshLocalStatusAsync(forceWeather);
+    }
+
+    private async Task RefreshLocalStatusAsync(bool forceWeather)
+    {
+        _isReadingStatus = true;
+        RefreshCommand.Refresh();
+        var token = _lifetime.Token;
+        var readWeather = forceWeather || _lastWeatherRead is not { } last || _now < last || _now - last >= TimeSpan.FromMinutes(1);
+        try
+        {
+            var networkTask = ReadNetworkSafelyAsync(token);
+            var weatherTask = readWeather ? ReadWeatherSafelyAsync(token) : Task.FromResult(_weather);
+            await Task.WhenAll(networkTask, weatherTask);
+            token.ThrowIfCancellationRequested();
+            _network = await networkTask;
+            _weather = await weatherTask;
+            if (readWeather) _lastWeatherRead = _now;
+            foreach (var property in new[] { nameof(Network), nameof(Weather), nameof(NetworkText), nameof(NetworkDetail),
+                nameof(TrafficText), nameof(WeatherText), nameof(WeatherNote) }) Notify(property);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        finally { _isReadingStatus = false; RefreshCommand.Refresh(); }
+    }
+
+    private async Task<NetworkInfo> ReadNetworkSafelyAsync(CancellationToken token)
+    {
+        try { return await _localStatus.ReadNetworkAsync(token); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception) { return NetworkInfo.Unknown; }
+    }
+
+    private async Task<WeatherInfo> ReadWeatherSafelyAsync(CancellationToken token)
+    {
+        try { return await _localStatus.ReadWeatherAsync(token); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception) { return WeatherInfo.Unavailable("Windows 天气文字暂时不可读"); }
     }
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyUSE", Version = "0.1.0", FirstFrameMilliseconds = _firstFrameMilliseconds,
-        Environment = Report, Adaptation = Profile
+        Application = "DailyUSE", Version = "0.2.0", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Environment = Report, Adaptation = Profile,
+        Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);
 
     private async Task RefreshAsync()
@@ -219,4 +298,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static string FormatBytes(long? bytes) => bytes is null ? "未知" :
         bytes >= 1024L * 1024 * 1024 ? $"{bytes.Value / (1024d * 1024 * 1024):0.#} GB" :
         $"{bytes.Value / (1024d * 1024):0.#} MB";
+
+    private static string FormatRate(double? bytes) => bytes is null ? "—" :
+        bytes >= 1024 * 1024 ? $"{bytes.Value / (1024 * 1024):0.#} MB/s" : $"{bytes.Value / 1024:0.#} KB/s";
 }

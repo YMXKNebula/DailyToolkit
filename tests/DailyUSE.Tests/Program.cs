@@ -64,6 +64,31 @@ ProcessBackend Backend(string mode)
 }
 ToolRequest Request(object input) => new("echo", JsonSerializer.SerializeToElement(input));
 
+Test("Weather uses only valid Windows temperature labels", () =>
+{
+    Require(WindowsWeatherText.Parse("天气，18°C，多云").Available);
+    Require(WindowsWeatherText.Parse("Weather 65°F, Partly cloudy").Available);
+    Require(WindowsWeatherText.Parse("−2 ℃ 晴").Available);
+    Require(WindowsWeatherText.Parse("18 degrees Celsius Cloudy").Available);
+    Require(!WindowsWeatherText.Parse("小组件").Available);
+    Require(!WindowsWeatherText.Parse("Stock market 1234.5").Available);
+    Require(!WindowsWeatherText.Parse(null).Available);
+    Require(!WindowsWeatherText.Parse(new string('x', 513) + "18°C").Available);
+});
+Test("Traffic rates survive adapter changes and resets", () =>
+{
+    var sampler = new TrafficSampler();
+    Require(sampler.Sample([new("wifi", 1000, 500)], 1).ReceivedBytesPerSecond is null);
+    var rate = sampler.Sample([new("wifi", 3000, 1000)], 3);
+    Require(rate.ReceivedBytesPerSecond == 1000 && rate.SentBytesPerSecond == 250);
+    var changed = sampler.Sample([new("vpn", 50000000, 50000000)], 4);
+    Require(changed.ReceivedBytesPerSecond is null);
+    var reset = sampler.Sample([new("vpn", 0, 0)], 5);
+    Require(reset.ReceivedBytesPerSecond == 0 && reset.SentBytesPerSecond == 0);
+    Require(sampler.Sample([new("vpn", 100, 100)], 5).ReceivedBytesPerSecond is null);
+    Require(sampler.Sample([], 6).ReceivedBytesPerSecond is null);
+});
+
 Test("Workers bounded by CPU and memory", () =>
 {
     Require(AdaptationPolicy.Evaluate(machine, 1040).WorkerLimit == 8);

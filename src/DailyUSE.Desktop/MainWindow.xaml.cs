@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Navigation;
+using System.Windows.Threading;
 using DailyUSE.Desktop.Presentation;
 using Microsoft.Win32;
 
@@ -14,16 +15,24 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
     private bool _closing;
+    private readonly DispatcherTimer _clockTimer;
+    private int _ticks;
 
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
-        Loaded += (_, _) => _ = _viewModel.InitializeAsync();
+        _clockTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+        _clockTimer.Tick += (_, _) =>
+        {
+            _viewModel.UpdateClock();
+            if (++_ticks % 3 == 0) _viewModel.QueueLocalRefresh();
+        };
+        Loaded += (_, _) => { _ = _viewModel.InitializeAsync(); _clockTimer.Start(); };
         SizeChanged += (_, _) => _viewModel.SetViewportWidth(ActualWidth);
         Closing += OnClosing;
-        Closed += (_, _) => _viewModel.Dispose();
+        Closed += (_, _) => { _clockTimer.Stop(); _viewModel.Dispose(); };
     }
 
     internal FrameworkElement PreviewContent => RootContent;
@@ -31,11 +40,13 @@ public partial class MainWindow : Window
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
         if (_closing) { e.Cancel = true; return; }
-        if (_viewModel.CurrentProbeTask.IsCompleted) return;
+        var pending = _viewModel.PendingWork;
+        if (pending.IsCompleted) return;
         e.Cancel = true;
         _closing = true;
+        _clockTimer.Stop();
         _viewModel.CancelPending();
-        await _viewModel.CurrentProbeTask;
+        await pending;
         _closing = false;
         Close();
     }
@@ -57,6 +68,14 @@ public partial class MainWindow : Window
         {
             _viewModel.Notice = "没有保存成功，请换一个位置再试。";
         }
+    }
+
+    internal void ShowPreviewDetails(bool software)
+    {
+        HardwareExpander.IsExpanded = true;
+        SoftwareExpander.IsExpanded = software;
+        UpdateLayout();
+        HomeScroll.ScrollToVerticalOffset(software ? SoftwareExpander.TranslatePoint(new(0, 0), HomeScroll).Y : 320);
     }
 
     private void CopySummary(object sender, RoutedEventArgs e)

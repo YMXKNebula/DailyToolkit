@@ -2,7 +2,7 @@
     <SolidColorBrush x:Key="WindowBrush" Color="#F5F7F6" />
     <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="TextBrush" Color="#26372F" />
-    <SolidColorBrush x:Key="MutedBrush" Color="#728078" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#596B61" />
     <SolidColorBrush x:Key="BorderBrush" Color="#E3E9E5" />
     <SolidColorBrush x:Key="AccentBrush" Color="#267A5D" />
     <SolidColorBrush x:Key="AccentSoftBrush" Color="#E8F2EC" />
@@ -16,7 +16,7 @@
     </Style>
     <Style x:Key="MutedText" TargetType="TextBlock">
       <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
-      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontSize" Value="13" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <Style x:Key="SectionTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
@@ -29,13 +29,9 @@
       <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="12" />
-      <Setter Property="Padding" Value="20" />
-      <Setter Property="Effect">
-        <Setter.Value><DropShadowEffect Color="#27382E" Opacity="0.025" BlurRadius="12" ShadowDepth="2" /></Setter.Value>
-      </Setter>
-      <Style.Triggers>
-        <DataTrigger Binding="{Binding ReducedEffects}" Value="True"><Setter Property="Effect" Value="{x:Null}" /></DataTrigger>
-      </Style.Triggers>
+      <Setter Property="Padding" Value="18" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
+      <Setter Property="RenderOptions.ClearTypeHint" Value="Enabled" />
     </Style>
     <Style TargetType="Button">
       <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
