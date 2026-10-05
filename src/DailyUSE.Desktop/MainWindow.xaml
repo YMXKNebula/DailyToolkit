@@ -24,7 +24,7 @@
         <StackPanel DockPanel.Dock="Bottom" Margin="12,0,0,0">
           <TextBlock Text="本机运行" Style="{StaticResource MutedText}" />
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.4</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.5</Hyperlink>
           </TextBlock>
         </StackPanel>
         <StackPanel>
@@ -197,14 +197,9 @@
                     <ComboBox ItemsSource="{Binding Monitors}" SelectedItem="{Binding SelectedMonitor}" Padding="8" Margin="0,0,0,18" />
                     </StackPanel>
                     <TextBlock Text="位置" FontWeight="SemiBold" Margin="0,0,0,10" />
-                    <WrapPanel Margin="0,0,0,10">
+                    <WrapPanel Margin="0,0,0,18">
                       <RadioButton Content="固定" GroupName="LensMovement" IsChecked="{Binding IsFixedMode}" Margin="0,0,18,0" />
                       <RadioButton Content="可移动" GroupName="LensMovement" IsChecked="{Binding IsMovableMode}" />
-                    </WrapPanel>
-                    <WrapPanel Margin="0,0,0,18">
-                      <Button Content="回到中心" Command="{Binding CenterCommand}" Margin="0,0,8,0" />
-                      <Button Content="恢复默认" Command="{Binding ResetDefaultsCommand}"
-                              ToolTip="关闭放大框，恢复默认画面、居中位置和可移动模式；保留快捷键、按住／切换模式和收藏。" />
                     </WrapPanel>
                     <Grid>
                       <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -253,7 +248,10 @@
                   </WrapPanel>
                   <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
                   <TextBlock Text="按住模式：按下开启，松开关闭。切换模式：按一次开启，再按一次关闭。关闭时释放画面资源，之后可调整设置；同一快捷键仍可再次开启。" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
-                  <TextBlock Text="框内使用高质量插值和锐化，鼠标操作直接穿过浮窗。建议游戏使用窗口或无边框模式。实际细节取决于原画面的分辨率，画面仅用于本机实时显示。" Style="{StaticResource MutedText}" />
+                  <TextBlock Text="框内使用高质量插值和锐化，固定模式下可直接操作下面的窗口。建议游戏使用窗口或无边框模式。实际细节取决于原画面的分辨率，画面仅用于本机实时显示。" Style="{StaticResource MutedText}" />
+                  <Separator Margin="0,18,0,14" />
+                  <Button Content="恢复默认" Command="{Binding ResetDefaultsCommand}" HorizontalAlignment="Left"
+                          ToolTip="关闭放大框，恢复默认画面、居中位置和固定模式；保留快捷键、按住／切换模式和收藏。" />
                 </StackPanel>
               </Border>
             </StackPanel>

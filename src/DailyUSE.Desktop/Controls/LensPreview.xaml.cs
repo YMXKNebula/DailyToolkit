@@ -17,7 +17,7 @@ public partial class LensPreview : UserControl
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Background);
     private bool _dirty=true, _rendering;
     private int _generation;
-    private double _pointerX=0.5, _pointerY=0.5;
+    private double _pointerX=0.5,_pointerY=0.5;
     private bool _dragging;
     private bool _verticalGuide,_horizontalGuide;
     private double _dragOffsetX,_dragOffsetY;
@@ -85,7 +85,7 @@ public partial class LensPreview : UserControl
         var renderer=_renderer ??= new();
         var settings = new LensPreviewSettings(monitor.Bounds.Width,monitor.Bounds.Height,
             (int)_model.FrameWidth,(int)_model.FrameHeight,_model.Zoom,_model.Sharpening,_model.FrameRate,
-            _model.IsFixedMode ? 0.5 : _pointerX,_model.IsFixedMode ? 0.5 : _pointerY,_verticalGuide,_horizontalGuide);
+            _pointerX,_pointerY,_verticalGuide,_horizontalGuide);
         try
         {
             var result=await Task.Run(() => renderer.Render(settings));
@@ -99,7 +99,8 @@ public partial class LensPreview : UserControl
             var clamped=result.Layout.Output.Width != settings.Width || result.Layout.Output.Height != settings.Height;
             PreviewNote.Text=(settings.FrameRate == 0 ? "跟随捕获画面的新帧。" : $"上限 {settings.FrameRate} 帧/秒。") +
                 (clamped ? "框已限制在显示器范围内。" : "") +
-                (_model.IsFixedMode ? "固定在中央，滚轮可试倍率。" : "拖拽上方放大框，接近中心会吸附；滚轮可试倍率。") + "照片在本机读取。";
+                (_model.IsFixedMode ? "锁住当前位置，滚轮可试倍率。" : "拖拽上方放大框，接近中心会吸附；滚轮可试倍率。") +
+                "预览位置独立，照片在本机读取。";
             PositionFrame();
         }
         catch (Exception)
@@ -163,8 +164,8 @@ public partial class LensPreview : UserControl
     private void UpdateMovement()
     {
         FrameBorder.Cursor=_model?.IsFixedMode == true ? Cursors.Arrow : Cursors.SizeAll;
-        Screen.ToolTip=_model?.IsFixedMode == true ? "固定在中央，滚动鼠标调整倍率。" : "拖拽照片中的放大框，靠近中心时吸附；滚动鼠标调整倍率。";
-        if (_model?.IsFixedMode == true) { FinishDrag(); _pointerX=_pointerY=0.5; }
+        Screen.ToolTip=_model?.IsFixedMode == true ? "锁住当前位置，滚动鼠标调整倍率。" : "拖拽照片中的放大框，靠近中心时吸附；滚动鼠标调整倍率。";
+        if (_model?.IsFixedMode == true) FinishDrag();
     }
 
     private void FinishDrag()
@@ -181,6 +182,7 @@ public partial class LensPreview : UserControl
 
     private void Release()
     {
+        FinishDrag();
         _generation++; _timer.Stop();
         _dragging=false; Screen.ReleaseMouseCapture();
         if (_model is not null) _model.PropertyChanged -= SettingsChanged;

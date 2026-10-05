@@ -18,7 +18,7 @@ public sealed record GamingPreferences
 {
     public KeyboardShortcut? ToggleShortcut { get; init; } = new(6,0x77,"Ctrl + Shift + F8");
     public LensActivationMode ActivationMode { get; init; } = LensActivationMode.Toggle;
-    public LensMovementMode MovementMode { get; init; } = LensMovementMode.Movable;
+    public LensMovementMode MovementMode { get; init; } = LensMovementMode.Fixed;
     [JsonIgnore] public bool IsValid => (ToggleShortcut is null || ToggleShortcut.IsValid) &&
         (ActivationMode is LensActivationMode.Toggle or LensActivationMode.Hold) &&
         (MovementMode is LensMovementMode.Movable or LensMovementMode.Fixed);

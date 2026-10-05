@@ -32,7 +32,8 @@ internal sealed class LensPointerController : IDisposable
         if (code >= 0)
         {
             var data=Marshal.PtrToStructure<MouseData>(pointer);
-            // Only frame edges and wheel events inside a visible lens are consumed.
+            // Movable lenses accept dragging anywhere inside; fixed lenses pass clicks through.
+            // Wheel zoom remains available in both modes.
             // No rendering, I/O or GPU waits are performed in this callback.
             if (Process((int)message,data.Point.X,data.Point.Y,unchecked((short)(data.Data >> 16)))) return new(1);
         }
@@ -49,8 +50,7 @@ internal sealed class LensPointerController : IDisposable
         var inside=x >= bounds.Left && y >= bounds.Top && x < bounds.Left+bounds.Width && y < bounds.Top+bounds.Height;
         if (!inside) return false;
         if (message == 0x20A) { _zoom(delta); return true; }
-        var edge=x-bounds.Left < 8 || y-bounds.Top < 8 || bounds.Left+bounds.Width-x <= 8 || bounds.Top+bounds.Height-y <= 8;
-        if (message != 0x201 || !edge || !_canMove()) return false;
+        if (message != 0x201 || !_canMove()) return false;
         _offsetX=x-bounds.Left; _offsetY=y-bounds.Top;
         _dragging=_consumedDown=true;
         return true;

@@ -104,6 +104,7 @@ Test("Center assistance snaps each axis, releases outside its range and clamps n
 });
 Test("Magnifier supports a single empty or custom shortcut and validated activation modes", () =>
 {
+    Require(new GamingPreferences().MovementMode == LensMovementMode.Fixed);
     Require(new GamingPreferences { ToggleShortcut=null,ActivationMode=LensActivationMode.Hold }.IsValid);
     var custom=new KeyboardShortcut(3,0x5A,"Ctrl + Alt + Z");
     Require(custom.IsValid && new GamingPreferences { ToggleShortcut=custom }.IsValid);

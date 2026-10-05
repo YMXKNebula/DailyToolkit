@@ -38,7 +38,6 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         StopCommand = new(_ => Stop(), () => IsActive);
         ToggleCommand = new(_ => Toggle(), () => IsActive || SelectedMonitor is not null);
         ToggleFavoriteCommand = new(_ => IsFavorite = !IsFavorite);
-        CenterCommand = new(_ => CenterFrame());
         ResetDefaultsCommand = new(_ => ResetDefaults());
     }
 
@@ -78,7 +77,6 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public RelayCommand StopCommand { get; }
     public RelayCommand ToggleCommand { get; }
     public RelayCommand ToggleFavoriteCommand { get; }
-    public RelayCommand CenterCommand { get; }
     public RelayCommand ResetDefaultsCommand { get; }
     public int PositionResetVersion => _positionResetVersion;
     public LensMovementMode MovementMode
@@ -89,15 +87,15 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             if (value == MovementMode || value is not (LensMovementMode.Movable or LensMovementMode.Fixed)) return;
             SavePreferences(_preferences with { MovementMode=value });
             Notify(nameof(MovementMode)); Notify(nameof(IsFixedMode)); Notify(nameof(IsMovableMode)); Notify(nameof(MovementHint));
-            if (IsFixedMode) CenterFrame();
+            if (IsFixedMode) { _pointer?.CancelDrag(); ClearGuides(); }
             if (IsVisible) UpdateActiveStatus();
         }
     }
     public bool IsFixedMode { get => MovementMode == LensMovementMode.Fixed; set { if (value) MovementMode=LensMovementMode.Fixed; } }
     public bool IsMovableMode { get => MovementMode == LensMovementMode.Movable; set { if (value) MovementMode=LensMovementMode.Movable; } }
     public string MovementHint => IsFixedMode
-        ? "固定在屏幕中央。框内滚轮调倍率（1–8×），点击可操作下面的窗口。"
-        : "拖拽边缘移动，靠近屏幕中心时吸附并显示辅助线。框内滚轮调倍率（1–8×），点击可操作下面的窗口。";
+        ? "锁住当前位置。框内滚轮调倍率（1–8×），点击可操作下面的窗口。"
+        : "按住放大画面中的任意位置拖动，靠近屏幕中心时吸附并显示辅助线。框内滚轮调倍率（1–8×）；摆好位置后切回固定，可操作下面的窗口。";
     public bool IsFavorite
     {
         get => _favorite;
@@ -145,8 +143,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             if (!GraphicsCaptureSession.IsSupported()) { Status = "当前 Windows 图形环境不支持屏幕捕获。"; return; }
             var width = (int)Math.Round(FrameWidth);
             var height = (int)Math.Round(FrameHeight);
-            var centerX=monitor.Bounds.Left+(int)Math.Round(monitor.Bounds.Width*(!IsFixedMode && _positionMonitor == monitor.Handle ? _positionX : 0.5));
-            var centerY=monitor.Bounds.Top+(int)Math.Round(monitor.Bounds.Height*(!IsFixedMode && _positionMonitor == monitor.Handle ? _positionY : 0.5));
+            var centerX=monitor.Bounds.Left+(int)Math.Round(monitor.Bounds.Width*(_positionMonitor == monitor.Handle ? _positionX : 0.5));
+            var centerY=monitor.Bounds.Top+(int)Math.Round(monitor.Bounds.Height*(_positionMonitor == monitor.Handle ? _positionY : 0.5));
             var layout = LensLayout.Calculate(monitor.Bounds,width,height,Zoom,centerX,centerY);
             _activeMonitor=monitor;
             _centerX=layout.Output.Left+layout.Output.Width/2;
@@ -206,7 +204,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         Reposition();
     }
 
-    public void CenterFrame()
+    private void CenterFrame()
     {
         _pointer?.CancelDrag();
         _verticalGuide=_horizontalGuide=false;
@@ -228,7 +226,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         Stop();
         Zoom=2; FrameWidth=640; FrameHeight=384; Sharpening=0.35; FrameRate=0;
         SelectedMonitor=Monitors.FirstOrDefault();
-        MovementMode=LensMovementMode.Movable;
+        MovementMode=LensMovementMode.Fixed;
         CenterFrame();
         Status="已恢复默认画面设置，快捷键、按住／切换模式和收藏保留。";
     }
@@ -241,7 +239,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     }
 
     private void UpdateActiveStatus() => Status=$"已开启 · {ZoomText} · " +
-        (IsFixedMode ? "固定居中，框内滚轮调倍率" : "拖拽边缘移动，框内滚轮调倍率");
+        (IsFixedMode ? "固定当前位置，框内滚轮调倍率" : "按住放大画面拖动，框内滚轮调倍率");
 
     private void Reposition()
     {

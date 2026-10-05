@@ -177,16 +177,20 @@ internal static class Program
         var canMove=true; var ended=0;
         using var controller=new LensPointerController(() => bounds,(x,y) => moved=(x,y),delta => wheel+=delta,install:false,
             canMove:() => canMove,dragEnded:() => ended++);
-        Require(!controller.Process(0x201,100,100),"Interior clicks were intercepted");
+        Require(!controller.Process(0x201,0,0),"Clicks outside the lens were intercepted");
         Require(!controller.Process(0x20A,0,0,120),"Wheel outside the lens was intercepted");
+        Require(controller.Process(0x201,170,116) && controller.Process(0x200,210,176) && moved == (50,80),
+            "Dragging from the magnified picture's center did not preserve its pointer offset");
+        Require(controller.Process(0x202,210,176),"Picture drag did not end");
         Require(controller.Process(0x201,12,22) && controller.Process(0x200,52,82) && moved == (50,80),"Border dragging lost its pointer offset");
         Require(controller.Process(0x202,900,900),"Drag release outside the frame was not consumed");
         Require(controller.Process(0x20A,100,100,120) && wheel == 120,"Wheel inside the lens did not adjust zoom");
         Require(controller.Process(0x201,12,22),"Second drag did not begin");
         canMove=false;
-        Require(!controller.Process(0x200,52,82) && controller.Process(0x202,52,82) && ended == 2,
+        Require(!controller.Process(0x200,52,82) && controller.Process(0x202,52,82) && ended == 3,
             "Changing to fixed during a drag lost release routing or kept dragging");
-        Require(!controller.Process(0x201,12,22) && controller.Process(0x20A,100,100,120) && wheel == 240,
+        Require(!controller.Process(0x201,12,22) && !controller.Process(0x201,170,116) &&
+            controller.Process(0x20A,100,100,120) && wheel == 240,
             "Fixed mode intercepted clicks or disabled wheel zoom");
         canMove=true;
         Require(controller.Process(0x201,12,22),"Returning to movable did not allow dragging");
@@ -200,7 +204,7 @@ internal static class Program
         Require(gaming.Zoom == 8 && !gaming.IsActive,"Wheel upper limit changed activation state");
         for (var i=0;i<100;i++) gaming.AdjustZoom(-120);
         Require(gaming.Zoom == 1 && !gaming.IsActive,"Wheel lower limit changed activation state");
-        Console.WriteLine("PASS Border dragging and wheel routing preserve interior clicks, outside input, hiding and safe zoom limits");
+        Console.WriteLine("PASS Movable lenses drag from the picture or border; fixed lenses pass clicks through; wheel routing and cleanup stay safe");
     }
 
     private static async Task CheckPreviewLayoutAsync()
@@ -278,6 +282,7 @@ internal static class Program
         try
         {
             var store=new GamingPreferencesStore(path);
+            Require(store.Load().MovementMode == LensMovementMode.Fixed,"New settings did not default to fixed");
             using(var gaming=new GamingViewModel(store))
             {
                 var custom=new KeyboardShortcut(3,0x5A,"Ctrl + Alt + Z");
@@ -294,7 +299,7 @@ internal static class Program
                 var revision=reopened.PositionResetVersion;
                 reopened.ResetDefaultsCommand.Execute(null);
                 Require(reopened.FrameWidth == 640 && reopened.FrameHeight == 384 && reopened.Zoom == 2 &&
-                    reopened.Sharpening == 0.35 && reopened.FrameRate == 0 && reopened.IsMovableMode &&
+                    reopened.Sharpening == 0.35 && reopened.FrameRate == 0 && reopened.IsFixedMode &&
                     reopened.PositionResetVersion > revision && !reopened.IsActive && !reopened.HasCaptureResources,
                     "Restoring defaults did not reset picture, placement and resource state");
                 Require(reopened.ToggleShortcut?.Name == "Ctrl + Alt + Z" && reopened.IsHoldMode && reopened.IsFavorite,
@@ -310,9 +315,12 @@ internal static class Program
             }
             Require(store.Load().ActivationMode == LensActivationMode.Toggle,"Toggle mode was not persisted");
             File.WriteAllText(path,"{\"ToggleShortcut\":null,\"CloseShortcut\":{\"Modifiers\":6,\"VirtualKey\":120,\"Name\":\"Ctrl + Shift + F9\"}}");
-            Require(store.Load() is { ToggleShortcut:null,ActivationMode:LensActivationMode.Toggle },"Legacy empty shortcut was not preserved");
+            Require(store.Load() is { ToggleShortcut:null,ActivationMode:LensActivationMode.Toggle,MovementMode:LensMovementMode.Fixed },
+                "Legacy empty shortcut or the new fixed default was not preserved");
             File.WriteAllText(path,"{\"ToggleShortcut\":{\"Modifiers\":3,\"VirtualKey\":90,\"Name\":\"Ctrl + Alt + Z\"},\"CloseShortcut\":null}");
             Require(store.Load().ToggleShortcut?.Name == "Ctrl + Alt + Z","Legacy custom shortcut was not preserved");
+            File.WriteAllText(path,"{\"ToggleShortcut\":null,\"MovementMode\":0}");
+            Require(store.Load() is { ToggleShortcut:null,MovementMode:LensMovementMode.Movable },"An explicitly saved movable choice was overwritten");
             File.WriteAllText(path,"{");
             Require(store.Load().IsValid,"Corrupt preferences prevented a usable default");
             Console.WriteLine("PASS Shortcut and movement choices persist; restoring defaults preserves custom/empty shortcuts, activation mode and favorites");

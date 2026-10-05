@@ -2,7 +2,9 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
 using DailyUSE.Core.Gaming;
 using DailyUSE.Desktop.Presentation;
 
@@ -22,15 +24,50 @@ internal static class LensShortcutDiagnostics
             FrameWidth=320,FrameHeight=240
         };
         using var controller = new LensShortcutController(source);
+        // Real mouse input is directed at this read-only test backdrop, never a user's application.
+        var backdrop = new Window
+        {
+            Title="DailyUSE 拖动验证",WindowStyle=WindowStyle.None,ResizeMode=ResizeMode.NoResize,
+            Width=720,Height=540,Topmost=true,ShowActivated=false,ShowInTaskbar=false,
+            WindowStartupLocation=WindowStartupLocation.Manual,Left=-20000,Top=-20000,
+            Background=new SolidColorBrush(Color.FromRgb(32,64,100))
+        };
+        var preview=new Controls.LensPreview { DataContext=gaming };
+        var previewWindow=new Window
+        {
+            Title="DailyUSE 预览验证",Content=preview,Width=480,Height=760,Topmost=true,
+            ShowActivated=false,ShowInTaskbar=false,WindowStyle=WindowStyle.None,ResizeMode=ResizeMode.NoResize,
+            WindowStartupLocation=WindowStartupLocation.Manual,Left=24,Top=24
+        };
+        previewWindow.SourceInitialized += (_,_) =>
+        {
+            var handle=new WindowInteropHelper(previewWindow).Handle;
+            SetWindowLongPtr(handle,-20,new IntPtr(GetWindowLongPtr(handle,-20).ToInt64() | 0x08000000));
+        };
         controller.ToggleRequested += gaming.Toggle;
         controller.StartRequested += gaming.Start;
         controller.StopRequested += gaming.Stop;
-        var keyDown = false;
+        var keyDown = false; var mouseDown=false;
+        GetCursorPos(out var originalCursor);
         void Key(bool down)
         {
             var input = new Input { Type=1, Data=new() { Keyboard=new() { Key=0x87,Flags=down ? 0u : 2u } } };
             if (SendInput(1,[input],Marshal.SizeOf<Input>()) != 1) throw new Win32Exception(Marshal.GetLastWin32Error());
             keyDown=down;
+        }
+        void Mouse(uint flags,int x=0,int y=0,uint data=0)
+        {
+            var input=new Input { Type=0,Data=new() { Mouse=new() { X=x,Y=y,Flags=flags,Data=data } } };
+            if (SendInput(1,[input],Marshal.SizeOf<Input>()) != 1) throw new Win32Exception(Marshal.GetLastWin32Error());
+            if ((flags & 2) != 0) mouseDown=true;
+            if ((flags & 4) != 0) mouseDown=false;
+        }
+        void MoveMouse(int x,int y)
+        {
+            var width=GetSystemMetrics(78); var height=GetSystemMetrics(79);
+            var normalizedX=(int)Math.Clamp((x-GetSystemMetrics(76)+0.5)*65536/width,0,65535);
+            var normalizedY=(int)Math.Clamp((y-GetSystemMetrics(77)+0.5)*65536/height,0,65535);
+            Mouse(0xC001,normalizedX,normalizedY); // absolute move over the full virtual desktop
         }
         async Task Wait(Func<bool> ready, string failure)
         {
@@ -40,8 +77,18 @@ internal static class LensShortcutDiagnostics
         }
         try
         {
-            if (new[] { 0x10,0x11,0x12,0x5B,0x5C,0x87 }.Any(key => GetAsyncKeyState(key)<0))
-                throw new InvalidOperationException("Release modifier keys and F24 before running the developer check.");
+            if (new[] { 0x01,0x02,0x10,0x11,0x12,0x5B,0x5C,0x87 }.Any(key => GetAsyncKeyState(key)<0))
+                throw new InvalidOperationException("Release mouse buttons, modifier keys and F24 before running the developer check.");
+            if (!gaming.IsFixedMode) throw new InvalidOperationException("New settings did not default to fixed.");
+            var monitor=gaming.SelectedMonitor!.Bounds;
+            var planned=LensLayout.Calculate(monitor,320,240,2,monitor.Left+monitor.Width/2,monitor.Top+monitor.Height/2).Output;
+            backdrop.Show();
+            if (!SetWindowPos(new WindowInteropHelper(backdrop).Handle,new IntPtr(-1),planned.Left-100,planned.Top-100,720,540,0x10))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            gaming.IsMovableMode=true;
+            previewWindow.Show();
+            await preview.Ready.WaitAsync(TimeSpan.FromSeconds(15));
+            if (preview.CurrentFrame is null) throw new InvalidOperationException("The developer photo preview did not render.");
             // F24 is reserved by this test before input is generated. No text or modifier keys are sent.
             var binding = new KeyboardShortcut(0,0x87,"F24");
             gaming.SetShortcut(binding);
@@ -53,21 +100,40 @@ internal static class LensShortcutDiagnostics
             var initialHandle=gaming.LensHandle;
             if (initial.Width != 320 || initial.Height != 240) throw new InvalidOperationException("The live lens did not use independent width and height.");
             var pointer=gaming.PointerForDiagnostics ?? throw new InvalidOperationException("The native mouse hook was not installed.");
-            if (!pointer.Process(0x201,initial.Left+2,initial.Top+2) ||
-                !pointer.Process(0x200,initial.Left+82,initial.Top+72) || !pointer.Process(0x202,initial.Left+82,initial.Top+72))
-                throw new InvalidOperationException("The live lens did not accept a border drag.");
+            MoveMouse(initial.Left+160,initial.Top+120);
+            await Task.Delay(30);
+            Mouse(2);
+            await Task.Delay(30);
+            MoveMouse(initial.Left+240,initial.Top+190);
             await Wait(() =>
             {
                 if (!GetWindowRect(gaming.LensHandle,out var rect)) return false;
                 return rect.Left == initial.Left+80 && rect.Top == initial.Top+70 && rect.Right-rect.Left == 320 && rect.Bottom-rect.Top == 240;
-            },"The live native window did not move without resizing.");
+            },"Actual mouse input from the picture's center did not move the native window.");
+            Mouse(4);
+            await Task.Delay(30);
             var moved=gaming.ActiveBounds!;
+            if (preview.CurrentFrame.Settings.PointerX != 0.5 || preview.CurrentFrame.Settings.PointerY != 0.5)
+                throw new InvalidOperationException("Moving the live lens changed the independent photo position.");
+            Mouse(0x0800,data:120);
+            await Wait(() => gaming.Zoom == 2.25,"Actual wheel input did not reach the mouse hook.");
             for (var i=0;i<40;i++) pointer.Process(0x20A,moved.Left+20,moved.Top+20,120);
             if (gaming.Zoom != 8 || !gaming.IsVisible) throw new InvalidOperationException("Wheel zoom hid the lens at its upper limit.");
             for (var i=0;i<40;i++) pointer.Process(0x20A,moved.Left+20,moved.Top+20,-120);
             if (gaming.Zoom != 1 || !gaming.IsVisible) throw new InvalidOperationException("Wheel zoom hid the lens at its lower limit.");
             await Task.Delay(120);
             if (!gaming.IsVisible) throw new InvalidOperationException("Rendering failed after dragging or repeated wheel changes.");
+            await Wait(() => preview.CurrentFrame?.Settings.Zoom == 1,"Preview zoom did not update before dragging.");
+            var previewBorder=(System.Windows.Controls.Border)preview.FindName("FrameBorder");
+            var previewCenter=previewBorder.PointToScreen(new(previewBorder.ActualWidth/2,previewBorder.ActualHeight/2));
+            MoveMouse((int)Math.Round(previewCenter.X),(int)Math.Round(previewCenter.Y));
+            await Task.Delay(30); Mouse(2); await Task.Delay(30);
+            MoveMouse((int)Math.Round(previewCenter.X)+48,(int)Math.Round(previewCenter.Y)+28);
+            await Wait(() => preview.CurrentFrame!.Settings.PointerX != 0.5 && preview.CurrentFrame.Settings.PointerY != 0.5,
+                "Actual mouse input did not drag the photo preview.");
+            Mouse(4); await Task.Delay(50);
+            var previewX=preview.CurrentFrame!.Settings.PointerX; var previewY=preview.CurrentFrame.Settings.PointerY;
+            if (!At(moved)) throw new InvalidOperationException("Dragging the photo moved the independent live lens.");
             Key(true); Key(false);
             await Wait(() => !gaming.IsActive,"The same shortcut did not close the lens.");
             RequireReleased(initialHandle);
@@ -83,34 +149,52 @@ internal static class LensShortcutDiagnostics
 
             gaming.Start();
             await Wait(() => gaming.IsVisible,"Movement checks did not start.");
+            var revision=gaming.PositionResetVersion;
             gaming.IsFixedMode=true;
-            await Wait(() => At(initial),"Fixed mode did not center the native window.");
+            await Task.Delay(50);
+            if (!At(moved) || gaming.PositionResetVersion != revision)
+                throw new InvalidOperationException("Fixed mode moved the lens instead of locking its current position.");
+            if (preview.CurrentFrame!.Settings.PointerX != previewX || preview.CurrentFrame.Settings.PointerY != previewY)
+                throw new InvalidOperationException("Fixed mode reset the photo's current position.");
+            var lockedHandle=gaming.LensHandle;
+            gaming.Stop(); RequireReleased(lockedHandle);
+            gaming.Start();
+            await Wait(() => gaming.IsVisible,"The fixed lens did not restart.");
+            if (!At(moved)) throw new InvalidOperationException("Reopening a fixed lens lost its locked position.");
             pointer=gaming.PointerForDiagnostics!;
-            if (pointer.Process(0x201,initial.Left+2,initial.Top+2) || pointer.Process(0x200,initial.Left+82,initial.Top+72))
+            if (pointer.Process(0x201,moved.Left+2,moved.Top+2) || pointer.Process(0x201,moved.Left+160,moved.Top+120) ||
+                pointer.Process(0x200,moved.Left+82,moved.Top+72))
                 throw new InvalidOperationException("Fixed mode still allowed dragging.");
-            pointer.Process(0x20A,initial.Left+20,initial.Top+20,120);
+            pointer.Process(0x20A,moved.Left+20,moved.Top+20,120);
             if (gaming.Zoom != 1.25 || !gaming.IsVisible) throw new InvalidOperationException("Fixed mode disabled wheel zoom.");
             gaming.IsMovableMode=true;
-            pointer.Process(0x201,initial.Left+2,initial.Top+2);
-            pointer.Process(0x200,initial.Left+82,initial.Top+72);
-            pointer.Process(0x200,initial.Left+12,initial.Top+12);
+            pointer.Process(0x201,moved.Left+160,moved.Top+120);
+            pointer.Process(0x200,initial.Left+170,initial.Top+130);
             await Wait(() => At(initial),"Center assistance did not snap the native window.");
             if (!gaming.VerticalGuide || !gaming.HorizontalGuide) throw new InvalidOperationException("Snapping did not activate center guides.");
-            pointer.Process(0x202,initial.Left+12,initial.Top+12);
+            pointer.Process(0x202,initial.Left+170,initial.Top+130);
             if (gaming.VerticalGuide || gaming.HorizontalGuide) throw new InvalidOperationException("Releasing the drag left center guides enabled.");
             pointer.Process(0x201,initial.Left+2,initial.Top+2);
             pointer.Process(0x200,initial.Left+82,initial.Top+72);
             pointer.Process(0x202,initial.Left+82,initial.Top+72);
-            gaming.CenterCommand.Execute(null);
-            await Wait(() => At(initial),"Recenter button did not move the live native window.");
+            gaming.IsFixedMode=true;
             var resetHandle=gaming.LensHandle;
             gaming.IsFavorite=true;
             gaming.ResetDefaultsCommand.Execute(null);
             RequireReleased(resetHandle);
             if (gaming.Zoom != 2 || gaming.FrameWidth != 640 || gaming.FrameHeight != 384 || gaming.Sharpening != 0.35 ||
-                gaming.FrameRate != 0 || !gaming.IsMovableMode || !gaming.ToggleShortcut!.Matches(binding) ||
+                gaming.FrameRate != 0 || !gaming.IsFixedMode || !gaming.ToggleShortcut!.Matches(binding) ||
                 !gaming.IsToggleMode || !gaming.IsFavorite || !controller.IsRegistered)
                 throw new InvalidOperationException("Reset did not restore picture defaults while preserving personal choices and the background shortcut.");
+            gaming.Start();
+            await Wait(() => gaming.IsVisible,"The reset lens did not start.");
+            var defaults=LensLayout.Calculate(gaming.SelectedMonitor!.Bounds,640,384,2,
+                monitor.Left+monitor.Width/2,monitor.Top+monitor.Height/2).Output;
+            if (!At(defaults) || !gaming.IsFixedMode) throw new InvalidOperationException("Restoring defaults did not recenter and lock the lens.");
+            await Wait(() => preview.CurrentFrame?.Settings is { Width:640,Height:384,Zoom:2,PointerX:0.5,PointerY:0.5 },
+                "Restoring defaults did not reset the independent photo position and picture settings.");
+            var defaultHandle=gaming.LensHandle;
+            gaming.Stop(); RequireReleased(defaultHandle);
 
             // Stop before the UI can process the first-frame callback. A stale callback must not reopen the window.
             gaming.Start();
@@ -139,14 +223,20 @@ internal static class LensShortcutDiagnostics
                 BackgroundRegistration=true,FirstShortcutStartsCapture=true,SingleShortcutToggles=true,
                 HoldStartsCapture=true,ReleaseStopsCapture=true,ReleasedBeforeStartupStaysClosed=true,EmptyShortcutUnregistered=true,
                 ToggleReleasesResources=true,ReopensAfterFullStop=true,PendingStartupCanClose=true,PositionAndZoomPreserved=true,
-                IndependentLiveDimensions=true,NativeWindowDrag=true,WheelLimitsRemainVisible=true,FollowCaptureFrames=gaming.FrameRate == 0,
-                FixedCentersAndBlocksDrag=true,FixedWheelZoom=true,CenterSnapAndGuideRelease=true,RecenterButton=true,ResetDefaultsPreservesPersonalChoices=true
+                IndependentLiveDimensions=true,NativePictureDrag=true,RealMouseHookDrag=true,RealWheelInput=true,
+                WheelLimitsRemainVisible=true,FollowCaptureFrames=gaming.FrameRate == 0,
+                FixedIsDefault=true,FixedLocksCurrentPosition=true,FixedReopenPreservesPosition=true,FixedWheelZoom=true,
+                CenterSnapAndGuideRelease=true,ResetDefaultsRecenters=true,ResetDefaultsPreservesPersonalChoices=true,
+                LiveDragIndependent=true,PreviewDragIndependent=true,PreviewFixedKeepsPosition=true,ResetDefaultsResetsPreview=true
             }));
         }
         finally
         {
+            if (mouseDown) Mouse(4);
             if (keyDown) Key(false);
             controller.Dispose(); gaming.Dispose();
+            previewWindow.Close(); backdrop.Close();
+            SetCursorPos(originalCursor.X,originalCursor.Y);
             var tempRoot=Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
             if(Path.GetFullPath(directory.FullName).StartsWith(tempRoot,StringComparison.OrdinalIgnoreCase) &&
                 directory.Name.StartsWith("DailyUSE-lens-key-check-",StringComparison.Ordinal)) directory.Delete(recursive:true);
@@ -186,4 +276,11 @@ internal static class LensShortcutDiagnostics
     [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left,Top,Right,Bottom; }
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window,out NativeRect bounds);
     [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr window);
+    [StructLayout(LayoutKind.Sequential)] private struct NativePoint { public int X,Y; }
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out NativePoint point);
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x,int y);
+    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
+    [DllImport("user32.dll",SetLastError=true)] private static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern IntPtr GetWindowLongPtr(IntPtr window,int index);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
 }
