@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DailyUSE.Core.Gaming;
 using DailyUSE.Desktop.Presentation;
 
@@ -32,6 +33,10 @@ internal static class LensShortcutDiagnostics
             WindowStartupLocation=WindowStartupLocation.Manual,Left=-20000,Top=-20000,
             Background=new SolidColorBrush(Color.FromRgb(32,64,100))
         };
+        var testScene=new System.Windows.Controls.Canvas();
+        var label=new System.Windows.Controls.TextBlock { Text="DailyUSE",FontSize=28,Foreground=Brushes.White };
+        System.Windows.Controls.Canvas.SetLeft(label,210); System.Windows.Controls.Canvas.SetTop(label,200);
+        testScene.Children.Add(label); backdrop.Content=testScene;
         var preview=new Controls.LensPreview { DataContext=gaming };
         var previewWindow=new Window
         {
@@ -100,19 +105,85 @@ internal static class LensShortcutDiagnostics
             var initialHandle=gaming.LensHandle;
             if (initial.Width != 320 || initial.Height != 240) throw new InvalidOperationException("The live lens did not use independent width and height.");
             var pointer=gaming.PointerForDiagnostics ?? throw new InvalidOperationException("The native mouse hook was not installed.");
+            var stage=new PixelBounds(planned.Left-100,planned.Top-100,720,540);
+            var capture=gaming.CaptureForDiagnostics!;
+            // Observe desktop composition, not the lens's private back buffer or HWND bounds.
+            // Pause this test capture and temporarily include its own window in the observation.
+            capture.Paused=true;
+            if (!SetWindowDisplayAffinity(initialHandle,0)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            await Task.Delay(100);
+            var before=LensDesktopSnapshot.Read(stage);
+            Save(before,Path.ChangeExtension(outputPath,"before.png"));
+            var borderColor=Color(before,initial.Left+1,initial.Top+60);
+            var backdropColor=Color(before,stage.Left+10,stage.Top+10);
+            if (borderColor[1] <= borderColor[2]+50 || borderColor[1] <= borderColor[0]+20 ||
+                borderColor.SequenceEqual(backdropColor))
+            {
+                var at=((initial.Top+60-stage.Top)*stage.Width+initial.Left+1-stage.Left)*4;
+                throw new InvalidOperationException($"The magnified window's border was not visibly present before dragging. RGB={before[at+2]},{before[at+1]},{before[at]}; HWND={initialHandle}; bounds={initial}");
+            }
             MoveMouse(initial.Left+160,initial.Top+120);
             await Task.Delay(30);
+            if (WindowFromPoint(new() { X=initial.Left+160,Y=initial.Top+120 }) != initialHandle)
+                throw new InvalidOperationException("Movable mode still made the magnified window mouse transparent.");
             Mouse(2);
             await Task.Delay(30);
-            MoveMouse(initial.Left+240,initial.Top+190);
+            var guides=gaming.GuidesForDiagnostics!;
+            if (!guides.Visible || !GetWindowRect(guides.VerticalHandle,out var vertical) ||
+                !GetWindowRect(guides.HorizontalHandle,out var horizontal) ||
+                vertical.Left != monitor.Left+monitor.Width/2-1 || vertical.Top != monitor.Top || vertical.Bottom != monitor.Top+monitor.Height ||
+                horizontal.Top != monitor.Top+monitor.Height/2-1 || horizontal.Left != monitor.Left || horizontal.Right != monitor.Left+monitor.Width)
+                throw new InvalidOperationException("Dragging did not show guides in desktop center coordinates.");
+            SetWindowDisplayAffinity(guides.VerticalHandle,0); SetWindowDisplayAffinity(guides.HorizontalHandle,0);
+            await Task.Delay(50);
+            var assisted=LensDesktopSnapshot.Read(stage);
+            var guideX=monitor.Left+monitor.Width/2-1;
+            var guideY=monitor.Top+(int)Math.Ceiling((stage.Top+24-monitor.Top)/12d)*12+3;
+            if (ColorAt(assisted,guideX,guideY,backdropColor) ||
+                !ColorAt(assisted,guideX+4,guideY,backdropColor))
+                throw new InvalidOperationException("The desktop center guide was not visibly drawn outside the lens.");
+            for (var y=4;y<initial.Height-4;y+=8) for (var x=4;x<initial.Width-4;x+=8)
+                if (!ColorAt(assisted,initial.Left+x,initial.Top+y,Color(before,initial.Left+x,initial.Top+y)))
+                    throw new InvalidOperationException("A desktop guide was painted over the magnified picture.");
+            Save(assisted,Path.ChangeExtension(outputPath,"guides.png"));
+            SetWindowDisplayAffinity(guides.VerticalHandle,0x11); SetWindowDisplayAffinity(guides.HorizontalHandle,0x11);
+            // Relative input follows the same path as an ordinary mouse, including pointer acceleration.
+            // Verify against Windows' resulting cursor position rather than assuming a fixed speed.
+            for (var step=0;step<4;step++)
+            {
+                GetCursorPos(out var previousCursor);
+                Mouse(0x0001,16,10);
+                await Task.Delay(30);
+                GetCursorPos(out var currentCursor);
+                if (currentCursor.X <= previousCursor.X || currentCursor.Y <= previousCursor.Y)
+                    throw new InvalidOperationException("Relative mouse motion was suppressed during the drag.");
+                var expected=LensPlacement.Snap(monitor,320,240,currentCursor.X-160,currentCursor.Y-120).Bounds;
+                if (!At(expected)) throw new InvalidOperationException("The floating window did not follow consecutive relative mouse moves.");
+            }
+            // A single mouse move leaves the old frame in both axes, exercising continuation outside it.
+            MoveMouse(initial.Left+400,initial.Top+290);
             await Wait(() =>
             {
                 if (!GetWindowRect(gaming.LensHandle,out var rect)) return false;
-                return rect.Left == initial.Left+80 && rect.Top == initial.Top+70 && rect.Right-rect.Left == 320 && rect.Bottom-rect.Top == 240;
+                return rect.Left == initial.Left+240 && rect.Top == initial.Top+170 && rect.Right-rect.Left == 320 && rect.Bottom-rect.Top == 240;
             },"Actual mouse input from the picture's center did not move the native window.");
+            GetCursorPos(out var draggedCursor);
+            if (Math.Abs(draggedCursor.X-(initial.Left+400))>1 || Math.Abs(draggedCursor.Y-(initial.Top+290))>1)
+                throw new InvalidOperationException("Dragging moved the floating window but suppressed the system cursor's movement.");
             Mouse(4);
             await Task.Delay(30);
             var moved=gaming.ActiveBounds!;
+            if (guides.Visible) throw new InvalidOperationException("Desktop guides remained visible after mouse release.");
+            var after=LensDesktopSnapshot.Read(stage);
+            if (!ColorAt(after,moved.Left+1,moved.Top+60,borderColor) ||
+                !ColorAt(after,initial.Left+1,initial.Top+60,backdropColor))
+                throw new InvalidOperationException("The displayed magnified pixels did not move away from their original position.");
+            for (var y=4;y<initial.Height-4;y+=8) for (var x=4;x<initial.Width-4;x+=8)
+                if (!ColorAt(after,moved.Left+x,moved.Top+y,Color(before,initial.Left+x,initial.Top+y)))
+                    throw new InvalidOperationException("The displayed magnified picture did not travel with the floating window.");
+            Save(after,Path.ChangeExtension(outputPath,"png"));
+            if (!SetWindowDisplayAffinity(initialHandle,0x11)) throw new Win32Exception(Marshal.GetLastWin32Error());
+            capture.Paused=false;
             if (preview.CurrentFrame.Settings.PointerX != 0.5 || preview.CurrentFrame.Settings.PointerY != 0.5)
                 throw new InvalidOperationException("Moving the live lens changed the independent photo position.");
             Mouse(0x0800,data:120);
@@ -227,8 +298,28 @@ internal static class LensShortcutDiagnostics
                 WheelLimitsRemainVisible=true,FollowCaptureFrames=gaming.FrameRate == 0,
                 FixedIsDefault=true,FixedLocksCurrentPosition=true,FixedReopenPreservesPosition=true,FixedWheelZoom=true,
                 CenterSnapAndGuideRelease=true,ResetDefaultsRecenters=true,ResetDefaultsPreservesPersonalChoices=true,
-                LiveDragIndependent=true,PreviewDragIndependent=true,PreviewFixedKeepsPosition=true,ResetDefaultsResetsPreview=true
+                LiveDragIndependent=true,PreviewDragIndependent=true,PreviewFixedKeepsPosition=true,ResetDefaultsResetsPreview=true,
+                NativeWindowReceivesDrag=true,CompositedPictureActuallyMoves=true,DesktopGuideCoordinates=true,DesktopGuidesHideOnRelease=true,
+                DragContinuesOutsideOriginalFrame=true,DesktopGuidesVisibleOutsideLens=true,DesktopGuidesAvoidMagnifiedPicture=true,
+                RealCursorFollowsDrag=true,ContinuousRelativeMouseDrag=true
             }));
+
+            byte[] Color(byte[] pixels,int x,int y)
+            {
+                var at=((y-stage.Top)*stage.Width+x-stage.Left)*4;
+                return [pixels[at],pixels[at+1],pixels[at+2]];
+            }
+            bool ColorAt(byte[] pixels,int x,int y,byte[] expected)
+            {
+                var actual=Color(pixels,x,y);
+                return actual.Zip(expected).All(pair => Math.Abs(pair.First-pair.Second)<=4);
+            }
+            void Save(byte[] pixels,string path)
+            {
+                var encoder=new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(stage.Width,stage.Height,96,96,PixelFormats.Bgra32,null,pixels,stage.Width*4)));
+                using var file=File.Create(path); encoder.Save(file);
+            }
         }
         finally
         {
@@ -283,4 +374,6 @@ internal static class LensShortcutDiagnostics
     [DllImport("user32.dll",SetLastError=true)] private static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern IntPtr GetWindowLongPtr(IntPtr window,int index);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(NativePoint point);
+    [DllImport("user32.dll",SetLastError=true)] private static extern bool SetWindowDisplayAffinity(IntPtr window,uint affinity);
 }

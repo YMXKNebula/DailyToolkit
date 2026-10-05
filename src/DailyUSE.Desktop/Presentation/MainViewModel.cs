@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Data;
 using DailyUSE.Core.Environment;
 using DailyUSE.Desktop.Environment;
+using DailyUSE.Desktop.Gaming;
 
 namespace DailyUSE.Desktop.Presentation;
 
@@ -35,7 +36,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isReadingStatus;
 
     public MainViewModel(IEnvironmentProbe probe, DisplayInfo display, ILocalStatusProbe? localStatus = null,
-        TimeProvider? clock = null, FavoritesStore? favoritesStore = null)
+        TimeProvider? clock = null, FavoritesStore? favoritesStore = null, GamingPreferencesStore? gamingPreferencesStore = null)
     {
         _probe = probe;
         _display = display;
@@ -43,6 +44,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _clock = clock ?? TimeProvider.System;
         _favoritesStore = favoritesStore ?? new();
         _favoriteIds = _favoritesStore.Load();
+        Gaming = new(gamingPreferencesStore);
         Gaming.IsFavorite = _favoriteIds.Contains("screen-lens");
         _now = _clock.GetLocalNow();
         _report = new()
@@ -71,7 +73,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public RelayCommand NavigateCommand { get; }
-    public GamingViewModel Gaming { get; } = new();
+    public GamingViewModel Gaming { get; }
     public RelayCommand RefreshCommand { get; }
     public Task CurrentProbeTask { get; private set; } = Task.CompletedTask;
     public Task CurrentLocalStatusTask { get; private set; } = Task.CompletedTask;
@@ -277,7 +279,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyUSE", Version = "0.3.5", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyUSE", Version = "0.3.6", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);

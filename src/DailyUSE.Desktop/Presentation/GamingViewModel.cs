@@ -11,6 +11,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     private LensGpuRenderer? _renderer;
     private LensCapture? _capture;
     private LensPointerController? _pointer;
+    private LensDesktopGuides? _guides;
     private LensLayout? _layout;
     private CaptureMonitor? _activeMonitor;
     private IntPtr _positionMonitor;
@@ -65,7 +66,9 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     internal bool VerticalGuide => _verticalGuide;
     internal bool HorizontalGuide => _horizontalGuide;
     internal IntPtr LensHandle => _window?.Handle ?? IntPtr.Zero;
-    internal bool HasCaptureResources => _window is not null || _renderer is not null || _capture is not null || _pointer is not null || _startupTimer is not null;
+    internal LensDesktopGuides? GuidesForDiagnostics => _guides;
+    internal LensCapture? CaptureForDiagnostics => _capture;
+    internal bool HasCaptureResources => _window is not null || _renderer is not null || _capture is not null || _pointer is not null || _guides is not null || _startupTimer is not null;
     public bool IsRequestedVisible => IsActive;
     public bool IsVisible => IsRequestedVisible && _capture is { FramesRendered: > 0 };
     public bool CanConfigure => !IsActive;
@@ -88,6 +91,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             SavePreferences(_preferences with { MovementMode=value });
             Notify(nameof(MovementMode)); Notify(nameof(IsFixedMode)); Notify(nameof(IsMovableMode)); Notify(nameof(MovementHint));
             if (IsFixedMode) { _pointer?.CancelDrag(); ClearGuides(); }
+            _window?.SetMovable(IsMovableMode);
             if (IsVisible) UpdateActiveStatus();
         }
     }
@@ -95,7 +99,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public bool IsMovableMode { get => MovementMode == LensMovementMode.Movable; set { if (value) MovementMode=LensMovementMode.Movable; } }
     public string MovementHint => IsFixedMode
         ? "锁住当前位置。框内滚轮调倍率（1–8×），点击可操作下面的窗口。"
-        : "按住放大画面中的任意位置拖动，靠近屏幕中心时吸附并显示辅助线。框内滚轮调倍率（1–8×）；摆好位置后切回固定，可操作下面的窗口。";
+        : "按住放大画面拖动整个浮窗。拖动时显示屏幕中心辅助线，靠近时吸附。框内滚轮调倍率（1–8×）；摆好位置后切回固定。";
     public bool IsFavorite
     {
         get => _favorite;
@@ -152,12 +156,16 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             // Keep the sampled area aligned with the frame when a changed size clamps its position.
             _layout=layout=LensLayout.Calculate(monitor.Bounds,width,height,Zoom,_centerX,_centerY);
             _window = new(layout.Output);
+            _window.SetMovable(IsMovableMode);
+            _guides = new(monitor.Bounds);
             _renderer = new(_window.Handle,layout.Output.Width,layout.Output.Height);
             var item = CaptureInterop.ForMonitor(monitor.Handle);
             var generation = ++_generation;
             _capture = new(_renderer,item,layout.Source,Sharpening,FrameRate);
             _pointer = new(() => IsVisible ? _layout?.Output : null,MoveFrame,AdjustZoom,
-                canMove:() => IsMovableMode,dragEnded:ClearGuides);
+                canMove:() => IsMovableMode,dragEnded:ClearGuides,dragStarted:ShowGuides,nativeInput:true);
+            _window.PointerMessage += _pointer.Process;
+            _window.PointerCanceled += _pointer.CancelDrag;
             _capture.FirstFrame += () => Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 if (generation != _generation || !IsActive) return;
@@ -233,9 +241,14 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
 
     private void ClearGuides()
     {
-        if (!_verticalGuide && !_horizontalGuide) return;
+        _guides?.Hide();
+        _window?.ReleasePointer();
         _verticalGuide=_horizontalGuide=false;
-        Reposition();
+    }
+
+    private void ShowGuides()
+    {
+        if (_layout is not null) _guides?.Update(_layout.Output,_verticalGuide,_horizontalGuide);
     }
 
     private void UpdateActiveStatus() => Status=$"已开启 · {ZoomText} · " +
@@ -244,9 +257,11 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     private void Reposition()
     {
         if (_layout is null || _activeMonitor is null || !IsActive) return;
-        _layout=LensLayout.Calculate(_activeMonitor.Bounds,_layout.Output.Width,_layout.Output.Height,Zoom,_centerX,_centerY);
-        _window?.Move(_layout.Output);
-        _capture?.UpdateSource(_layout.Source,Sharpening,_verticalGuide,_horizontalGuide);
+        var layout=LensLayout.Calculate(_activeMonitor.Bounds,_layout.Output.Width,_layout.Output.Height,Zoom,_centerX,_centerY);
+        if (_window?.Move(layout.Output) != true) { Status="浮窗移动失败，请重新开启放大框。"; return; }
+        _layout=layout;
+        if (_guides is { Visible:true }) _guides.Update(layout.Output,_verticalGuide,_horizontalGuide);
+        _capture?.UpdateSource(layout.Source,Sharpening);
         UpdateActiveStatus();
     }
 
@@ -258,6 +273,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     {
         _generation++;
         _pointer?.Dispose(); _pointer=null;
+        _guides?.Dispose(); _guides=null;
         _startupTimer?.Stop(); _startupTimer=null;
         _window?.Hide();
         _capture?.Dispose(); _capture = null;

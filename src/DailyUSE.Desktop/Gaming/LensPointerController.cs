@@ -12,15 +12,18 @@ internal sealed class LensPointerController : IDisposable
     private readonly Action<int> _zoom;
     private readonly Func<bool> _canMove;
     private readonly Action? _dragEnded;
+    private readonly Action? _dragStarted;
+    private readonly bool _nativeInput;
     private IntPtr _hook;
     private bool _dragging,_consumedDown;
     private int _offsetX,_offsetY;
 
     public LensPointerController(Func<PixelBounds?> visibleBounds, Action<int,int> move, Action<int> zoom, bool install=true,
-        Func<bool>? canMove=null, Action? dragEnded=null)
+        Func<bool>? canMove=null, Action? dragEnded=null, Action? dragStarted=null, bool nativeInput=false)
     {
         _visibleBounds=visibleBounds; _move=move; _zoom=zoom;
         _canMove=canMove ?? (() => true); _dragEnded=dragEnded;
+        _dragStarted=dragStarted; _nativeInput=nativeInput;
         _procedure=OnMouse;
         if (!install) return;
         _hook=SetWindowsHookEx(14,_procedure,GetModuleHandle(null),0);
@@ -35,7 +38,11 @@ internal sealed class LensPointerController : IDisposable
             // Movable lenses accept dragging anywhere inside; fixed lenses pass clicks through.
             // Wheel zoom remains available in both modes.
             // No rendering, I/O or GPU waits are performed in this callback.
-            if (Process((int)message,data.Point.X,data.Point.Y,unchecked((short)(data.Data >> 16)))) return new(1);
+            if (_nativeInput && (int)message == 0x201) return CallNextHookEx(_hook,code,message,pointer);
+            var handled=Process((int)message,data.Point.X,data.Point.Y,unchecked((short)(data.Data >> 16)));
+            // Observing a move must not suppress the system cursor's motion. Otherwise physical
+            // relative mouse input keeps starting at the old position and the lens appears stuck.
+            if (handled && (int)message != 0x200) return new(1);
         }
         return CallNextHookEx(_hook,code,message,pointer);
     }
@@ -53,6 +60,7 @@ internal sealed class LensPointerController : IDisposable
         if (message != 0x201 || !_canMove()) return false;
         _offsetX=x-bounds.Left; _offsetY=y-bounds.Top;
         _dragging=_consumedDown=true;
+        _dragStarted?.Invoke();
         return true;
     }
 

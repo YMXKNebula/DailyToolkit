@@ -66,8 +66,7 @@ internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposa
             var offsetY = (monitor.Height-photo.PixelHeight*scale)/2;
             var source = new SourceArea((layout.Source.Left-offsetX)/scale,(layout.Source.Top-offsetY)/scale,
                 layout.Source.Width/scale,layout.Source.Height/scale);
-            _renderer.Render(_texture!,source,settings.Sharpening,present:false,
-                verticalGuide:settings.VerticalGuide,horizontalGuide:settings.HorizontalGuide);
+            _renderer.Render(_texture!,source,settings.Sharpening,present:false);
             var output = BitmapSource.Create(layout.Output.Width,layout.Output.Height,96,96,
                 PixelFormats.Bgra32,null,_renderer.ReadOutput(),layout.Output.Width*4);
             output.Freeze();

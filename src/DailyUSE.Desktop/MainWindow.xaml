@@ -24,7 +24,7 @@
         <StackPanel DockPanel.Dock="Bottom" Margin="12,0,0,0">
           <TextBlock Text="本机运行" Style="{StaticResource MutedText}" />
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.5</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.6</Hyperlink>
           </TextBlock>
         </StackPanel>
         <StackPanel>
@@ -198,8 +198,8 @@
                     </StackPanel>
                     <TextBlock Text="位置" FontWeight="SemiBold" Margin="0,0,0,10" />
                     <WrapPanel Margin="0,0,0,18">
-                      <RadioButton Content="固定" GroupName="LensMovement" IsChecked="{Binding IsFixedMode}" Margin="0,0,18,0" />
-                      <RadioButton Content="可移动" GroupName="LensMovement" IsChecked="{Binding IsMovableMode}" />
+                      <RadioButton x:Name="LensFixedMode" Content="固定" GroupName="LensMovement" IsChecked="{Binding IsFixedMode, Mode=TwoWay}" Margin="0,0,18,0" />
+                      <RadioButton x:Name="LensMovableMode" Content="可移动" GroupName="LensMovement" IsChecked="{Binding IsMovableMode, Mode=TwoWay}" />
                     </WrapPanel>
                     <Grid>
                       <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>

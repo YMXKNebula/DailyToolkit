@@ -153,9 +153,7 @@ internal static class Program
             }
             var original=Pixels(first.Magnified);
             var guided=Pixels(renderer.Render(settings with { VerticalGuide=true,HorizontalGuide=true }).Magnified);
-            var at=(24*320+160)*4;
-            Require(guided[at+2] == 255 && Math.Abs(guided[at+1]-212) <= 1 && Math.Abs(guided[at]-89) <= 1,
-                "Center assistance was not drawn by the actual shader");
+            Require(guided.SequenceEqual(original),"Desktop guides were painted inside the magnified photo");
             Require(Pixels(renderer.Render(settings).Magnified).SequenceEqual(original),"Ending assistance left guide pixels in the output");
             var sharp=Pixels(renderer.Render(settings with { Sharpening=1 }).Magnified);
             Require(!original.SequenceEqual(sharp),"Sharpening did not change the actual photo shader output");
@@ -209,10 +207,12 @@ internal static class Program
 
     private static async Task CheckPreviewLayoutAsync()
     {
+        var directory=Directory.CreateTempSubdirectory("DailyUSE-lens-layout-tests-");
         var display=new DisplayInfo(1920,1080,1,1920,1040,false);
         var probe=new ControlledProbe(display);
         probe.Finish.TrySetResult();
-        var model=new MainViewModel(probe,display,new LocalProbe());
+        var model=new MainViewModel(probe,display,new LocalProbe(),
+            gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")));
         model.Page="gaming";
         var window=new MainWindow(model,enableShortcuts:false)
         {
@@ -226,6 +226,13 @@ internal static class Program
             window.ShowPreviewDetails(false);
             await window.WaitForLensPreviewAsync().WaitAsync(TimeSpan.FromSeconds(15));
             window.UpdateLayout();
+            var fixedRadio=(System.Windows.Controls.RadioButton)window.FindName("LensFixedMode");
+            var movableRadio=(System.Windows.Controls.RadioButton)window.FindName("LensMovableMode");
+            Require(fixedRadio.IsChecked == true && movableRadio.IsChecked == false,"Position radio buttons did not default to fixed");
+            movableRadio.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty,true);
+            Require(model.Gaming.IsMovableMode && fixedRadio.IsChecked == false,"Choosing movable in the actual settings did not update the lens mode");
+            fixedRadio.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty,true);
+            Require(model.Gaming.IsFixedMode && movableRadio.IsChecked == false,"Choosing fixed in the actual settings did not lock the lens mode");
             Require(preview.CurrentFrame is not null && !model.Gaming.IsActive && System.Windows.Controls.Grid.GetColumn(preview) == 1,
                 "Expanded preview was missing or did not sit beside settings");
             window.Width=680;
@@ -233,7 +240,13 @@ internal static class Program
             Require(System.Windows.Controls.Grid.GetRow(preview) == 1 && System.Windows.Controls.Grid.GetColumn(preview) == 0,
                 "Narrow layout did not place the preview below the settings");
         }
-        finally { window.Close(); await model.PendingWork; }
+        finally
+        {
+            window.Close(); await model.PendingWork;
+            var tempRoot=Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+            if (Path.GetFullPath(directory.FullName).StartsWith(tempRoot,StringComparison.OrdinalIgnoreCase) &&
+                directory.Name.StartsWith("DailyUSE-lens-layout-tests-",StringComparison.Ordinal)) directory.Delete(recursive:true);
+        }
         Console.WriteLine("PASS Preview loads only when expanded, stays offline, leaves capture off and adapts to narrow windows");
     }
 
