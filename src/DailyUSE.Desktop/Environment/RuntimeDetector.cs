@@ -72,6 +72,13 @@ internal static partial class RuntimeDetector
             }
         };
         foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+        if (id == "dotnet-sdk")
+        {
+            process.StartInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+            process.StartInfo.Environment["DOTNET_NOLOGO"] = "1";
+            process.StartInfo.Environment["DOTNET_GENERATE_ASPNET_CERTIFICATE"] = "false";
+            process.StartInfo.Environment["DOTNET_ADD_GLOBAL_TOOLS_TO_PATH"] = "false";
+        }
         try
         {
             if (!process.Start()) return new(id, name, RuntimeStatus.Unknown, null);
