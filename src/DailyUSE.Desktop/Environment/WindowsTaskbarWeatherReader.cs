@@ -17,6 +17,7 @@ internal static class WindowsTaskbarWeatherReader
             var ids = new[] { "AugmentedEntryPointButton", "WidgetsButton", "DynamicContent1", "NewsAndInterestsButton" };
             var conditions = ids.Select(id => (Condition)new PropertyCondition(AutomationElement.AutomationIdProperty, id)).ToArray();
             var matches = taskbar.FindAll(TreeScope.Descendants, new OrCondition(conditions));
+            if (matches.Count == 0) return WeatherInfo.Unavailable("未找到可读取的任务栏天气入口", "Windows 任务栏");
             foreach (AutomationElement element in matches)
             {
                 var weather = WindowsWeatherText.Parse(element.Current.Name);

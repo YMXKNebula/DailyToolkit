@@ -6,7 +6,7 @@ DailyUSE 的界面和工具都在本机运行。第一版先做 Windows，桌面
 
 | 目录 | 用途 |
 | --- | --- |
-| `src/DailyUSE.Core/Environment` | 信息格式、适配规则、天气文字识别和网卡流量采样 |
+| `src/DailyUSE.Core/Environment` | 信息格式、适配规则、Windows 天气缓存解析和网卡流量采样 |
 | `src/DailyUSE.Core/Tools` | 工具登记、运行条件检查、本地进程调用 |
 | `src/DailyUSE.Desktop/Environment` | Windows 信息读取 |
 | `src/DailyUSE.Desktop/Presentation` | 页面状态和操作 |
@@ -30,11 +30,13 @@ DailyUSE 的界面和工具都在本机运行。第一版先做 Windows，桌面
 - 日期和时间读取 Windows 本机时钟，每秒更新。软件不自行校时。
 - 网络状态来自 Windows Network List Manager。它反映 Windows 当前的判断，不保证每个网站都能访问；DailyUSE 不发送 Ping、DNS 查询或 HTTP 连通性请求。
 - 流量读取有默认网关的活动网卡计数器，每三秒采样。它包含本机这些网卡的流量，不是互联网测速；使用多个物理或虚拟连接时可能包含多个连接的统计。不记录网卡名称、IP、MAC 或 Wi-Fi 名称。
-- 天气通过 UI Automation 读取任务栏中现有的天气或小组件入口文字，每分钟最多尝试一次；手动刷新可以立即重读。只在文字包含可识别的温度时显示，不打开或点击系统小组件。
+- 天气优先读取 Windows 小组件在本机保存的天气缓存，每分钟最多尝试一次；手动刷新可以立即重读。页面显示温度、天气描述、可用的地点和观测更新时间，保持缓存中的摄氏或华氏单位。超过三小时标为“缓存较旧”，超过一天不再作为可用天气显示。没有可用缓存时，尝试通过 UI Automation 读取任务栏现有的天气文字，不打开或点击系统小组件。
 
-Windows 没有保证所有版本都提供相同的任务栏天气入口和可读文字。读取不到、入口关闭、显示的是其他小组件内容或读取超时时，显示“未获取”。这不等于没有安装天气应用。软件不会读取浏览器缓存、登录信息或其他小组件数据来补齐天气，也不会自行联网获取。
+缓存来源为 `%LOCALAPPDATA%/Packages/MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy/LocalState/DiagOutputDir/IDX_CONTENT_TASKBARHEADLINES.json`，目前在本机的 Windows 11 小组件缓存上验证。只解析 `WeatherSummary` 卡片中的 `WeatherOverview`，提取当前天气、单位、城市和观测时间；不解析新闻、账号、访问令牌、精确坐标或浏览器缓存。这个文件属于 Windows 内部格式，不是公开天气 API；Windows 改变格式时可能需要调整读取器。
 
-天气读取放在独立的隐藏进程中，限时三秒；关闭主窗口会取消周期读取并清理子进程。报告额外包含当前本机时间、Windows 网络状态、采样流量和已取得的天气文字，天气文字可能包含地点。
+读取器兼容 UTF-8、UTF-16 以及不带 BOM 的 UTF-16 文件，共享只读打开并限制文件为 4 MB。文件正在写入、格式变化、缓存缺失或超时时，显示具体的不可用原因。天气缓存由 Windows 自己更新，DailyUSE 不会自行联网，也不修改小组件开关；“刷新”只重读本机已有数据。
+
+天气读取放在独立的隐藏进程中，限时三秒；关闭主窗口会取消周期读取并清理子进程。报告额外包含当前本机时间、Windows 网络状态、采样流量和已取得的天气摘要、城市及观测时间，不保存原始缓存内容。
 
 ## 适配规则
 

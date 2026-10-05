@@ -23,7 +23,12 @@ public partial class App : Application
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Console.OutputEncoding = new UTF8Encoding(false);
-            var weather = await Task.Run(WindowsTaskbarWeatherReader.Read);
+            var weather = await new WindowsWeatherCacheReader().ReadAsync(DateTimeOffset.UtcNow);
+            if (!weather.Available)
+            {
+                var taskbarWeather = await Task.Run(WindowsTaskbarWeatherReader.Read);
+                if (taskbarWeather.Available) weather = taskbarWeather;
+            }
             Console.Write(JsonSerializer.Serialize(weather, MachineReport.JsonOptions));
             Shutdown();
             return;

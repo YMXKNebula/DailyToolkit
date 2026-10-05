@@ -1,7 +1,11 @@
 using System.Windows;
 using System.Windows.Threading;
+using System.IO;
+using System.Text;
+using System.Text.Json;
 using DailyUSE.Core.Environment;
 using DailyUSE.Desktop;
+using DailyUSE.Desktop.Environment;
 using DailyUSE.Desktop.Presentation;
 
 namespace DailyUSE.Desktop.Tests;
@@ -34,6 +38,7 @@ internal static class Program
 
     private static async Task CheckAsync()
     {
+        await CheckWeatherCacheAsync();
         var display = new DisplayInfo(1920, 1080, 1, 1920, 1040, false);
         var probe = new ControlledProbe(display);
         var clock = new ManualClock();
@@ -71,6 +76,20 @@ internal static class Program
         Require(status.WeatherReads == 2, "Weather did not refresh after the interval");
         Console.WriteLine("PASS Local clock rollover and periodic status refresh");
 
+        var cachedClock = new ManualClock();
+        var cachedWeather = new WeatherInfo(true, "23°C · 晴朗", WindowsWeatherCache.Source, null)
+        {
+            Location = "测试城", UpdatedAt = cachedClock.UtcNow.AddHours(-1), FromCache = true
+        };
+        using var cachedModel = new MainViewModel(probe, display, new LocalProbe { WeatherResult = cachedWeather }, cachedClock);
+        await cachedModel.InitializeAsync();
+        Require(cachedModel.WeatherNote == "测试城 · Windows 小组件缓存" &&
+            cachedModel.WeatherUpdatedText == "10月5日 22:59 更新", "Cached weather source or local timestamp is incorrect");
+        cachedClock.UtcNow += TimeSpan.FromHours(3);
+        cachedModel.UpdateClock();
+        Require(cachedModel.WeatherUpdatedText.StartsWith("缓存较旧"), "Older cached weather was presented as fresh");
+        Console.WriteLine("PASS Cached weather displays its source, city, observation time, and age");
+
         using var failedModel = new MainViewModel(new FailingProbe(probe.Basic), display, new LocalProbe());
         await failedModel.InitializeAsync();
         Require(failedModel.Report.Stage == ProbeStage.Partial && failedModel.HasIssues && !failedModel.IsRefreshing,
@@ -100,7 +119,49 @@ internal static class Program
         Require(closingProbe.WasCanceled && closingStatus.WasCanceled && closingModel.PendingWork.IsCompleted,
             "Closing did not cancel pending computer and weather detection");
         Console.WriteLine("PASS Closing cancels detection before releasing the window");
-        Console.WriteLine("6/6 desktop checks passed");
+        Console.WriteLine("8/8 desktop checks passed");
+    }
+
+    private static async Task CheckWeatherCacheAsync()
+    {
+        var directory = Directory.CreateTempSubdirectory("DailyUSE-weather-tests-");
+        var path = Path.Combine(directory.FullName, "Packages", "MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy",
+            "LocalState", "DiagOutputDir", "IDX_CONTENT_TASKBARHEADLINES.json");
+        try
+        {
+            var reader = new WindowsWeatherCacheReader(directory.FullName);
+            var now = DateTimeOffset.Parse("2026-10-05T06:00:00Z");
+            Require(!(await reader.ReadAsync(now)).Available, "Missing Windows cache did not degrade gracefully");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var data = JsonSerializer.Serialize(new
+            {
+                responses = new[] { new { weather = new[] { new { current = new { temp = 23, cap = "晴朗", created = "2026-10-05T05:40:00Z" } } } } },
+                units = new { temperature = "°C" }
+            });
+            var json = JsonSerializer.Serialize(new
+            {
+                sections = new[] { new { cards = new[] { new { type = "WeatherSummary", dataType = "WeatherOverview", data } } } }
+            });
+            await File.WriteAllBytesAsync(path, Encoding.Unicode.GetBytes(json));
+            using (var writer = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete))
+                Require((await reader.ReadAsync(now)).Summary == "23°C · 晴朗", "The Windows-owned shared UTF-16 cache was not read");
+            await File.WriteAllTextAsync(path, "{");
+            Require(!(await reader.ReadAsync(now)).Available, "Partially written cache was treated as weather");
+            using (var oversized = new FileStream(path, FileMode.Open, FileAccess.Write))
+                oversized.SetLength(WindowsWeatherCache.MaximumBytes + 1L);
+            Require(!(await reader.ReadAsync(now)).Available, "Oversized cache was read");
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            try { await reader.ReadAsync(now, cancellation.Token); throw new InvalidOperationException("Canceled cache read continued"); }
+            catch (OperationCanceledException) { }
+            Console.WriteLine("PASS Local Windows weather cache tolerates sharing, missing/partial files, size limits, and cancellation");
+        }
+        finally
+        {
+            var tempRoot = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (Path.GetFullPath(directory.FullName).StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase) &&
+                directory.Name.StartsWith("DailyUSE-weather-tests-", StringComparison.Ordinal)) directory.Delete(recursive: true);
+        }
     }
 
     private sealed class ControlledProbe(DisplayInfo display) : IEnvironmentProbe
@@ -144,6 +205,7 @@ internal static class Program
 
     private sealed class LocalProbe : ILocalStatusProbe
     {
+        public WeatherInfo? WeatherResult { get; init; }
         public bool FailWeather { get; init; }
         public bool WaitForCancel { get; init; }
         public bool WasCanceled { get; private set; }
@@ -159,7 +221,7 @@ internal static class Program
                 try { await Task.Delay(Timeout.Infinite, token); }
                 catch (OperationCanceledException) { WasCanceled = true; throw; }
             }
-            return WindowsWeatherText.Parse("天气，18°C，多云");
+            return WeatherResult ?? WindowsWeatherText.Parse("天气，18°C，多云");
         }
     }
 }

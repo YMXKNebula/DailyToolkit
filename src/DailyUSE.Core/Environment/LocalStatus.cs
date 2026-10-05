@@ -12,7 +12,12 @@ public sealed record NetworkInfo(NetworkState State, string ConnectionType,
 
 public sealed record WeatherInfo(bool Available, string Summary, string Source, string? Reason)
 {
-    public static WeatherInfo Unavailable(string reason) => new(false, "未获取", "Windows 任务栏", reason);
+    public string? Location { get; init; }
+    public DateTimeOffset? UpdatedAt { get; init; }
+    public bool FromCache { get; init; }
+
+    public static WeatherInfo Unavailable(string reason, string source = "Windows 天气") =>
+        new(false, "未获取", source, reason);
 }
 
 public interface ILocalStatusProbe

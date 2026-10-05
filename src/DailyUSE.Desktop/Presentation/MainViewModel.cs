@@ -29,7 +29,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private DateTimeOffset _now;
     private DateTimeOffset? _lastWeatherRead;
     private NetworkInfo _network = NetworkInfo.Unknown;
-    private WeatherInfo _weather = WeatherInfo.Unavailable("正在读取 Windows 天气文字");
+    private WeatherInfo _weather = WeatherInfo.Unavailable("正在读取 Windows 天气");
     private bool _isReadingStatus;
 
     public MainViewModel(IEnvironmentProbe probe, DisplayInfo display, ILocalStatusProbe? localStatus = null,
@@ -73,7 +73,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public NetworkInfo Network => _network;
     public WeatherInfo Weather => _weather;
     public string WeatherText => Weather.Summary;
-    public string WeatherNote => Weather.Available ? "来自 Windows 任务栏" : Weather.Reason ?? "Windows 天气暂时不可用";
+    public string WeatherNote => Weather.Available ?
+        string.Join(" · ", new[] { Weather.Location, Weather.Source }.Where(text => !string.IsNullOrWhiteSpace(text))) :
+        Weather.Reason ?? "Windows 天气暂时不可用";
+    public string WeatherUpdatedText => Weather.UpdatedAt is { } updated
+        ? $"{(Weather.FromCache && _now - updated > TimeSpan.FromHours(3) ? "缓存较旧 · " : "")}{TimeZoneInfo.ConvertTime(updated, _clock.LocalTimeZone):M月d日 HH:mm} 更新" : "";
     public string NetworkText => Network.State switch
     {
         NetworkState.Internet => "已联网", NetworkState.LocalNetwork => "仅本地网络",
@@ -199,6 +203,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _now = _clock.GetLocalNow();
         Notify(nameof(TimeText));
         Notify(nameof(DateText));
+        Notify(nameof(WeatherUpdatedText));
     }
 
     public void QueueLocalRefresh(bool forceWeather = false)
@@ -223,7 +228,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _weather = await weatherTask;
             if (readWeather) _lastWeatherRead = _now;
             foreach (var property in new[] { nameof(Network), nameof(Weather), nameof(NetworkText), nameof(NetworkDetail),
-                nameof(TrafficText), nameof(WeatherText), nameof(WeatherNote) }) Notify(property);
+                nameof(TrafficText), nameof(WeatherText), nameof(WeatherNote), nameof(WeatherUpdatedText) }) Notify(property);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         finally { _isReadingStatus = false; RefreshCommand.Refresh(); }
@@ -245,7 +250,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyUSE", Version = "0.2.0", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyUSE", Version = "0.2.1", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);

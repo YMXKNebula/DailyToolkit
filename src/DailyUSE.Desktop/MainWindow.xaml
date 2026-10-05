@@ -23,7 +23,7 @@
         <StackPanel DockPanel.Dock="Bottom" Margin="12,0,0,0">
           <TextBlock Text="本机运行" Style="{StaticResource MutedText}" />
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.2.0</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.2.1</Hyperlink>
           </TextBlock>
         </StackPanel>
         <StackPanel>
@@ -62,6 +62,7 @@
                 <TextBlock Text="{Binding WeatherText}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"
                            TextTrimming="CharacterEllipsis" LineHeight="27" MaxHeight="54" Margin="0,8,0,7" ToolTip="{Binding WeatherText}" />
                 <TextBlock Text="{Binding WeatherNote}" Style="{StaticResource MutedText}" />
+                <TextBlock Text="{Binding WeatherUpdatedText}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
               </StackPanel>
             </Border>
             <Border Style="{StaticResource Card}" MinHeight="152" Margin="6,0,6,12">
