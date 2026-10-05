@@ -1,0 +1,32 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editors
+.vs/
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Common build output and caches
+bin/
+obj/
+build/
+dist/
+out/
+node_modules/
+coverage/
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.bak
