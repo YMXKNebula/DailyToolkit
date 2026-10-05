@@ -87,12 +87,12 @@ Test("Lens stays inside monitors including negative origins and edge-following",
     var small=LensLayout.Calculate(new(0,0,200,100),640,384,2,0,0);
     Require(small.Output.Width == 200 && small.Output.Height == 100);
 });
-Test("Magnifier shortcuts support empty choices, custom chords, and collision validation", () =>
+Test("Magnifier supports a single empty or custom shortcut and validated activation modes", () =>
 {
-    Require(new GamingPreferences { ToggleShortcut=null,CloseShortcut=null }.IsValid);
+    Require(new GamingPreferences { ToggleShortcut=null,ActivationMode=LensActivationMode.Hold }.IsValid);
     var custom=new KeyboardShortcut(3,0x5A,"Ctrl + Alt + Z");
     Require(custom.IsValid && new GamingPreferences { ToggleShortcut=custom }.IsValid);
-    Require(!new GamingPreferences { ToggleShortcut=custom,CloseShortcut=custom with { Name="Another label" } }.IsValid);
+    Require(!new GamingPreferences { ActivationMode=(LensActivationMode)99 }.IsValid);
     Require(!new KeyboardShortcut(0,0x10,"Shift").IsValid && !new KeyboardShortcut(0x100,0x5A,"Z").IsValid);
 });
 

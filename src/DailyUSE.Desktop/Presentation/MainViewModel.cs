@@ -17,6 +17,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly DisplayInfo _display;
     private readonly ILocalStatusProbe _localStatus;
     private readonly TimeProvider _clock;
+    private readonly FavoritesStore _favoritesStore;
+    private readonly HashSet<string> _favoriteIds;
     private readonly CancellationTokenSource _lifetime = new();
     private MachineReport _report;
     private string _page = "home";
@@ -33,12 +35,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isReadingStatus;
 
     public MainViewModel(IEnvironmentProbe probe, DisplayInfo display, ILocalStatusProbe? localStatus = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null, FavoritesStore? favoritesStore = null)
     {
         _probe = probe;
         _display = display;
         _localStatus = localStatus ?? new WindowsLocalStatusProbe();
         _clock = clock ?? TimeProvider.System;
+        _favoritesStore = favoritesStore ?? new();
+        _favoriteIds = _favoritesStore.Load();
+        Gaming.IsFavorite = _favoriteIds.Contains("screen-lens");
         _now = _clock.GetLocalNow();
         _report = new()
         {
@@ -50,9 +55,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         NavigateCommand = new(parameter => Page = parameter as string ?? "home");
         RefreshCommand = new(_ =>
         {
-            if (IsGaming) Gaming.RefreshMonitors(); else _ = InitializeAsync();
-        }, () => IsGaming ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus);
-        Gaming.PropertyChanged += (_,e) => { if (e.PropertyName == nameof(GamingViewModel.IsActive)) RefreshCommand.Refresh(); };
+            if (ShowScreenLens) Gaming.RefreshMonitors(); else _ = InitializeAsync();
+        }, () => ShowScreenLens ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus);
+        Gaming.PropertyChanged += OnGamingChanged;
+    }
+
+    private void OnGamingChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(GamingViewModel.IsActive)) RefreshCommand.Refresh();
+        if (e.PropertyName != nameof(GamingViewModel.IsFavorite)) return;
+        if (Gaming.IsFavorite) _favoriteIds.Add("screen-lens"); else _favoriteIds.Remove("screen-lens");
+        if (!_favoritesStore.Save(_favoriteIds)) Notice="收藏已在本次运行中修改，但没有保存成功。";
+        Notify(nameof(HasFavorites)); Notify(nameof(ShowScreenLens)); Notify(nameof(ShowFavoritesEmpty)); Notify(nameof(RefreshText));
+        RefreshCommand.Refresh();
     }
 
     public RelayCommand NavigateCommand { get; }
@@ -67,14 +82,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string Page
     {
         get => _page;
-        set { if (Set(ref _page, value is "tools" or "gaming" ? value : "home")) { Notify(""); RefreshCommand.Refresh(); } }
+        set { if (Set(ref _page, value is "tools" ? "daily" : value is "daily" or "gaming" or "favorites" ? value : "home")) { Notify(""); RefreshCommand.Refresh(); } }
     }
     public bool IsHome => Page == "home";
-    public bool IsTools => Page == "tools";
+    public bool IsDaily => Page == "daily";
+    public bool IsTools => IsDaily;
     public bool IsGaming => Page == "gaming";
-    public string PageTitle => IsGaming ? "游戏" : IsTools ? "工具" : "首页";
-    public string PageDescription => IsGaming ? "玩游戏时用的小工具。" : IsTools ? "把常用的小工具放在一起。" : "今天和这台电脑的状态。";
-    public string RefreshText => IsGaming ? "刷新屏幕" : "刷新";
+    public bool IsFavorites => Page == "favorites";
+    public bool HasFavorites => Gaming.IsFavorite;
+    public bool ShowScreenLens => IsGaming || (IsFavorites && HasFavorites);
+    public bool ShowFavoritesEmpty => IsFavorites && !HasFavorites;
+    public string PageTitle => IsGaming ? "游戏" : IsDaily ? "日常" : IsFavorites ? "收藏夹" : "首页";
+    public string PageDescription => IsGaming ? "玩游戏时用的小工具。" : IsDaily ? "日常用的小工具。" : IsFavorites ? "常用的放在这里。" : "今天和这台电脑的状态。";
+    public string RefreshText => ShowScreenLens ? "刷新屏幕" : "刷新";
     public string TimeText => _now.ToString("HH:mm");
     public string DateText => _now.ToString("yyyy年M月d日 dddd", CultureInfo.GetCultureInfo("zh-CN"));
     public NetworkInfo Network => _network;
@@ -257,7 +277,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyUSE", Version = "0.3.0", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyUSE", Version = "0.3.1", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);
@@ -305,7 +325,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public void CancelPending() => _lifetime.Cancel();
-    public void Dispose() { Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 
     private static string FormatBytes(long? bytes) => bytes is null ? "未知" :
         bytes >= 1024L * 1024 * 1024 ? $"{bytes.Value / (1024d * 1024 * 1024):0.#} GB" :

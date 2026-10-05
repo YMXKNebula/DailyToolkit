@@ -3,6 +3,8 @@ using System.Windows.Threading;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using DailyUSE.Core.Environment;
 using DailyUSE.Desktop;
 using DailyUSE.Desktop.Environment;
@@ -42,6 +44,8 @@ internal static class Program
     {
         await CheckWeatherCacheAsync();
         CheckShortcutPersistence();
+        CheckFavorites();
+        await CheckBackgroundShortcutAsync();
         LensDiagnostics.CheckShader();
         Console.WriteLine("PASS Actual Direct3D shader preserves colors and reconstructs subpixel edges");
         var display = new DisplayInfo(1920, 1080, 1, 1920, 1040, false);
@@ -61,7 +65,7 @@ internal static class Program
         Console.WriteLine("PASS UI stays responsive while detailed detection is pending");
 
         model.NavigateCommand.Execute("tools");
-        Require(model.IsTools, "Tools navigation failed");
+        Require(model.IsDaily && model.PageTitle == "日常", "The daily section or legacy navigation failed");
         model.NavigateCommand.Execute("gaming");
         Require(model.IsGaming && model.PageTitle == "游戏" && !model.Gaming.IsActive, "The separate DailyUSE game page was not ready");
         Console.WriteLine("PASS Game navigation keeps screen capture off until explicitly enabled");
@@ -113,7 +117,7 @@ internal static class Program
         var closingProbe = new ControlledProbe(display);
         var closingStatus = new LocalProbe { WaitForCancel = true };
         var closingModel = new MainViewModel(closingProbe, display, closingStatus);
-        var window = new MainWindow(closingModel)
+        var window = new MainWindow(closingModel, enableShortcuts: false)
         {
             ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000
         };
@@ -127,7 +131,45 @@ internal static class Program
         Require(closingProbe.WasCanceled && closingStatus.WasCanceled && closingModel.PendingWork.IsCompleted,
             "Closing did not cancel pending computer and weather detection");
         Console.WriteLine("PASS Closing cancels detection before releasing the window");
-        Console.WriteLine("11/11 desktop checks passed");
+        Console.WriteLine("13/13 desktop checks passed");
+    }
+
+    private static void CheckFavorites()
+    {
+        var directory=Directory.CreateTempSubdirectory("DailyUSE-favorites-tests-");
+        var path=Path.Combine(directory.FullName,"favorites.json");
+        try
+        {
+            var store=new FavoritesStore(path);
+            Require(store.Load().Count==0 && store.Save(["future-tool"]),"Missing favorites did not start empty");
+            var display=new DisplayInfo(1920,1080,1,1920,1040,false);
+            using(var model=new MainViewModel(new ControlledProbe(display),display,favoritesStore:store))
+            {
+                model.NavigateCommand.Execute("favorites");
+                Require(model.IsFavorites && model.ShowFavoritesEmpty && !model.ShowScreenLens,"Favorites empty state was missing");
+                model.Gaming.ToggleFavoriteCommand.Execute(null);
+                Require(model.HasFavorites && model.ShowScreenLens && !model.ShowFavoritesEmpty && !model.Gaming.IsActive,
+                    "Starring a tool did not show it in favorites, or started capture");
+            }
+            using(var reopened=new MainViewModel(new ControlledProbe(display),display,favoritesStore:store))
+            {
+                reopened.NavigateCommand.Execute("favorites");
+                Require(reopened.Gaming.IsFavorite && reopened.ShowScreenLens,"Favorites did not survive restart");
+                reopened.Gaming.ToggleFavoriteCommand.Execute(null);
+                Require(reopened.ShowFavoritesEmpty,"Removing the last visible favorite did not show the empty state");
+            }
+            Require(store.Load().SetEquals(["future-tool"]),"Removing this tool changed other saved favorites");
+            File.WriteAllText(path,"{");
+            Require(store.Load().Count==0,"Broken favorites prevented an empty usable view");
+            Require(!store.Save(["../invalid"]),"Invalid tool identifiers were persisted");
+            Console.WriteLine("PASS Daily/favorites navigation, star/unstar, saved favorites and independent tool state");
+        }
+        finally
+        {
+            var tempRoot=Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+            if(Path.GetFullPath(directory.FullName).StartsWith(tempRoot,StringComparison.OrdinalIgnoreCase) &&
+                directory.Name.StartsWith("DailyUSE-favorites-tests-",StringComparison.Ordinal)) directory.Delete(recursive:true);
+        }
     }
 
     private static void CheckShortcutPersistence()
@@ -140,20 +182,27 @@ internal static class Program
             using(var gaming=new GamingViewModel(store))
             {
                 var custom=new KeyboardShortcut(3,0x5A,"Ctrl + Alt + Z");
-                Require(gaming.SetShortcut(true,custom),"A custom shortcut was rejected");
-                Require(!gaming.SetShortcut(false,custom),"Duplicate shortcuts were accepted");
-                Require(gaming.SetShortcut(false,null),"Empty close shortcut was rejected");
+                Require(gaming.SetShortcut(custom),"A custom shortcut was rejected");
+                gaming.ActivationMode=LensActivationMode.Hold;
             }
             using(var reopened=new GamingViewModel(store))
             {
-                Require(reopened.ToggleShortcut?.Name == "Ctrl + Alt + Z" && reopened.CloseShortcut is null,"Shortcut choices were not restored");
-                Require(reopened.SetShortcut(true,null),"Empty toggle shortcut was rejected");
+                Require(reopened.ToggleShortcut?.Name == "Ctrl + Alt + Z" && reopened.IsHoldMode,"Shortcut and hold mode were not restored");
+                Require(reopened.SetShortcut(null),"Empty shortcut was rejected");
             }
-            using(var empty=new GamingViewModel(store)) Require(empty.ToggleShortcut is null && empty.CloseShortcut is null,
-                "Cleared shortcuts reverted to defaults after restart");
+            using(var empty=new GamingViewModel(store))
+            {
+                Require(empty.ToggleShortcut is null && empty.IsHoldMode,"Cleared shortcut or mode reverted after restart");
+                empty.IsToggleMode=true;
+            }
+            Require(store.Load().ActivationMode == LensActivationMode.Toggle,"Toggle mode was not persisted");
+            File.WriteAllText(path,"{\"ToggleShortcut\":null,\"CloseShortcut\":{\"Modifiers\":6,\"VirtualKey\":120,\"Name\":\"Ctrl + Shift + F9\"}}");
+            Require(store.Load() is { ToggleShortcut:null,ActivationMode:LensActivationMode.Toggle },"Legacy empty shortcut was not preserved");
+            File.WriteAllText(path,"{\"ToggleShortcut\":{\"Modifiers\":3,\"VirtualKey\":90,\"Name\":\"Ctrl + Alt + Z\"},\"CloseShortcut\":null}");
+            Require(store.Load().ToggleShortcut?.Name == "Ctrl + Alt + Z","Legacy custom shortcut was not preserved");
             File.WriteAllText(path,"{");
             Require(store.Load().IsValid,"Corrupt preferences prevented a usable default");
-            Console.WriteLine("PASS Custom and cleared shortcuts persist without registering capture or accepting duplicates");
+            Console.WriteLine("PASS Single custom/empty shortcut and both modes persist, preserving previous shortcut choices");
         }
         finally
         {
@@ -162,6 +211,60 @@ internal static class Program
                 directory.Name.StartsWith("DailyUSE-shortcut-tests-",StringComparison.Ordinal)) directory.Delete(recursive:true);
         }
     }
+
+    private static async Task CheckBackgroundShortcutAsync()
+    {
+        using var source = new HwndSource(new HwndSourceParameters("DailyUSE shortcut check")
+        {
+            PositionX=-20000,PositionY=-20000,Width=1,Height=1,WindowStyle=unchecked((int)0x80000000)
+        });
+        var keys = new HashSet<uint>();
+        using var controller = new LensShortcutController(source,keys.Contains);
+        var toggle=0; var shown=0; var hidden=0;
+        controller.ToggleRequested += () => toggle++;
+        controller.ShowRequested += () => shown++;
+        controller.HideRequested += () => hidden++;
+        var binding=new KeyboardShortcut(6,0x87,"Ctrl + Shift + F24");
+        async Task PressAsync(KeyboardShortcut shortcut)
+        {
+            Require(PostMessage(source.Handle,0x0312,new IntPtr(LensShortcutController.HotkeyId),
+                new IntPtr((long)shortcut.VirtualKey << 16 | shortcut.Modifiers)),"Could not route a native hotkey message");
+            await Application.Current.Dispatcher.InvokeAsync(() => { },DispatcherPriority.ContextIdle);
+        }
+        Require(controller.Configure(binding,LensActivationMode.Toggle) && controller.IsRegistered,
+            "The background shortcut was not registered before capture starts");
+        await PressAsync(binding); await PressAsync(binding);
+        Require(toggle==2 && shown==0,"The same background shortcut did not toggle twice");
+        Require(controller.Configure(binding,LensActivationMode.Hold),"Hold mode could not register");
+        keys.UnionWith([0x87u,0x11u,0x10u]);
+        await PressAsync(binding); await PressAsync(binding);
+        Require(shown==1 && hidden==0,"A held/repeated chord did not show exactly once");
+        keys.Remove(0x10);
+        await Task.Delay(50);
+        Require(hidden==1,"Releasing a modifier did not hide the lens in the background");
+        keys.Add(0x10);
+        await PressAsync(binding);
+        Require(shown==2,"Hold mode could not show again after release");
+        Require(controller.Suspend(true) && !controller.IsRegistered && hidden==2,"Editing did not release the hold and shortcut");
+        await PressAsync(binding);
+        Require(shown==2,"Editing still activated the shortcut");
+        Require(controller.Suspend(false) && controller.IsRegistered,"Leaving the editor did not restore the shortcut");
+        Require(controller.Configure(null,LensActivationMode.Hold) && !controller.IsRegistered,"Empty shortcut still reserved a key");
+        await PressAsync(binding);
+        Require(shown==2,"A queued message for a cleared shortcut still activated the lens");
+        var replacement=new KeyboardShortcut(6,0x86,"Ctrl + Shift + F23");
+        Require(controller.Configure(replacement,LensActivationMode.Toggle),"Replacement shortcut was not registered");
+        await PressAsync(binding);
+        Require(toggle==2,"The previous shortcut still activated after replacement");
+        await PressAsync(replacement);
+        Require(toggle==3,"The replacement shortcut did not activate");
+        controller.Dispose();
+        Require(!controller.IsRegistered,"Exit retained the global shortcut");
+        Console.WriteLine("PASS Native background shortcut registration, single-key toggle, held release, rebinding, empty choice and cleanup");
+    }
+
+    [DllImport("user32.dll",SetLastError=true)]
+    private static extern bool PostMessage(IntPtr window,int message,IntPtr wParam,IntPtr lParam);
 
     private static async Task CheckWeatherCacheAsync()
     {

@@ -13,6 +13,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     private CaptureMonitor? _monitor;
     private double _zoom = 2, _width = 640, _sharpening = 0.35;
     private bool _followMouse, _active, _hidden;
+    private bool _favorite;
     private int _fps = 60, _generation;
     private string _status = "未开启";
     private readonly GamingPreferencesStore _preferencesStore;
@@ -27,7 +28,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         _monitor = Monitors.FirstOrDefault();
         StartCommand = new(_ => Start(), () => !IsActive && SelectedMonitor is not null);
         StopCommand = new(_ => Stop(), () => IsActive);
-        ToggleCommand = new(_ => Toggle(), () => IsActive);
+        ToggleCommand = new(_ => Toggle(), () => IsActive || SelectedMonitor is not null);
+        ToggleFavoriteCommand = new(_ => IsFavorite = !IsFavorite);
     }
 
     public IReadOnlyList<CaptureMonitor> Monitors { get; private set; }
@@ -40,34 +42,59 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         SelectedMonitor=Monitors.FirstOrDefault(m => m.Handle == selected) ?? Monitors.FirstOrDefault();
     }
     public IReadOnlyList<int> FrameRates { get; } = new[] { 30,60 };
-    public CaptureMonitor? SelectedMonitor { get => _monitor; set { if (Set(ref _monitor,value)) StartCommand.Refresh(); } }
+    public CaptureMonitor? SelectedMonitor { get => _monitor; set { if (Set(ref _monitor,value)) { StartCommand.Refresh(); ToggleCommand.Refresh(); } } }
     public double Zoom { get => _zoom; set { if (double.IsFinite(value) && Set(ref _zoom,Math.Clamp(value,1.5,4))) Notify(nameof(ZoomText)); } }
     public double FrameWidth { get => _width; set { if (double.IsFinite(value) && Set(ref _width,Math.Clamp(value,320,1000))) Notify(nameof(FrameSizeText)); } }
     public double Sharpening { get => _sharpening; set { if (double.IsFinite(value)) Set(ref _sharpening,Math.Clamp(value,0,1)); } }
     public int FrameRate { get => _fps; set => Set(ref _fps,value == 30 ? 30 : 60); }
     public bool FollowMouse { get => _followMouse; set => Set(ref _followMouse,value); }
     public bool IsActive => _active;
+    public bool IsRequestedVisible => _active && !_hidden;
+    public bool IsVisible => IsRequestedVisible && _capture is { FramesRendered: > 0 };
     public bool CanConfigure => !IsActive;
     public string ZoomText => $"{Zoom:0.#}×";
     public string FrameSizeText => $"{Math.Round(FrameWidth)} × {Math.Round(FrameWidth*0.6)} 像素";
     public string Status { get => _status; private set => Set(ref _status,value); }
-    public string ToggleText => _hidden ? "显示放大框" : "临时隐藏";
+    public string ToggleText => IsRequestedVisible ? "隐藏放大框" : "显示放大框";
     public RelayCommand StartCommand { get; }
     public RelayCommand StopCommand { get; }
     public RelayCommand ToggleCommand { get; }
-    public KeyboardShortcut? ToggleShortcut => _preferences.ToggleShortcut;
-    public KeyboardShortcut? CloseShortcut => _preferences.CloseShortcut;
-    public string ToggleShortcutText => ToggleShortcut?.Name ?? "无";
-    public string CloseShortcutText => CloseShortcut?.Name ?? "无";
-    public string ShortcutHint => $"显示 / 临时隐藏：{ToggleShortcutText}\n关闭放大框：{CloseShortcutText}";
-    public bool SetShortcut(bool toggle, KeyboardShortcut? shortcut)
+    public RelayCommand ToggleFavoriteCommand { get; }
+    public bool IsFavorite
     {
-        var preferences = toggle ? _preferences with { ToggleShortcut=shortcut } : _preferences with { CloseShortcut=shortcut };
-        if (!preferences.IsValid) { Status="两个操作不能使用相同快捷键，请换一个按键。"; return false; }
-        _preferences = preferences;
-        if (!_preferencesStore.Save(preferences)) Status="快捷键已在本次运行中修改，但没有保存成功。";
-        foreach (var name in new[] { nameof(ToggleShortcut),nameof(CloseShortcut),nameof(ToggleShortcutText),nameof(CloseShortcutText),nameof(ShortcutHint) }) Notify(name);
+        get => _favorite;
+        set { if (Set(ref _favorite,value)) { Notify(nameof(FavoriteSymbol)); Notify(nameof(FavoriteHint)); } }
+    }
+    public string FavoriteSymbol => IsFavorite ? "★" : "☆";
+    public string FavoriteHint => IsFavorite ? "取消收藏" : "加入收藏夹";
+    public KeyboardShortcut? ToggleShortcut => _preferences.ToggleShortcut;
+    public string ToggleShortcutText => ToggleShortcut?.Name ?? "无";
+    public LensActivationMode ActivationMode
+    {
+        get => _preferences.ActivationMode;
+        set
+        {
+            if (value == ActivationMode || value is not (LensActivationMode.Toggle or LensActivationMode.Hold)) return;
+            Hide();
+            SavePreferences(_preferences with { ActivationMode=value });
+            Notify(nameof(ActivationMode)); Notify(nameof(IsHoldMode)); Notify(nameof(IsToggleMode));
+        }
+    }
+    public bool IsHoldMode { get => ActivationMode == LensActivationMode.Hold; set { if (value) ActivationMode=LensActivationMode.Hold; } }
+    public bool IsToggleMode { get => ActivationMode == LensActivationMode.Toggle; set { if (value) ActivationMode=LensActivationMode.Toggle; } }
+    public bool SetShortcut(KeyboardShortcut? shortcut)
+    {
+        var preferences = _preferences with { ToggleShortcut=shortcut };
+        if (!preferences.IsValid) { Status="这个按键不能用作快捷键。"; return false; }
+        Hide();
+        SavePreferences(preferences);
+        Notify(nameof(ToggleShortcut)); Notify(nameof(ToggleShortcutText));
         return true;
+    }
+    private void SavePreferences(GamingPreferences preferences)
+    {
+        _preferences = preferences;
+        if (!_preferencesStore.Save(preferences)) Status="设置已在本次运行中修改，但没有保存成功。";
     }
 
     public void Start()
@@ -98,8 +125,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             {
                 if (generation != _generation || !IsActive) return;
                 _startupTimer?.Stop();
-                if (!_hidden) _window?.Show();
-                Status = $"已开启 · {ZoomText} · {(FollowMouse ? "跟随鼠标" : "屏幕中央")}";
+                if (!_hidden) { _window?.Show(); Status = $"已显示 · {ZoomText} · {(FollowMouse ? "跟随鼠标" : "屏幕中央")}"; }
+                Notify(nameof(IsVisible));
             });
             _capture.Failed += reason => Application.Current.Dispatcher.BeginInvoke(() =>
             {
@@ -114,7 +141,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             _startupTimer.Tick += (_,_) =>
             {
                 _startupTimer?.Stop();
-                if (generation != _generation || !IsActive || _capture!.FramesRendered > 0) return;
+                if (generation != _generation || !IsRequestedVisible || _capture!.FramesRendered > 0) return;
                 Stop(); Status="暂时没有取得画面，请确认 Windows 允许捕获，并使用窗口或无边框模式。";
             };
             _startupTimer.Start();
@@ -128,12 +155,26 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
 
     public void Toggle()
     {
+        if (IsRequestedVisible) Hide(); else Show();
+    }
+    public void Show()
+    {
+        if (!IsActive) { Start(); return; }
+        _hidden = false;
+        if (_capture is not null) _capture.Paused = false;
+        if (_capture is { FramesRendered: > 0 }) { _window?.Show(); Status=$"已显示 · {ZoomText}"; }
+        else { Status="正在读取屏幕画面…"; _startupTimer?.Start(); }
+        RefreshVisibility();
+    }
+    public void Hide()
+    {
         if (!IsActive) return;
-        _hidden = !_hidden;
-        if (_capture is not null) _capture.Paused = _hidden;
-        if (_hidden) _window?.Hide(); else _window?.Show();
-        Status = _hidden ? "已临时隐藏" : $"已开启 · {ZoomText}";
-        Notify(nameof(ToggleText));
+        _hidden = true;
+        if (_capture is not null) _capture.Paused = true;
+        _startupTimer?.Stop();
+        _window?.Hide();
+        Status="已隐藏";
+        RefreshVisibility();
     }
     public void Stop()
     {
@@ -149,8 +190,13 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     }
     private void RefreshState()
     {
-        foreach (var name in new[] { nameof(IsActive),nameof(CanConfigure),nameof(ToggleText) }) Notify(name);
+        foreach (var name in new[] { nameof(IsActive),nameof(CanConfigure) }) Notify(name);
+        RefreshVisibility();
         StartCommand.Refresh(); StopCommand.Refresh(); ToggleCommand.Refresh();
+    }
+    private void RefreshVisibility()
+    {
+        Notify(nameof(IsRequestedVisible)); Notify(nameof(IsVisible)); Notify(nameof(ToggleText));
     }
     public void Dispose() => Stop();
 }

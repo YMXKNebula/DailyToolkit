@@ -23,16 +23,18 @@
         <StackPanel DockPanel.Dock="Bottom" Margin="12,0,0,0">
           <TextBlock Text="本机运行" Style="{StaticResource MutedText}" />
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.0</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.1</Hyperlink>
           </TextBlock>
         </StackPanel>
         <StackPanel>
           <RadioButton Content="首页" GroupName="Navigation" Style="{StaticResource NavButton}"
                        IsChecked="{Binding IsHome, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="home" />
-          <RadioButton Content="工具" GroupName="Navigation" Style="{StaticResource NavButton}"
-                       IsChecked="{Binding IsTools, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="tools" />
+          <RadioButton Content="日常" GroupName="Navigation" Style="{StaticResource NavButton}"
+                       IsChecked="{Binding IsDaily, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="daily" />
           <RadioButton Content="游戏" GroupName="Navigation" Style="{StaticResource NavButton}"
                        IsChecked="{Binding IsGaming, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="gaming" />
+          <RadioButton Content="收藏夹" GroupName="Navigation" Style="{StaticResource NavButton}"
+                       IsChecked="{Binding IsFavorites, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="favorites" />
         </StackPanel>
       </DockPanel>
     </Border>
@@ -143,86 +145,94 @@
       </ScrollViewer>
 
       <Border Grid.Row="1" Style="{StaticResource Card}" VerticalAlignment="Top"
-              Visibility="{Binding IsTools, Converter={StaticResource VisibleWhen}}">
+              Visibility="{Binding IsDaily, Converter={StaticResource VisibleWhen}}">
         <StackPanel Margin="0,4">
           <TextBlock Text="还没有添加工具" FontSize="18" FontWeight="SemiBold" />
-          <TextBlock Text="写好的日常工具会放在这里。电脑信息已经并入首页。" Style="{StaticResource MutedText}" Margin="0,10,0,0" />
+          <TextBlock Text="日常小工具会放在这里。电脑信息已经并入首页。" Style="{StaticResource MutedText}" Margin="0,10,0,0" />
         </StackPanel>
       </Border>
 
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                    Visibility="{Binding IsGaming, Converter={StaticResource VisibleWhen}}">
+                    Visibility="{Binding ShowScreenLens, Converter={StaticResource VisibleWhen}}">
         <StackPanel DataContext="{Binding Gaming}" Margin="0,0,8,0">
           <Border Style="{StaticResource Card}">
             <StackPanel>
-              <TextBlock Text="局部放大" FontSize="20" FontWeight="SemiBold" />
-              <TextBlock Text="用一个浮动框放大屏幕中的一小块，周围画面保持原样。" Style="{StaticResource MutedText}" Margin="0,10,0,20" />
-              <StackPanel IsEnabled="{Binding CanConfigure}">
-                <TextBlock Text="显示器" FontWeight="SemiBold" Margin="0,0,0,8" />
-                <ComboBox ItemsSource="{Binding Monitors}" SelectedItem="{Binding SelectedMonitor}" Padding="8" Margin="0,0,0,20" />
-                <Grid>
-                  <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                  <TextBlock Text="放大倍率" FontWeight="SemiBold" />
-                  <TextBlock Grid.Column="1" Text="{Binding ZoomText}" />
-                </Grid>
-                <Slider Minimum="1.5" Maximum="4" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding Zoom}" Margin="0,10,0,20" AutomationProperties.Name="放大倍率" />
-                <CheckBox Content="跟随鼠标（默认固定在屏幕中央）" IsChecked="{Binding FollowMouse}" Margin="0,0,0,20" />
-                <Expander Header="框大小、锐化和帧率" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,20">
-                <StackPanel Margin="0,16,0,0">
-                <Grid>
-                  <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                  <TextBlock Text="框的大小" FontWeight="SemiBold" />
-                  <TextBlock Grid.Column="1" Text="{Binding FrameSizeText}" />
-                </Grid>
-                <Slider Minimum="320" Maximum="1000" TickFrequency="40" IsSnapToTickEnabled="True" Value="{Binding FrameWidth}" Margin="0,10,0,20" AutomationProperties.Name="放大框宽度" />
-                <TextBlock Text="锐化强度" FontWeight="SemiBold" />
-                <Slider Minimum="0" Maximum="1" TickFrequency="0.05" Value="{Binding Sharpening}" Margin="0,10,0,20" AutomationProperties.Name="锐化强度" />
-                <Grid Margin="0,0,0,20">
-                  <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                  <TextBlock Text="帧率上限" FontWeight="SemiBold" VerticalAlignment="Center" />
-                  <ComboBox Grid.Column="1" ItemsSource="{Binding FrameRates}" SelectedItem="{Binding FrameRate}" Width="90" Padding="6" />
-                </Grid>
-                </StackPanel>
-                </Expander>
-              </StackPanel>
-              <WrapPanel>
-                <Button Content="开启放大框" Command="{Binding StartCommand}" Margin="0,0,8,8" />
-                <Button Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" Margin="0,0,8,8" />
-                <Button Content="关闭" Command="{Binding StopCommand}" Margin="0,0,0,8" />
-              </WrapPanel>
-              <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
-            </StackPanel>
-          </Border>
-          <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-            <StackPanel>
-              <TextBlock Text="快捷键" FontWeight="SemiBold" />
-              <TextBlock Text="点击输入框，再按想用的组合键。清空后不使用快捷键，仍可用页面按钮控制。" Style="{StaticResource MutedText}" Margin="0,10,0,16" />
-              <TextBlock Text="显示 / 临时隐藏" Margin="0,0,0,8" />
-              <DockPanel Margin="0,0,0,16">
-                <Button DockPanel.Dock="Right" Content="清空" Tag="toggle" Click="ClearShortcut" Margin="8,0,0,0" />
-                <TextBox Text="{Binding ToggleShortcutText, Mode=OneWay}" IsReadOnly="True" Tag="toggle" Padding="10,8"
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button Content="屏幕局部放大" Click="ToggleLensDetails" FontSize="15" FontWeight="SemiBold"
+                        Padding="0,6" BorderThickness="0" Background="Transparent" ToolTip="展开或收起详细设置" />
+                <TextBox Grid.Column="1" Text="{Binding ToggleShortcutText, Mode=OneWay}" IsReadOnly="True" Padding="8,6"
+                         MinWidth="62" Margin="12,0,4,0" VerticalContentAlignment="Center"
                          PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur"
                          Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                         ToolTip="点击后按下想用的组合键。清空后可在详细设置中用按钮控制。"
                          AutomationProperties.Name="显示或隐藏放大框的快捷键" />
-              </DockPanel>
-              <TextBlock Text="关闭放大框" Margin="0,0,0,8" />
-              <DockPanel Margin="0,0,0,16">
-                <Button DockPanel.Dock="Right" Content="清空" Tag="close" Click="ClearShortcut" Margin="8,0,0,0" />
-                <TextBox Text="{Binding CloseShortcutText, Mode=OneWay}" IsReadOnly="True" Tag="close" Padding="10,8"
-                         PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur"
-                         Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}"
-                         AutomationProperties.Name="关闭放大框的快捷键" />
-              </DockPanel>
-              <Expander Header="使用说明" Foreground="{DynamicResource TextBrush}">
-              <StackPanel Margin="0,12,0,0">
-              <TextBlock Text="框内使用高质量插值和锐化，鼠标操作直接穿过浮窗。建议游戏使用窗口或无边框模式。Windows 可能显示屏幕捕获提示边框。" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
-              <TextBlock Text="放大能改善观感，实际细节仍取决于游戏原本的画面分辨率。画面仅用于本机实时显示。" Style="{StaticResource MutedText}" />
+                <Button Grid.Column="2" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12" />
+              <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="10,0,4,0">
+                <RadioButton Content="按住" GroupName="LensMode" IsChecked="{Binding IsHoldMode}" Style="{StaticResource NavButton}"
+                             Padding="8,7" FontSize="13" Margin="0,0,2,0" ToolTip="按住快捷键显示，松开组合键中的任意一键就隐藏。" />
+                <RadioButton Content="切换" GroupName="LensMode" IsChecked="{Binding IsToggleMode}" Style="{StaticResource NavButton}"
+                             Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次显示，再按同一个快捷键隐藏。" />
               </StackPanel>
-              </Expander>
+                <Button Grid.Column="4" Content="{Binding FavoriteSymbol}" Command="{Binding ToggleFavoriteCommand}"
+                        Padding="4,6" FontSize="17" BorderThickness="0" Background="Transparent"
+                        Foreground="{DynamicResource AccentBrush}" ToolTip="{Binding FavoriteHint}" AutomationProperties.Name="{Binding FavoriteHint}" />
+                <Button x:Name="LensDetailsToggle" Grid.Column="5" Content="▾" Click="ToggleLensDetails" Padding="6,6"
+                        FontSize="16" BorderThickness="0" Background="Transparent" ToolTip="展开或收起详细设置"
+                        AutomationProperties.Name="屏幕局部放大的详细设置" />
+              </Grid>
+              <Border x:Name="LensDetailsPanel" Visibility="Collapsed">
+                <StackPanel Margin="0,16,0,0">
+                  <TextBlock Text="软件最小化或其他窗口在前台时，快捷键同样可用。点击快捷键框可以修改，按 Esc 退出输入。" Style="{StaticResource MutedText}" Margin="0,0,0,18" />
+                  <StackPanel IsEnabled="{Binding CanConfigure}">
+                    <TextBlock Text="显示器" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ComboBox ItemsSource="{Binding Monitors}" SelectedItem="{Binding SelectedMonitor}" Padding="8" Margin="0,0,0,18" />
+                    <Grid>
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                      <TextBlock Text="放大倍率" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Text="{Binding ZoomText}" />
+                    </Grid>
+                    <Slider Minimum="1.5" Maximum="4" TickFrequency="0.5" IsSnapToTickEnabled="True" Value="{Binding Zoom}" Margin="0,10,0,18" AutomationProperties.Name="放大倍率" />
+                    <CheckBox Content="跟随鼠标（默认固定在屏幕中央）" IsChecked="{Binding FollowMouse}" Margin="0,0,0,18" />
+                    <Grid>
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                      <TextBlock Text="框的大小" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Text="{Binding FrameSizeText}" />
+                    </Grid>
+                    <Slider Minimum="320" Maximum="1000" TickFrequency="40" IsSnapToTickEnabled="True" Value="{Binding FrameWidth}" Margin="0,10,0,18" AutomationProperties.Name="放大框宽度" />
+                    <TextBlock Text="锐化强度" FontWeight="SemiBold" />
+                    <Slider Minimum="0" Maximum="1" TickFrequency="0.05" Value="{Binding Sharpening}" Margin="0,10,0,18" AutomationProperties.Name="锐化强度" />
+                    <Grid Margin="0,0,0,18">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                      <TextBlock Text="帧率上限" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      <ComboBox Grid.Column="1" ItemsSource="{Binding FrameRates}" SelectedItem="{Binding FrameRate}" Width="90" Padding="6" />
+                    </Grid>
+                  </StackPanel>
+                  <WrapPanel>
+                    <Button Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" Margin="0,0,8,8" />
+                    <Button Content="停止捕获" Command="{Binding StopCommand}" Margin="0,0,0,8" />
+                  </WrapPanel>
+                  <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
+                  <TextBlock Text="按住模式：按下显示，松开隐藏。切换模式：同一快捷键在显示与隐藏之间切换。隐藏后暂停渲染；停止捕获后可以调整画面设置。" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+                  <TextBlock Text="框内使用高质量插值和锐化，鼠标操作直接穿过浮窗。建议游戏使用窗口或无边框模式。实际细节取决于原画面的分辨率，画面仅用于本机实时显示。" Style="{StaticResource MutedText}" />
+                </StackPanel>
+              </Border>
             </StackPanel>
           </Border>
         </StackPanel>
       </ScrollViewer>
+
+      <Border Grid.Row="1" Style="{StaticResource Card}" VerticalAlignment="Top"
+              Visibility="{Binding ShowFavoritesEmpty, Converter={StaticResource VisibleWhen}}">
+        <StackPanel>
+          <TextBlock Text="还没有收藏" FontSize="18" FontWeight="SemiBold" />
+          <TextBlock Text="点击工具旁的星标，把它放到这里。" Style="{StaticResource MutedText}" Margin="0,10,0,16" />
+          <Button Content="查看游戏工具" Command="{Binding NavigateCommand}" CommandParameter="gaming" HorizontalAlignment="Left" />
+        </StackPanel>
+      </Border>
 
       <StackPanel Grid.Row="2" Margin="0,16,0,0">
         <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource AccentBrush}" FontSize="13" Margin="0,0,0,8"

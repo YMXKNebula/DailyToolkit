@@ -20,6 +20,17 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (e.Args is ["--check-lens-shortcuts", var shortcutOutput])
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            try { await LensShortcutDiagnostics.RunAsync(Path.GetFullPath(shortcutOutput)); Shutdown(); }
+            catch (Exception exception)
+            {
+                await File.WriteAllTextAsync(Path.GetFullPath(shortcutOutput)+".error.txt",exception.ToString());
+                Shutdown(1);
+            }
+            return;
+        }
         if (e.Args is ["--check-lens", var outputPath])
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -61,7 +72,7 @@ public partial class App : Application
             }
 
             var preview = e.Args.Length >= 2 && e.Args[0] == "--preview";
-            var window = new MainWindow(viewModel);
+            var window = new MainWindow(viewModel, enableShortcuts: !preview);
             MainWindow = window;
             var firstFrame = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             window.ContentRendered += (_, _) =>

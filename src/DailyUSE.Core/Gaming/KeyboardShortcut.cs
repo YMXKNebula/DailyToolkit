@@ -11,10 +11,12 @@ public sealed record KeyboardShortcut(uint Modifiers, uint VirtualKey, string Na
         Modifiers == other.Modifiers && VirtualKey == other.VirtualKey;
 }
 
+public enum LensActivationMode { Toggle, Hold }
+
 public sealed record GamingPreferences
 {
     public KeyboardShortcut? ToggleShortcut { get; init; } = new(6,0x77,"Ctrl + Shift + F8");
-    public KeyboardShortcut? CloseShortcut { get; init; } = new(6,0x78,"Ctrl + Shift + F9");
+    public LensActivationMode ActivationMode { get; init; } = LensActivationMode.Toggle;
     [JsonIgnore] public bool IsValid => (ToggleShortcut is null || ToggleShortcut.IsValid) &&
-        (CloseShortcut is null || CloseShortcut.IsValid) && ToggleShortcut?.Matches(CloseShortcut) != true;
+        ActivationMode is LensActivationMode.Toggle or LensActivationMode.Hold;
 }
