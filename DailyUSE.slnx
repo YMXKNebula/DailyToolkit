@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DailyUSE.Core/DailyUSE.Core.csproj" />
+    <Project Path="src/DailyUSE.Desktop/DailyUSE.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DailyUSE.Tests/DailyUSE.Tests.csproj" />
+    <Project Path="tests/DailyUSE.Desktop.Tests/DailyUSE.Desktop.Tests.csproj" />
+  </Folder>
+</Solution>

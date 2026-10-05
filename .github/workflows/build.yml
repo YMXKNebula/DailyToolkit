@@ -1,0 +1,35 @@
+name: Build Windows app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build and check
+        shell: pwsh
+        run: ./scripts/build.ps1
+      - name: Package portable app
+        shell: pwsh
+        run: ./scripts/publish.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: DailyUSE-win-x64
+          path: artifacts/DailyUSE-win-x64.zip
+          if-no-files-found: error
+          retention-days: 14
