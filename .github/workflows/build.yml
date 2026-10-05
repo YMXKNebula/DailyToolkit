@@ -29,7 +29,7 @@ jobs:
         run: ./scripts/publish.ps1
       - uses: actions/upload-artifact@v7
         with:
-          name: DailyUSE-win-x64
-          path: artifacts/DailyUSE-win-x64.zip
+          name: DailyToolkit-win-x64
+          path: artifacts/DailyToolkit-win-x64.zip
           if-no-files-found: error
           retention-days: 14

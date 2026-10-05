@@ -1,0 +1,33 @@
+<UserControl x:Class="DailyToolkit.Desktop.Controls.LensPreview"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+  <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14"
+          Background="{DynamicResource WindowBrush}">
+    <StackPanel>
+      <TextBlock Text="效果预览" FontWeight="SemiBold" Margin="0,0,0,10" />
+      <Grid x:Name="Screen" ClipToBounds="True" Background="#18231F" SizeChanged="ScreenSizeChanged"
+            MouseMove="MovePreview" MouseLeftButtonUp="EndDrag" LostMouseCapture="LostDrag" MouseWheel="ZoomPreview"
+            ToolTip="拖拽照片中的放大框移动位置，在照片上滚动鼠标调整倍率。">
+        <Image x:Name="BackgroundPhoto" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" />
+        <Canvas x:Name="Overlay" ClipToBounds="True">
+          <Line x:Name="VerticalGuide" Stroke="#FFD459" StrokeThickness="1" StrokeDashArray="5,3"
+                Visibility="Collapsed" IsHitTestVisible="False" />
+          <Line x:Name="HorizontalGuide" Stroke="#FFD459" StrokeThickness="1" StrokeDashArray="5,3"
+                Visibility="Collapsed" IsHitTestVisible="False" />
+          <Border x:Name="FrameBorder" BorderBrush="#48CCB0" BorderThickness="1" Visibility="Collapsed"
+                  MouseLeftButtonDown="BeginDrag" Cursor="SizeAll">
+            <Image x:Name="FrameImage" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality" />
+          </Border>
+        </Canvas>
+      </Grid>
+      <TextBlock x:Name="ScreenInfo" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+      <TextBlock Text="框内效果" FontWeight="SemiBold" Margin="0,18,0,8" />
+      <Border Background="#18231F" HorizontalAlignment="Left" MaxWidth="400">
+        <Image x:Name="DetailImage" Stretch="Uniform" MaxHeight="210" RenderOptions.BitmapScalingMode="HighQuality" />
+      </Border>
+      <TextBlock x:Name="FrameInfo" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+      <TextBlock x:Name="PreviewNote" Text="正在准备照片…" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+    </StackPanel>
+  </Border>
+</UserControl>

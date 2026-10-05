@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DailyToolkit.Core/DailyToolkit.Core.csproj" />
+    <Project Path="src/DailyToolkit.Desktop/DailyToolkit.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DailyToolkit.Tests/DailyToolkit.Tests.csproj" />
+    <Project Path="tests/DailyToolkit.Desktop.Tests/DailyToolkit.Desktop.Tests.csproj" />
+  </Folder>
+</Solution>

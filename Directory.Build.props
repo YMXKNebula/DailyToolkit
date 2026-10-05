@@ -4,9 +4,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
-    <Version>0.3.6</Version>
+    <Version>0.3.7</Version>
     <Authors>YMXKNebula</Authors>
-    <RepositoryUrl>https://github.com/YMXKNebula/DailyUSE</RepositoryUrl>
+    <RepositoryUrl>https://github.com/YMXKNebula/DailyToolkit</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 </Project>

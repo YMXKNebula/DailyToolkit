@@ -1,4 +1,4 @@
-DailyUSE - third-party components
+DailyToolkit - third-party components
 
 The portable package includes the following components under the MIT License:
 

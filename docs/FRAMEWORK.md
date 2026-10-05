@@ -1,15 +1,16 @@
 # 框架说明
 
-DailyUSE 的界面和工具都在本机运行。第一版先做 Windows，桌面程序用 WPF，公共代码放在独立的 C# 项目里。
+DailyToolkit 的界面和工具都在本机运行。第一版先做 Windows，桌面程序用 WPF，公共代码放在独立的 C# 项目里。
 
 ## 目录
 
 | 目录 | 用途 |
 | --- | --- |
-| `src/DailyUSE.Core/Environment` | 信息格式、适配规则、Windows 天气缓存解析和网卡流量采样 |
-| `src/DailyUSE.Core/Tools` | 工具登记、运行条件检查、本地进程调用 |
-| `src/DailyUSE.Desktop/Environment` | Windows 信息读取 |
-| `src/DailyUSE.Desktop/Presentation` | 页面状态和操作 |
+| `src/DailyToolkit.Core/Environment` | 信息格式、适配规则、Windows 天气缓存解析和网卡流量采样 |
+| `src/DailyToolkit.Core/Tools` | 工具登记、运行条件检查、本地进程调用 |
+| `src/DailyToolkit.Desktop/Environment` | Windows 信息读取 |
+| `src/DailyToolkit.Desktop/Presentation` | 页面状态和操作 |
+| `src/DailyToolkit.Desktop/Gaming` | 放大运行会话、原生窗口、捕获与显卡渲染 |
 | `tests` | 适配、进程通信及界面生命周期检查 |
 | `scripts` | 编译和打包 |
 
@@ -28,13 +29,13 @@ DailyUSE 的界面和工具都在本机运行。第一版先做 Windows，桌面
 首页合并了日常状态和电脑信息。完整配置、运行环境、软件列表默认折叠，不再保留单独的电脑信息导航。界面启用像素对齐和 Display 文字排版，移除会把整张卡片栅格化的阴影；预览按窗口的实际 DPI 输出。
 
 - 日期和时间读取 Windows 本机时钟，每秒更新。软件不自行校时。
-- 网络状态来自 Windows Network List Manager。它反映 Windows 当前的判断，不保证每个网站都能访问；DailyUSE 不发送 Ping、DNS 查询或 HTTP 连通性请求。
+- 网络状态来自 Windows Network List Manager。它反映 Windows 当前的判断，不保证每个网站都能访问；DailyToolkit 不发送 Ping、DNS 查询或 HTTP 连通性请求。
 - 流量读取有默认网关的活动网卡计数器，每三秒采样。它包含本机这些网卡的流量，不是互联网测速；使用多个物理或虚拟连接时可能包含多个连接的统计。不记录网卡名称、IP、MAC 或 Wi-Fi 名称。
 - 天气优先读取 Windows 小组件在本机保存的天气缓存，每分钟最多尝试一次；手动刷新可以立即重读。页面显示温度、天气描述、可用的地点和观测更新时间，保持缓存中的摄氏或华氏单位。超过三小时标为“缓存较旧”，超过一天不再作为可用天气显示。没有可用缓存时，尝试通过 UI Automation 读取任务栏现有的天气文字，不打开或点击系统小组件。
 
 缓存来源为 `%LOCALAPPDATA%/Packages/MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy/LocalState/DiagOutputDir/IDX_CONTENT_TASKBARHEADLINES.json`，目前在本机的 Windows 11 小组件缓存上验证。只解析 `WeatherSummary` 卡片中的 `WeatherOverview`，提取当前天气、单位、城市和观测时间；不解析新闻、账号、访问令牌、精确坐标或浏览器缓存。这个文件属于 Windows 内部格式，不是公开天气 API；Windows 改变格式时可能需要调整读取器。
 
-读取器兼容 UTF-8、UTF-16 以及不带 BOM 的 UTF-16 文件，共享只读打开并限制文件为 4 MB。文件正在写入、格式变化、缓存缺失或超时时，显示具体的不可用原因。天气缓存由 Windows 自己更新，DailyUSE 不会自行联网，也不修改小组件开关；“刷新”只重读本机已有数据。
+读取器兼容 UTF-8、UTF-16 以及不带 BOM 的 UTF-16 文件，共享只读打开并限制文件为 4 MB。文件正在写入、格式变化、缓存缺失或超时时，显示具体的不可用原因。天气缓存由 Windows 自己更新，DailyToolkit 不会自行联网，也不修改小组件开关；“刷新”只重读本机已有数据。
 
 天气读取放在独立的隐藏进程中，限时三秒；关闭主窗口会取消周期读取并清理子进程。报告额外包含当前本机时间、Windows 网络状态、采样流量和已取得的天气摘要、城市及观测时间，不保存原始缓存内容。
 
@@ -45,6 +46,14 @@ DailyUSE 的界面和工具都在本机运行。第一版先做 Windows，桌面
 界面不使用卡片阴影。窗口宽度小于 900 时缩小留白，高对比度模式使用系统颜色。`AdaptationPolicy` 保留低内存和低电量时减少界面效果的建议，后续工具可以按自己的工作量使用它，并非所有工具都要开满并发。
 
 ## 接入本地工具
+
+新增工具应有自己的页面或 `UserControl`，工具设置与命令放在自己的 ViewModel；主窗口只接入口，不继续承载各工具的完整界面和运行资源。这里不要求新的导航框架或通用服务层。
+
+屏幕局部放大的 `GamingViewModel` 管理绑定、命令、设置、收藏及显示器选择；`ScreenLensSession` 拥有浮窗、捕获、渲染器、鼠标监听、辅助线和启动超时，并统一启停及释放。首帧和失败才回到界面线程，实时帧仍直接从 `LensCapture` 进入 `LensGpuRenderer`，不经过会话事件、绑定或 ViewModel。倍率、位置、锐化只更新参数及已有窗口。
+
+现有放大设置仍保留在主窗口，因为快捷键编辑需要暂停全局注册，并与窗口焦点处理关联；当前拆出会增加转发。`MainViewModel`、自定义测试执行器和诊断命令也保留。测试按领域分文件，快捷键诊断按场景分方法，不增加工程依赖。
+
+默认配置读取新目录；新目录尚无对应文件时，兼容读取旧版 `%LOCALAPPDATA%/DailyUSE/`。保存只写新目录，不修改旧文件；已有新配置优先。开发检查使用独立临时配置，避免用户关掉滚轮后影响测试。
 
 用 `ToolDefinition` 描述工具，并通过 `ToolCatalog.Register` 登记。`ToolRequirements` 可以声明系统架构、Windows 内部版本、内存、处理器指令和运行环境版本；运行前调用 `ToolCatalog.Check`。未确认的信息不会被当作满足已声明的运行条件。
 
@@ -73,10 +82,10 @@ C# 工具可以直接在进程内运行。其他语言写的工具，或需要�
 开发时可用下面的参数生成本地检测报告或隐藏窗口预览。它们不会联网，生成文件不要提交进仓库：
 
 ```powershell
-DailyUSE.exe --diagnose "D:\临时\report.json"
-DailyUSE.exe --preview "D:\临时\home.png" --width 680 --height 650
-DailyUSE.exe --preview "D:\临时\details.png" --details
-DailyUSE.exe --preview "D:\临时\software.png" --software
+DailyToolkit.exe --diagnose "D:\临时\report.json"
+DailyToolkit.exe --preview "D:\临时\home.png" --width 680 --height 650
+DailyToolkit.exe --preview "D:\临时\details.png" --details
+DailyToolkit.exe --preview "D:\临时\software.png" --software
 ```
 
 输出目录需要事先存在。预览同时生成 JSON 报告；界面计时从应用创建开始，不能代替不同电脑上的冷启动测试。打包采用独立运行的单文件应用；首次运行仍可能需要在系统临时目录解包原生组件。

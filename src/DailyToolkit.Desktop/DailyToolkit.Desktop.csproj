@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>DailyToolkit</AssemblyName>
+    <RootNamespace>DailyToolkit.Desktop</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../DailyToolkit.Core/DailyToolkit.Core.csproj" />
+    <EmbeddedResource Include="Environment/HardwareProbe.ps1" />
+    <EmbeddedResource Include="Gaming/Lens.hlsl" />
+    <EmbeddedResource Include="Assets/lens-preview.jpg" LogicalName="DailyToolkit.Desktop.Assets.lens-preview.jpg" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+    <InternalsVisibleTo Include="DailyToolkit.Desktop.Tests" />
+  </ItemGroup>
+</Project>

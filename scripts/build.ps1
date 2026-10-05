@@ -11,12 +11,12 @@ $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
 $env:DOTNET_NOLOGO = '1'
 Push-Location -LiteralPath $projectRoot
 try {
-    & $dotnetPath build DailyUSE.slnx -c Release --disable-build-servers -m:1 --nologo
+    & $dotnetPath build DailyToolkit.slnx -c Release --disable-build-servers -m:1 --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
     if (-not $SkipTests) {
-        & (Join-Path $projectRoot 'tests\DailyUSE.Tests\bin\Release\net10.0\DailyUSE.Tests.exe')
+        & (Join-Path $projectRoot 'tests\DailyToolkit.Tests\bin\Release\net10.0\DailyToolkit.Tests.exe')
         if ($LASTEXITCODE -ne 0) { throw 'Core checks failed.' }
-        & (Join-Path $projectRoot 'tests\DailyUSE.Desktop.Tests\bin\Release\net10.0-windows10.0.26100.0\DailyUSE.Desktop.Tests.exe')
+        & (Join-Path $projectRoot 'tests\DailyToolkit.Desktop.Tests\bin\Release\net10.0-windows10.0.26100.0\DailyToolkit.Desktop.Tests.exe')
         if ($LASTEXITCODE -ne 0) { throw 'Desktop checks failed.' }
     }
 } finally { Pop-Location }
