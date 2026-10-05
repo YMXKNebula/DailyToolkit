@@ -307,8 +307,8 @@ internal static class Program
         using var controller = new LensShortcutController(source,keys.Contains);
         var toggle=0; var shown=0; var hidden=0;
         controller.ToggleRequested += () => toggle++;
-        controller.ShowRequested += () => shown++;
-        controller.HideRequested += () => hidden++;
+        controller.StartRequested += () => shown++;
+        controller.StopRequested += () => hidden++;
         var binding=new KeyboardShortcut(6,0x87,"Ctrl + Shift + F24");
         async Task PressAsync(KeyboardShortcut shortcut)
         {

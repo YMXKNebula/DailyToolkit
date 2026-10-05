@@ -13,10 +13,12 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     private LensPointerController? _pointer;
     private LensLayout? _layout;
     private CaptureMonitor? _activeMonitor;
+    private IntPtr _positionMonitor;
+    private double _positionX=0.5,_positionY=0.5;
     private int _centerX,_centerY;
     private CaptureMonitor? _monitor;
     private double _zoom = 2, _width = 640, _height = 384, _sharpening = 0.35;
-    private bool _active, _hidden;
+    private bool _active;
     private bool _favorite;
     private int _fps, _generation;
     private string _status = "未开启";
@@ -58,13 +60,14 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     internal PixelBounds? ActiveBounds => _layout?.Output;
     internal LensPointerController? PointerForDiagnostics => _pointer;
     internal IntPtr LensHandle => _window?.Handle ?? IntPtr.Zero;
-    public bool IsRequestedVisible => _active && !_hidden;
+    internal bool HasCaptureResources => _window is not null || _renderer is not null || _capture is not null || _pointer is not null || _startupTimer is not null;
+    public bool IsRequestedVisible => IsActive;
     public bool IsVisible => IsRequestedVisible && _capture is { FramesRendered: > 0 };
     public bool CanConfigure => !IsActive;
     public string ZoomText => $"{Zoom:0.##}×";
     public string FrameSizeText => $"{FrameWidth:0} × {FrameHeight:0} 像素";
     public string Status { get => _status; private set => Set(ref _status,value); }
-    public string ToggleText => IsRequestedVisible ? "隐藏放大框" : "显示放大框";
+    public string ToggleText => IsActive ? "关闭放大框" : "开启放大框";
     public RelayCommand StartCommand { get; }
     public RelayCommand StopCommand { get; }
     public RelayCommand ToggleCommand { get; }
@@ -84,7 +87,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         set
         {
             if (value == ActivationMode || value is not (LensActivationMode.Toggle or LensActivationMode.Hold)) return;
-            Hide();
+            Stop();
             SavePreferences(_preferences with { ActivationMode=value });
             Notify(nameof(ActivationMode)); Notify(nameof(IsHoldMode)); Notify(nameof(IsToggleMode));
         }
@@ -95,7 +98,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     {
         var preferences = _preferences with { ToggleShortcut=shortcut };
         if (!preferences.IsValid) { Status="这个按键不能用作快捷键。"; return false; }
-        Hide();
+        Stop();
         SavePreferences(preferences);
         Notify(nameof(ToggleShortcut)); Notify(nameof(ToggleShortcutText));
         return true;
@@ -116,12 +119,14 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             if (!GraphicsCaptureSession.IsSupported()) { Status = "当前 Windows 图形环境不支持屏幕捕获。"; return; }
             var width = (int)Math.Round(FrameWidth);
             var height = (int)Math.Round(FrameHeight);
-            var layout = LensLayout.Calculate(monitor.Bounds,width,height,Zoom,
-                monitor.Bounds.Left+monitor.Bounds.Width/2,monitor.Bounds.Top+monitor.Bounds.Height/2);
+            var centerX=monitor.Bounds.Left+(int)Math.Round(monitor.Bounds.Width*(_positionMonitor == monitor.Handle ? _positionX : 0.5));
+            var centerY=monitor.Bounds.Top+(int)Math.Round(monitor.Bounds.Height*(_positionMonitor == monitor.Handle ? _positionY : 0.5));
+            var layout = LensLayout.Calculate(monitor.Bounds,width,height,Zoom,centerX,centerY);
             _activeMonitor=monitor;
-            _layout=layout;
             _centerX=layout.Output.Left+layout.Output.Width/2;
             _centerY=layout.Output.Top+layout.Output.Height/2;
+            // Keep the sampled area aligned with the frame when a changed size clamps its position.
+            _layout=layout=LensLayout.Calculate(monitor.Bounds,width,height,Zoom,_centerX,_centerY);
             _window = new(layout.Output);
             _renderer = new(_window.Handle,layout.Output.Width,layout.Output.Height);
             var item = CaptureInterop.ForMonitor(monitor.Handle);
@@ -132,7 +137,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             {
                 if (generation != _generation || !IsActive) return;
                 _startupTimer?.Stop();
-                if (!_hidden) { _window?.Show(); Status = $"已显示 · {ZoomText} · 拖拽边缘移动，框内滚轮调倍率"; }
+                _window?.Show(); Status = $"已开启 · {ZoomText} · 拖拽边缘移动，框内滚轮调倍率";
                 Notify(nameof(IsVisible));
             });
             _capture.Failed += reason => Application.Current.Dispatcher.BeginInvoke(() =>
@@ -140,7 +145,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
                 if (generation != _generation) return;
                 Stop(); Status = reason;
             });
-            _active = true; _hidden = false;
+            _active = true;
             RefreshState();
             Status = "正在读取屏幕画面…";
             _capture.Start();
@@ -166,6 +171,9 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         var bounds=_activeMonitor.Bounds;
         _centerX=Math.Clamp(left,bounds.Left,bounds.Left+bounds.Width-_layout.Output.Width)+_layout.Output.Width/2;
         _centerY=Math.Clamp(top,bounds.Top,bounds.Top+bounds.Height-_layout.Output.Height)+_layout.Output.Height/2;
+        _positionMonitor=_activeMonitor.Handle;
+        _positionX=(_centerX-bounds.Left)/(double)bounds.Width;
+        _positionY=(_centerY-bounds.Top)/(double)bounds.Height;
         Reposition();
     }
 
@@ -175,33 +183,12 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         _layout=LensLayout.Calculate(_activeMonitor.Bounds,_layout.Output.Width,_layout.Output.Height,Zoom,_centerX,_centerY);
         _window?.Move(_layout.Output);
         _capture?.UpdateSource(_layout.Source,Sharpening);
-        if (IsRequestedVisible) Status=$"已显示 · {ZoomText} · 拖拽边缘移动，框内滚轮调倍率";
+        Status=$"已开启 · {ZoomText} · 拖拽边缘移动，框内滚轮调倍率";
     }
 
     public void Toggle()
     {
-        if (IsRequestedVisible) Hide(); else Show();
-    }
-    public void Show()
-    {
-        if (!IsActive) { Start(); return; }
-        _hidden = false;
-        if (_capture is not null) _capture.Paused = false;
-        if (_layout is not null) _capture?.UpdateSource(_layout.Source,Sharpening);
-        if (_capture is { FramesRendered: > 0 }) { _window?.Show(); Status=$"已显示 · {ZoomText}"; }
-        else { Status="正在读取屏幕画面…"; _startupTimer?.Start(); }
-        RefreshVisibility();
-    }
-    public void Hide()
-    {
-        if (!IsActive) return;
-        _hidden = true;
-        _pointer?.CancelDrag();
-        if (_capture is not null) _capture.Paused = true;
-        _startupTimer?.Stop();
-        _window?.Hide();
-        Status="已隐藏";
-        RefreshVisibility();
+        if (IsActive) Stop(); else Start();
     }
     public void Stop()
     {
@@ -213,7 +200,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         _renderer?.Dispose(); _renderer = null;
         _window?.Dispose(); _window = null;
         _layout=null; _activeMonitor=null;
-        _active = false; _hidden = false;
+        _active = false;
         Status = "未开启";
         RefreshState();
     }

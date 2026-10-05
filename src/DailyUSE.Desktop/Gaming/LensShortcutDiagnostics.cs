@@ -23,8 +23,8 @@ internal static class LensShortcutDiagnostics
         };
         using var controller = new LensShortcutController(source);
         controller.ToggleRequested += gaming.Toggle;
-        controller.ShowRequested += gaming.Show;
-        controller.HideRequested += gaming.Hide;
+        controller.StartRequested += gaming.Start;
+        controller.StopRequested += gaming.Stop;
         var keyDown = false;
         void Key(bool down)
         {
@@ -49,6 +49,7 @@ internal static class LensShortcutDiagnostics
             Key(true); Key(false);
             await Wait(() => gaming.IsVisible,"The first background shortcut did not start and display the lens.");
             var initial=gaming.ActiveBounds ?? throw new InvalidOperationException("The visible lens has no bounds.");
+            var initialHandle=gaming.LensHandle;
             if (initial.Width != 320 || initial.Height != 240) throw new InvalidOperationException("The live lens did not use independent width and height.");
             var pointer=gaming.PointerForDiagnostics ?? throw new InvalidOperationException("The native mouse hook was not installed.");
             if (!pointer.Process(0x201,initial.Left+2,initial.Top+2) ||
@@ -67,16 +68,34 @@ internal static class LensShortcutDiagnostics
             await Task.Delay(120);
             if (!gaming.IsVisible) throw new InvalidOperationException("Rendering failed after dragging or repeated wheel changes.");
             Key(true); Key(false);
-            await Wait(() => !gaming.IsRequestedVisible,"The same shortcut did not hide the lens.");
+            await Wait(() => !gaming.IsActive,"The same shortcut did not close the lens.");
+            RequireReleased(initialHandle);
+            if (!controller.IsRegistered) throw new InvalidOperationException("Closing capture released the background shortcut.");
             if (GetForegroundWindow()==source.Handle) throw new InvalidOperationException("Shortcut handling activated its background window.");
-            gaming.Stop();
+            Key(true); Key(false);
+            await Wait(() => gaming.IsVisible,"The shortcut could not restart after full resource release.");
+            if (gaming.ActiveBounds != moved || gaming.Zoom != 1) throw new InvalidOperationException("Reopening lost the dragged position or zoom.");
+            var restartedHandle=gaming.LensHandle;
+            Key(true); Key(false);
+            await Wait(() => !gaming.IsActive,"The restarted lens could not close.");
+            RequireReleased(restartedHandle);
+
+            // Stop before the UI can process the first-frame callback. A stale callback must not reopen the window.
+            gaming.Start();
+            if (!gaming.IsActive) throw new InvalidOperationException("Pending startup did not create a capture session.");
+            var pendingHandle=gaming.LensHandle;
+            gaming.Toggle();
+            await Task.Delay(150);
+            RequireReleased(pendingHandle);
+
             gaming.ActivationMode=LensActivationMode.Hold;
             if (!controller.Configure(binding,gaming.ActivationMode)) throw new InvalidOperationException("Hold mode did not register.");
             Key(true);
             await Wait(() => gaming.IsVisible,"Holding the background shortcut did not display the lens.");
+            var heldHandle=gaming.LensHandle;
             Key(false);
-            await Wait(() => !gaming.IsRequestedVisible,"Releasing the key did not hide the lens.");
-            gaming.Stop();
+            await Wait(() => !gaming.IsActive,"Releasing the key did not close the lens.");
+            RequireReleased(heldHandle);
             Key(true); Key(false);
             await Task.Delay(100);
             if (gaming.IsActive) throw new InvalidOperationException("An already released short press started capture in hold mode.");
@@ -86,7 +105,8 @@ internal static class LensShortcutDiagnostics
             await File.WriteAllTextAsync(outputPath,JsonSerializer.Serialize(new
             {
                 BackgroundRegistration=true,FirstShortcutStartsCapture=true,SingleShortcutToggles=true,
-                HoldShows=true,ReleaseHides=true,ReleasedBeforeStartupStaysHidden=true,EmptyShortcutUnregistered=true,
+                HoldStartsCapture=true,ReleaseStopsCapture=true,ReleasedBeforeStartupStaysClosed=true,EmptyShortcutUnregistered=true,
+                ToggleReleasesResources=true,ReopensAfterFullStop=true,PendingStartupCanClose=true,PositionAndZoomPreserved=true,
                 IndependentLiveDimensions=true,NativeWindowDrag=true,WheelLimitsRemainVisible=true,FollowCaptureFrames=gaming.FrameRate == 0
             }));
         }
@@ -97,6 +117,13 @@ internal static class LensShortcutDiagnostics
             var tempRoot=Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
             if(Path.GetFullPath(directory.FullName).StartsWith(tempRoot,StringComparison.OrdinalIgnoreCase) &&
                 directory.Name.StartsWith("DailyUSE-lens-key-check-",StringComparison.Ordinal)) directory.Delete(recursive:true);
+        }
+
+        void RequireReleased(IntPtr previousHandle)
+        {
+            if (gaming.IsActive || gaming.HasCaptureResources || gaming.LensHandle != IntPtr.Zero ||
+                gaming.ActiveBounds is not null || !gaming.CanConfigure || IsWindow(previousHandle))
+                throw new InvalidOperationException("Closing did not release the capture, renderer, pointer hook and native window.");
         }
     }
 
@@ -123,4 +150,5 @@ internal static class LensShortcutDiagnostics
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left,Top,Right,Bottom; }
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window,out NativeRect bounds);
+    [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr window);
 }

@@ -36,8 +36,8 @@ public partial class MainWindow : Window
             if (source is null) return;
             _shortcuts = new(source);
             _shortcuts.ToggleRequested += _viewModel.Gaming.Toggle;
-            _shortcuts.ShowRequested += _viewModel.Gaming.Show;
-            _shortcuts.HideRequested += _viewModel.Gaming.Hide;
+            _shortcuts.StartRequested += _viewModel.Gaming.Start;
+            _shortcuts.StopRequested += _viewModel.Gaming.Stop;
             RegisterLensHotkey();
         };
         _viewModel.Gaming.PropertyChanged += OnGamingStateChanged;

@@ -24,7 +24,7 @@
         <StackPanel DockPanel.Dock="Bottom" Margin="12,0,0,0">
           <TextBlock Text="本机运行" Style="{StaticResource MutedText}" />
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.2</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyUSE" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyUSE 0.3.3</Hyperlink>
           </TextBlock>
         </StackPanel>
         <StackPanel>
@@ -170,13 +170,13 @@
                          PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur"
                          Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}"
                          ToolTip="点击后按下想用的组合键。清空后可在详细设置中用按钮控制。"
-                         AutomationProperties.Name="显示或隐藏放大框的快捷键" />
+                         AutomationProperties.Name="开启或关闭放大框的快捷键" />
                 <Button Grid.Column="2" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12" />
               <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="10,0,4,0">
                 <RadioButton Content="按住" GroupName="LensMode" IsChecked="{Binding IsHoldMode}" Style="{StaticResource NavButton}"
-                             Padding="8,7" FontSize="13" Margin="0,0,2,0" ToolTip="按住快捷键显示，松开组合键中的任意一键就隐藏。" />
+                             Padding="8,7" FontSize="13" Margin="0,0,2,0" ToolTip="按住快捷键开启，松开组合键中的任意一键就关闭。" />
                 <RadioButton Content="切换" GroupName="LensMode" IsChecked="{Binding IsToggleMode}" Style="{StaticResource NavButton}"
-                             Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次显示，再按同一个快捷键隐藏。" />
+                             Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次开启，再按同一个快捷键关闭并释放画面资源。" />
               </StackPanel>
                 <Button Grid.Column="4" Content="{Binding FavoriteSymbol}" Command="{Binding ToggleFavoriteCommand}"
                         Padding="4,6" FontSize="17" BorderThickness="0" Background="Transparent"
@@ -240,10 +240,9 @@
                   </Grid>
                   <WrapPanel>
                     <Button Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" Margin="0,0,8,8" />
-                    <Button Content="停止捕获" Command="{Binding StopCommand}" Margin="0,0,0,8" />
                   </WrapPanel>
                   <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
-                  <TextBlock Text="按住模式：按下显示，松开隐藏。切换模式：同一快捷键在显示与隐藏之间切换。隐藏后暂停渲染；停止捕获后可以调整画面设置。" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+                  <TextBlock Text="按住模式：按下开启，松开关闭。切换模式：按一次开启，再按一次关闭。关闭时释放画面资源，之后可调整设置；同一快捷键仍可再次开启。" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
                   <TextBlock Text="框内使用高质量插值和锐化，鼠标操作直接穿过浮窗。建议游戏使用窗口或无边框模式。实际细节取决于原画面的分辨率，画面仅用于本机实时显示。" Style="{StaticResource MutedText}" />
                 </StackPanel>
               </Border>

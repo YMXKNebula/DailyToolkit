@@ -28,8 +28,8 @@ internal sealed class LensShortcutController : IDisposable
     }
 
     public event Action? ToggleRequested;
-    public event Action? ShowRequested;
-    public event Action? HideRequested;
+    public event Action? StartRequested;
+    public event Action? StopRequested;
     public bool IsRegistered { get; private set; }
 
     public bool Configure(KeyboardShortcut? shortcut, LensActivationMode mode)
@@ -77,7 +77,7 @@ internal sealed class LensShortcutController : IDisposable
         {
             _holding = true;
             _releaseTimer.Start();
-            ShowRequested?.Invoke();
+            StartRequested?.Invoke();
             // Capture setup may outlast a short press. Check again before the first frame can show.
             CheckRelease();
         }
@@ -100,7 +100,7 @@ internal sealed class LensShortcutController : IDisposable
         _releaseTimer.Stop();
         if (!_holding) return;
         _holding = false;
-        HideRequested?.Invoke();
+        StopRequested?.Invoke();
     }
 
     public void Dispose()
