@@ -8,6 +8,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DailyUSE.Desktop.Environment;
 using DailyUSE.Desktop.Presentation;
+using DailyUSE.Desktop.Gaming;
 using DailyUSE.Core.Environment;
 
 namespace DailyUSE.Desktop;
@@ -19,6 +20,17 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (e.Args is ["--check-lens", var outputPath])
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            try { await LensDiagnostics.RunCaptureAsync(Path.GetFullPath(outputPath)); Shutdown(); }
+            catch (Exception exception)
+            {
+                await File.WriteAllTextAsync(Path.GetFullPath(outputPath)+".error.txt",exception.ToString());
+                Shutdown(1);
+            }
+            return;
+        }
         if (e.Args is ["--read-windows-weather"])
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;

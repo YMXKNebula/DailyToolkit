@@ -16,6 +16,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
     Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination (Join-Path $outputDirectory 'LICENSE-DailyUSE.txt')
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\PORTABLE_README.txt') -Destination (Join-Path $outputDirectory 'README.txt')
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'THIRD_PARTY_NOTICES.txt') -Destination (Join-Path $outputDirectory 'THIRD_PARTY_NOTICES.txt')
+    $licenseDirectory = Join-Path $outputDirectory 'licenses'
+    New-Item -ItemType Directory -Path $licenseDirectory -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'licenses\Windows-SDK-License.rtf') -Destination (Join-Path $licenseDirectory 'Windows-SDK-License.rtf')
     foreach ($packName in @('microsoft.netcore.app.runtime.', 'microsoft.windowsdesktop.app.runtime.')) {
         $packRoot = Join-Path $env:NUGET_PACKAGES ($packName + $Runtime)
         $versionDirectory = Get-ChildItem -LiteralPath $packRoot -Directory | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1

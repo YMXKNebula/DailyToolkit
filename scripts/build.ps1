@@ -16,7 +16,7 @@ try {
     if (-not $SkipTests) {
         & (Join-Path $projectRoot 'tests\DailyUSE.Tests\bin\Release\net10.0\DailyUSE.Tests.exe')
         if ($LASTEXITCODE -ne 0) { throw 'Core checks failed.' }
-        & (Join-Path $projectRoot 'tests\DailyUSE.Desktop.Tests\bin\Release\net10.0-windows\DailyUSE.Desktop.Tests.exe')
+        & (Join-Path $projectRoot 'tests\DailyUSE.Desktop.Tests\bin\Release\net10.0-windows10.0.26100.0\DailyUSE.Desktop.Tests.exe')
         if ($LASTEXITCODE -ne 0) { throw 'Desktop checks failed.' }
     }
 } finally { Pop-Location }

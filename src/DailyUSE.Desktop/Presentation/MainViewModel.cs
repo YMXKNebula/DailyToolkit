@@ -48,10 +48,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         };
         _softwareView = CreateSoftwareView();
         NavigateCommand = new(parameter => Page = parameter as string ?? "home");
-        RefreshCommand = new(_ => _ = InitializeAsync(), () => !IsRefreshing && !_isReadingStatus);
+        RefreshCommand = new(_ =>
+        {
+            if (IsGaming) Gaming.RefreshMonitors(); else _ = InitializeAsync();
+        }, () => IsGaming ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus);
+        Gaming.PropertyChanged += (_,e) => { if (e.PropertyName == nameof(GamingViewModel.IsActive)) RefreshCommand.Refresh(); };
     }
 
     public RelayCommand NavigateCommand { get; }
+    public GamingViewModel Gaming { get; } = new();
     public RelayCommand RefreshCommand { get; }
     public Task CurrentProbeTask { get; private set; } = Task.CompletedTask;
     public Task CurrentLocalStatusTask { get; private set; } = Task.CompletedTask;
@@ -62,12 +67,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string Page
     {
         get => _page;
-        set { if (Set(ref _page, value == "tools" ? "tools" : "home")) Notify(""); }
+        set { if (Set(ref _page, value is "tools" or "gaming" ? value : "home")) { Notify(""); RefreshCommand.Refresh(); } }
     }
     public bool IsHome => Page == "home";
     public bool IsTools => Page == "tools";
-    public string PageTitle => IsTools ? "工具" : "首页";
-    public string PageDescription => IsTools ? "把常用的小工具放在一起。" : "今天和这台电脑的状态。";
+    public bool IsGaming => Page == "gaming";
+    public string PageTitle => IsGaming ? "游戏" : IsTools ? "工具" : "首页";
+    public string PageDescription => IsGaming ? "玩游戏时用的小工具。" : IsTools ? "把常用的小工具放在一起。" : "今天和这台电脑的状态。";
+    public string RefreshText => IsGaming ? "刷新屏幕" : "刷新";
     public string TimeText => _now.ToString("HH:mm");
     public string DateText => _now.ToString("yyyy年M月d日 dddd", CultureInfo.GetCultureInfo("zh-CN"));
     public NetworkInfo Network => _network;
@@ -250,7 +257,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyUSE", Version = "0.2.1", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyUSE", Version = "0.3.0", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);
@@ -298,7 +305,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public void CancelPending() => _lifetime.Cancel();
-    public void Dispose() { _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 
     private static string FormatBytes(long? bytes) => bytes is null ? "未知" :
         bytes >= 1024L * 1024 * 1024 ? $"{bytes.Value / (1024d * 1024 * 1024):0.#} GB" :

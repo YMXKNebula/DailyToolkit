@@ -14,6 +14,8 @@
 
 首页把日期、天气、网络、电源和电脑信息放在一起。配置、运行环境和软件安装记录可以展开查看，也能搜索软件名称、复制配置摘要和保存 JSON 报告。其他日常工具会慢慢加进来，见 [开发计划](docs/PROJECT_PLAN.md)。
 
+左侧“游戏”页提供局部放大：一个浮窗放大屏幕中央或鼠标附近的区域，框外保持原样。框内通过显卡做高质量插值和锐化，可调倍率、大小和帧率上限。快捷键可以自行设置或清空，具体用法见 [局部放大](docs/SCREEN_LENS.md)。这个分区属于 DailyUSE，与其他游戏开发项目独立。
+
 日期用 Windows 本机时间，网络读取 Windows 的连接状态和网卡计数器，不发起测速或连通性请求。天气优先读取 Windows 小组件保存在本机的天气缓存，显示温度、天气、地点和更新时间；没有可用缓存时再尝试读取任务栏天气文字。缓存由 Windows 更新，DailyUSE 不请求天气服务。
 
 ## 运行和构建
@@ -24,7 +26,7 @@
 
 ```powershell
 .\scripts\build.ps1
-.\src\DailyUSE.Desktop\bin\Release\net10.0-windows\DailyUSE.exe
+.\src\DailyUSE.Desktop\bin\Release\net10.0-windows10.0.26100.0\DailyUSE.exe
 ```
 
 `build.ps1` 会编译并运行检查。生成便携包：

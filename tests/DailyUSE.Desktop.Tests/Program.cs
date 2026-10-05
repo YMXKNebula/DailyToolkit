@@ -6,6 +6,8 @@ using System.Text.Json;
 using DailyUSE.Core.Environment;
 using DailyUSE.Desktop;
 using DailyUSE.Desktop.Environment;
+using DailyUSE.Desktop.Gaming;
+using DailyUSE.Core.Gaming;
 using DailyUSE.Desktop.Presentation;
 
 namespace DailyUSE.Desktop.Tests;
@@ -39,6 +41,9 @@ internal static class Program
     private static async Task CheckAsync()
     {
         await CheckWeatherCacheAsync();
+        CheckShortcutPersistence();
+        LensDiagnostics.CheckShader();
+        Console.WriteLine("PASS Actual Direct3D shader preserves colors and reconstructs subpixel edges");
         var display = new DisplayInfo(1920, 1080, 1, 1920, 1040, false);
         var probe = new ControlledProbe(display);
         var clock = new ManualClock();
@@ -57,6 +62,9 @@ internal static class Program
 
         model.NavigateCommand.Execute("tools");
         Require(model.IsTools, "Tools navigation failed");
+        model.NavigateCommand.Execute("gaming");
+        Require(model.IsGaming && model.PageTitle == "游戏" && !model.Gaming.IsActive, "The separate DailyUSE game page was not ready");
+        Console.WriteLine("PASS Game navigation keeps screen capture off until explicitly enabled");
         model.NavigateCommand.Execute("computer");
         Require(model.IsHome, "The former computer page did not resolve to the merged home");
         model.SoftwareSearch = "beta";
@@ -119,7 +127,40 @@ internal static class Program
         Require(closingProbe.WasCanceled && closingStatus.WasCanceled && closingModel.PendingWork.IsCompleted,
             "Closing did not cancel pending computer and weather detection");
         Console.WriteLine("PASS Closing cancels detection before releasing the window");
-        Console.WriteLine("8/8 desktop checks passed");
+        Console.WriteLine("11/11 desktop checks passed");
+    }
+
+    private static void CheckShortcutPersistence()
+    {
+        var directory=Directory.CreateTempSubdirectory("DailyUSE-shortcut-tests-");
+        var path=Path.Combine(directory.FullName,"gaming.json");
+        try
+        {
+            var store=new GamingPreferencesStore(path);
+            using(var gaming=new GamingViewModel(store))
+            {
+                var custom=new KeyboardShortcut(3,0x5A,"Ctrl + Alt + Z");
+                Require(gaming.SetShortcut(true,custom),"A custom shortcut was rejected");
+                Require(!gaming.SetShortcut(false,custom),"Duplicate shortcuts were accepted");
+                Require(gaming.SetShortcut(false,null),"Empty close shortcut was rejected");
+            }
+            using(var reopened=new GamingViewModel(store))
+            {
+                Require(reopened.ToggleShortcut?.Name == "Ctrl + Alt + Z" && reopened.CloseShortcut is null,"Shortcut choices were not restored");
+                Require(reopened.SetShortcut(true,null),"Empty toggle shortcut was rejected");
+            }
+            using(var empty=new GamingViewModel(store)) Require(empty.ToggleShortcut is null && empty.CloseShortcut is null,
+                "Cleared shortcuts reverted to defaults after restart");
+            File.WriteAllText(path,"{");
+            Require(store.Load().IsValid,"Corrupt preferences prevented a usable default");
+            Console.WriteLine("PASS Custom and cleared shortcuts persist without registering capture or accepting duplicates");
+        }
+        finally
+        {
+            var tempRoot=Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+            if(Path.GetFullPath(directory.FullName).StartsWith(tempRoot,StringComparison.OrdinalIgnoreCase) &&
+                directory.Name.StartsWith("DailyUSE-shortcut-tests-",StringComparison.Ordinal)) directory.Delete(recursive:true);
+        }
     }
 
     private static async Task CheckWeatherCacheAsync()

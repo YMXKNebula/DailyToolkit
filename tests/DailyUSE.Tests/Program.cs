@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using DailyUSE.Core.Environment;
 using DailyUSE.Core.Tools;
+using DailyUSE.Core.Gaming;
 
 if (args.FirstOrDefault() == "--worker")
 {
@@ -63,6 +64,37 @@ ProcessBackend Backend(string mode)
     return new(processPath, arguments);
 }
 ToolRequest Request(object input) => new("echo", JsonSerializer.SerializeToElement(input));
+
+Test("Lens geometry magnifies only the requested frame at native pixel coordinates", () =>
+{
+    var layout=LensLayout.Calculate(new(0,0,2560,1600),640,384,2,1280,800);
+    Require(layout.Output == new PixelBounds(960,608,640,384));
+    Require(layout.Source == new SourceArea(1120,704,320,192));
+    var same=LensLayout.Calculate(new(0,0,2560,1600),640,384,1,1280,800);
+    Require(same.Source.Width == same.Output.Width && same.Source.Height == same.Output.Height);
+});
+Test("Lens stays inside monitors including negative origins and edge-following", () =>
+{
+    var monitor=new PixelBounds(-1920,-200,1920,1080);
+    foreach(var point in new[] { (-4000,-900),(0,300),(5000,300),(-900,4000) })
+    {
+        var layout=LensLayout.Calculate(monitor,640,384,2,point.Item1,point.Item2);
+        Require(layout.Output.Left>=monitor.Left && layout.Output.Top>=monitor.Top &&
+            layout.Output.Left+layout.Output.Width<=monitor.Left+monitor.Width && layout.Output.Top+layout.Output.Height<=monitor.Top+monitor.Height);
+        Require(layout.Source.Left>=0 && layout.Source.Top>=0 &&
+            layout.Source.Left+layout.Source.Width<=monitor.Width && layout.Source.Top+layout.Source.Height<=monitor.Height);
+    }
+    var small=LensLayout.Calculate(new(0,0,200,100),640,384,2,0,0);
+    Require(small.Output.Width == 200 && small.Output.Height == 100);
+});
+Test("Magnifier shortcuts support empty choices, custom chords, and collision validation", () =>
+{
+    Require(new GamingPreferences { ToggleShortcut=null,CloseShortcut=null }.IsValid);
+    var custom=new KeyboardShortcut(3,0x5A,"Ctrl + Alt + Z");
+    Require(custom.IsValid && new GamingPreferences { ToggleShortcut=custom }.IsValid);
+    Require(!new GamingPreferences { ToggleShortcut=custom,CloseShortcut=custom with { Name="Another label" } }.IsValid);
+    Require(!new KeyboardShortcut(0,0x10,"Shift").IsValid && !new KeyboardShortcut(0x100,0x5A,"Z").IsValid);
+});
 
 Test("Weather uses only valid Windows temperature labels", () =>
 {
