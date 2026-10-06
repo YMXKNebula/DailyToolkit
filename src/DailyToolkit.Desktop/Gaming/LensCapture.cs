@@ -92,6 +92,11 @@ internal sealed class LensCapture : IDisposable
     public void UpdateSource(SourceArea source,double sharpening)
     {
         Volatile.Write(ref _settings,new(source,sharpening));
+        RequestRefresh();
+    }
+
+    private void RequestRefresh()
+    {
         Interlocked.Exchange(ref _refreshRequested,1);
         if (Interlocked.CompareExchange(ref _refreshWorker,1,0) != 0) return;
         _=Task.Run(() =>
@@ -113,15 +118,21 @@ internal sealed class LensCapture : IDisposable
             {
                 Interlocked.Exchange(ref _refreshWorker,0);
                 if (Volatile.Read(ref _refreshRequested) != 0 && !_stopped)
-                {
-                    var settings=Volatile.Read(ref _settings);
-                    UpdateSource(settings.Source,settings.Sharpening);
-                }
+                    RequestRefresh();
             }
         });
     }
 
     private sealed record RenderSettings(SourceArea Source,double Sharpening);
+
+    internal (SourceArea Source,double Sharpening) SourceForDiagnostics
+    {
+        get
+        {
+            var settings=Volatile.Read(ref _settings);
+            return (settings.Source,settings.Sharpening);
+        }
+    }
 
     private void OnClosed(GraphicsCaptureItem item, object args) => Failed?.Invoke("放大的画面已关闭。");
     public byte[] ReadOutput() { lock (_gate) return _renderer.ReadOutput(); }

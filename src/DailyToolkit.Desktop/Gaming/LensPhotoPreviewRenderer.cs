@@ -43,6 +43,11 @@ internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposa
             var centerX = (int)Math.Round(settings.PointerX*monitor.Width);
             var centerY = (int)Math.Round(settings.PointerY*monitor.Height);
             var layout = LensLayout.Calculate(monitor,settings.Width,settings.Height,settings.Zoom,centerX,centerY);
+            // Use the displayed frame's center after size/monitor bounds clamp its placement,
+            // matching the live session's startup alignment.
+            centerX=layout.Output.Left+layout.Output.Width/2;
+            centerY=layout.Output.Top+layout.Output.Height/2;
+            layout=LensLayout.Calculate(monitor,layout.Output.Width,layout.Output.Height,settings.Zoom,centerX,centerY);
             if (_renderer is null)
             {
                 try { _renderer=new(IntPtr.Zero,layout.Output.Width,layout.Output.Height,software); }

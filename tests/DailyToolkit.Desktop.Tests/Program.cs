@@ -53,6 +53,7 @@ internal static partial class Program
         CheckLensPointer();
         await CheckPreviewLayoutAsync();
         await CheckLifecycleAsync();
-        Console.WriteLine("17/17 desktop checks passed");
+        await CheckDetectorDiagnosticsAsync();
+        Console.WriteLine("18/18 desktop checks passed");
     }
 }

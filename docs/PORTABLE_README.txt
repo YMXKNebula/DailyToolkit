@@ -1,4 +1,4 @@
-DailyToolkit 0.3.7
+DailyToolkit 0.3.8
 
 解压后打开 DailyToolkit.exe。这个版本已包含 .NET 运行环境。
 

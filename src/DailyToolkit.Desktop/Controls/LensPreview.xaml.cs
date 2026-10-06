@@ -158,8 +158,10 @@ public partial class LensPreview : UserControl
     {
         if (_model?.IsMovableMode != true || _frame is null || Screen.ActualWidth <= 0 || Screen.ActualHeight <= 0) return;
         var position=e.GetPosition(Screen);
-        _dragOffsetX=position.X/Screen.ActualWidth-_pointerX;
-        _dragOffsetY=position.Y/Screen.ActualHeight-_pointerY;
+        var settings=_frame.Settings;
+        var output=_frame.Layout.Output;
+        _dragOffsetX=position.X/Screen.ActualWidth-(output.Left+output.Width/2)/(double)settings.ScreenWidth;
+        _dragOffsetY=position.Y/Screen.ActualHeight-(output.Top+output.Height/2)/(double)settings.ScreenHeight;
         _dragging=Screen.CaptureMouse();
         e.Handled=true;
     }

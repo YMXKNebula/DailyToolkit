@@ -74,6 +74,20 @@
 
 本地证据：`artifacts/refactor-shortcut-check.json`、`artifacts/refactor-capture-check.json`、`artifacts/refactor-render-check.json`。电脑报告、测试区域截图和临时基线不提交公开仓库。
 
+## 0.3.8 复查修复
+
+复查发现三处遗漏，按原有实现修复：
+
+- 参数刷新任务结束后只重新安排重绘，不再写回先前读取的参数，避免覆盖用户刚调整的倍率、采样位置或锐化。
+- 照片框在屏幕边缘扩大后，按限制后的实际框中心取样。下一次拖动也从显示出来的中心计算偏移，避免拖动起点仍停在扩大前的位置。预览和实际浮窗的位置继续独立。
+- 硬件检测失败时通过 Trace 保留原始异常，页面继续显示可用的部分报告；没有新增日志文件。
+
+成功捕获帧、着色器、插值、锐化和限帧代码未改动。构建为 0 警告、0 错误；Core 30/30、Desktop 18/18、真实桌面快捷键与交互 45/45 通过。桌面检查增加检测异常记录验证，照片检查覆盖边缘扩大后的真实着色器像素；交互检查增加连续参数调节和边缘扩大后的实际鼠标拖动。
+
+便携程序的真实捕获、浮窗排除和鼠标穿透通过，三组生成纹理的 GPU 像素输出与 0.3.7 相同。GPU 耗时检查仍不包含 Windows 捕获和呈现，不能据此保证具体游戏的帧率。
+
+本地证据：`artifacts/fix-shortcut-check.json`、`artifacts/fix-capture-check.json`、`artifacts/fix-render-check.json`；这些诊断输出不提交公开仓库。
+
 ## 其他更名文件（仅名称和引用）
 
 - `DailyToolkit.slnx`

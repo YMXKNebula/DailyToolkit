@@ -41,6 +41,23 @@ internal static partial class Program
             var resized=renderer.Render(settings with { Width=480,Height=640,PointerX=1,PointerY=1 });
             Require(resized.Magnified.PixelWidth == 480 && resized.Magnified.PixelHeight == 640 &&
                 resized.Layout.Output == new PixelBounds(2080,800,480,640),"Independent size or edge-constrained dragging was incorrect");
+            foreach(var (pointerX,pointerY) in new[] { (0.9375,0.8),(0.0625,0.2) })
+            {
+                var atEdge=settings with { Width=320,Height=192,PointerX=pointerX,PointerY=pointerY };
+                renderer.Render(atEdge);
+                var enlarged=renderer.Render(atEdge with { Width=640,Height=768 });
+                var bounds=enlarged.Layout.Output;
+                var aligned=atEdge with
+                {
+                    Width=640,Height=768,
+                    PointerX=(bounds.Left+bounds.Width/2)/(double)atEdge.ScreenWidth,
+                    PointerY=(bounds.Top+bounds.Height/2)/(double)atEdge.ScreenHeight
+                };
+                var expected=renderer.Render(aligned);
+                Require(enlarged.Layout.Source == expected.Layout.Source &&
+                    Pixels(enlarged.Magnified).SequenceEqual(Pixels(expected.Magnified)),
+                    "Resizing an edge preview did not align its real shader output with the displayed frame");
+            }
             var clamped=renderer.Render(settings with { ScreenWidth=200,ScreenHeight=100,Width=480,Height=640,Zoom=1 });
             Require(clamped.Magnified.PixelWidth == 200 && clamped.Magnified.PixelHeight == 100,"Preview did not match monitor size limits");
         });

@@ -16,6 +16,28 @@ namespace DailyToolkit.Desktop.Tests;
 
 internal static partial class Program
 {
+    private static async Task CheckDetectorDiagnosticsAsync()
+    {
+        var display=new DisplayInfo(1920,1080,1,1920,1040,false);
+        var probe=new ControlledProbe(display);
+        using var output=new StringWriter();
+        using var listener=new System.Diagnostics.TextWriterTraceListener(output);
+        System.Diagnostics.Trace.Listeners.Add(listener);
+        try
+        {
+            using var model=new MainViewModel(new FailingProbe(probe.Basic),display,new LocalProbe());
+            await model.InitializeAsync();
+            listener.Flush();
+            Require(model.Report.Stage == ProbeStage.Partial && model.HasIssues && !model.IsRefreshing,
+                "Logging a detector failure changed its usable partial report");
+            Require(output.ToString().Contains("InvalidOperationException") &&
+                output.ToString().Contains("Simulated detector failure"),
+                "The original detector exception was not retained for diagnostics");
+        }
+        finally { System.Diagnostics.Trace.Listeners.Remove(listener); }
+        Console.WriteLine("PASS Detector failures retain original exceptions without changing the friendly partial report");
+    }
+
     private static async Task CheckLifecycleAsync()
     {
         var display = new DisplayInfo(1920, 1080, 1, 1920, 1040, false);

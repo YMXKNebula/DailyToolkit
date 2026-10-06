@@ -279,7 +279,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyToolkit", Version = "0.3.7", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyToolkit", Version = "0.3.8", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);
@@ -298,8 +298,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Apply(details);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception)
+        catch (Exception exception)
         {
+            System.Diagnostics.Trace.WriteLine(exception);
             Apply(Report with
             {
                 Stage = ProbeStage.Partial,

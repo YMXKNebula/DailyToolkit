@@ -96,6 +96,7 @@ internal static class LensShortcutDiagnostics
             await CheckPendingStartupAsync();
             await CheckHoldAndEmptyShortcutAsync();
             await CheckFailureCleanupAsync();
+            await CheckPreviewResizeDragAsync();
             await WriteReportAsync(outputPath);
         }
 
@@ -242,7 +243,27 @@ internal static class LensShortcutDiagnostics
             await Wait(() => activeCapture.FramesRendered > frames,"Live settings did not produce another frame.");
             if (gaming.LensHandle != handle || gaming.CaptureForDiagnostics != activeCapture || !gaming.IsVisible)
                 throw new InvalidOperationException("Zoom or sharpening recreated the native window or capture.");
+            // Let workers finish/restart between bursts while the UI keeps publishing new settings.
+            // Check the final actual capture settings after workers have had time to drain.
+            for(var batch=0;batch<40;batch++)
+            {
+                for(var step=0;step<40;step++)
+                {
+                    gaming.Zoom=1+(step%37)*0.25;
+                    gaming.Sharpening=(step%11)/10d;
+                }
+                await Task.Delay(2);
+            }
             gaming.Sharpening=originalSharpness; gaming.Zoom=originalZoom;
+            frames=activeCapture.FramesRendered;
+            await Wait(() => activeCapture.FramesRendered > frames,"The final burst settings did not render.");
+            await Task.Delay(80);
+            var bounds=gaming.ActiveBounds!;
+            var expected=LensLayout.Calculate(gaming.SelectedMonitor!.Bounds,bounds.Width,bounds.Height,originalZoom,
+                bounds.Left+bounds.Width/2,bounds.Top+bounds.Height/2).Source;
+            if (activeCapture.SourceForDiagnostics != (expected,originalSharpness) ||
+                gaming.LensHandle != handle || gaming.CaptureForDiagnostics != activeCapture || !gaming.IsVisible)
+                throw new InvalidOperationException("A completed refresh worker overwrote the final source or sharpening settings.");
         }
 
         private async Task CheckFailureCleanupAsync()
@@ -276,6 +297,43 @@ internal static class LensShortcutDiagnostics
             await Wait(() => gaming.IsVisible,"Active disposal check did not start.");
             handle=gaming.LensHandle;
             gaming.Dispose(); RequireReleased(handle);
+        }
+
+        private async Task CheckPreviewResizeDragAsync()
+        {
+            gaming.IsMovableMode=true;
+            gaming.FrameWidth=320; gaming.FrameHeight=240;
+            await Wait(() => preview.CurrentFrame?.Settings is { Width:320,Height:240 },"Small preview did not render.");
+            var screen=(FrameworkElement)preview.FindName("Screen");
+            var border=(FrameworkElement)preview.FindName("FrameBorder");
+            var start=border.PointToScreen(new(border.ActualWidth/2,border.ActualHeight/2));
+            var edge=screen.PointToScreen(new(screen.ActualWidth-6,screen.ActualHeight-6));
+            MoveMouse((int)Math.Round(start.X),(int)Math.Round(start.Y));
+            await Task.Delay(30); Mouse(2); await Task.Delay(30);
+            MoveMouse((int)Math.Round(edge.X),(int)Math.Round(edge.Y));
+            await Wait(() => preview.CurrentFrame?.Settings is { PointerX: > 0.8,PointerY: > 0.8 },
+                "Preview did not drag to the lower right edge.");
+            Mouse(4); await Task.Delay(50);
+            gaming.FrameWidth=800; gaming.FrameHeight=640;
+            await Wait(() => preview.CurrentFrame?.Settings is { Width:800,Height:640 },"Enlarged edge preview did not render.");
+            var frame=preview.CurrentFrame!;
+            var before=frame.Layout.Output;
+            start=border.PointToScreen(new(border.ActualWidth/2,border.ActualHeight/2));
+            var startX=(int)Math.Round(start.X); var startY=(int)Math.Round(start.Y);
+            var endX=startX-32; var endY=startY-24;
+            var from=screen.PointFromScreen(new(startX,startY));
+            var to=screen.PointFromScreen(new(endX,endY));
+            var expected=LensPlacement.Snap(new(0,0,frame.Settings.ScreenWidth,frame.Settings.ScreenHeight),
+                before.Width,before.Height,
+                before.Left+(int)Math.Round((to.X-from.X)/screen.ActualWidth*frame.Settings.ScreenWidth),
+                before.Top+(int)Math.Round((to.Y-from.Y)/screen.ActualHeight*frame.Settings.ScreenHeight)).Bounds;
+            MoveMouse(startX,startY); await Task.Delay(30); Mouse(2); await Task.Delay(30);
+            MoveMouse(endX,endY);
+            await Wait(() => preview.CurrentFrame?.Layout.Output == expected,
+                "Resizing at the edge left the preview drag offset at its former center.");
+            Mouse(4); await Task.Delay(30);
+            if (gaming.IsActive || gaming.HasCaptureResources)
+                throw new InvalidOperationException("Dragging a resized photo started screen capture.");
         }
 
         private async Task CheckPreviewDragAsync()
@@ -413,7 +471,8 @@ internal static class LensShortcutDiagnostics
                 DragContinuesOutsideOriginalFrame=true,DesktopGuidesVisibleOutsideLens=true,DesktopGuidesAvoidMagnifiedPicture=true,
                 RealCursorFollowsDrag=true,ContinuousRelativeMouseDrag=true,TenTimesRemainsVisible=true,
                 LiveWheelCanBeDisabled=true,PreviewWheelCanBeDisabled=true,
-                LiveParametersReuseCapture=true,SimulatedCaptureFailureCleanup=true,MonitorSelectionAndDispose=true
+                LiveParametersReuseCapture=true,LatestSourceSettingsWin=true,ResizedPreviewDragUsesDisplayedCenter=true,
+                SimulatedCaptureFailureCleanup=true,MonitorSelectionAndDispose=true
             }));
 
         }
