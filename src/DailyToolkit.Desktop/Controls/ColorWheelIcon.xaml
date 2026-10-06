@@ -1,0 +1,15 @@
+<UserControl x:Class="DailyToolkit.Desktop.Controls.ColorWheelIcon"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Focusable="False" IsHitTestVisible="False">
+ <Viewbox Stretch="Uniform">
+  <Canvas Width="24" Height="24">
+   <Path Fill="#F15C6D" Data="M12,12 L12,2 A10,10 0 0 1 20.66,7 Z" />
+   <Path Fill="#F6B84B" Data="M12,12 L20.66,7 A10,10 0 0 1 20.66,17 Z" />
+   <Path Fill="#75C676" Data="M12,12 L20.66,17 A10,10 0 0 1 12,22 Z" />
+   <Path Fill="#35B9C9" Data="M12,12 L12,22 A10,10 0 0 1 3.34,17 Z" />
+   <Path Fill="#5E87E8" Data="M12,12 L3.34,17 A10,10 0 0 1 3.34,7 Z" />
+   <Path Fill="#AF73DC" Data="M12,12 L3.34,7 A10,10 0 0 1 12,2 Z" />
+   <Ellipse Canvas.Left="8.5" Canvas.Top="8.5" Width="7" Height="7" Fill="{DynamicResource SurfaceBrush}" />
+  </Canvas>
+ </Viewbox>
+</UserControl>

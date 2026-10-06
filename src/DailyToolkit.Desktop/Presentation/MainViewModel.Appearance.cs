@@ -19,7 +19,7 @@ public sealed partial class MainViewModel
     private void InitializeAppearance()
     {
         var fields=new[] { ("Window","窗口背景"),("Surface","卡片与标题栏"),("Sidebar","侧栏背景"),("Text","主要文字"),
-            ("Muted","说明文字"),("Border","边框"),("Accent","强调色"),("AccentSoft","选中背景"),
+            ("Muted","次要文字"),("Border","边框"),("Accent","强调色"),("AccentSoft","选中背景"),
             ("AccentForeground","强调按钮文字"),("Hover","悬停背景"),("Warning","提示背景"),("WarningText","提示文字") };
         foreach (var (key,name) in fields)
         {

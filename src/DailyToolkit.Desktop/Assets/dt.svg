@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <defs><linearGradient id="jade" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2D8B68"/><stop offset="1" stop-color="#174A3B"/></linearGradient></defs>
+  <defs><linearGradient id="jade" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2E8268"/><stop offset="1" stop-color="#245C4C"/></linearGradient></defs>
   <rect width="256" height="256" rx="56" fill="url(#jade)"/>
-  <path d="M38 76 L52 62 H83 C130 62 155 86 155 128 C155 170 130 194 83 194 H38 Z M66 88 V168 H82 C110 168 128 153 128 128 C128 103 110 88 82 88 Z" fill="white" fill-rule="evenodd"/>
-  <path d="M111 62 H222 V88 H194 V179 L167 194 V88 H111 Z" fill="white"/>
+  <path d="M42 72 Q42 64 50 64 H88 C133 64 159 87 159 128 C159 169 133 192 88 192 H50 Q42 192 42 184 Z M69 90 V166 H88 C116 166 132 153 132 128 C132 103 116 90 88 90 Z" fill="white" fill-rule="evenodd"/>
+  <path d="M88 64 H214 Q220 64 220 70 V84 Q220 90 214 90 H196 V184 Q196 192 188 192 H178 Q170 192 170 184 V90 H88 Z" fill="white"/>
 </svg>

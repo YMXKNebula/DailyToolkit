@@ -120,7 +120,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     }
     public bool IsFixedMode { get => MovementMode == LensMovementMode.Fixed; set { if (value) MovementMode=LensMovementMode.Fixed; } }
     public bool IsMovableMode { get => MovementMode == LensMovementMode.Movable; set { if (value) MovementMode=LensMovementMode.Movable; } }
-    public string MovementHint => IsFixedMode ? "固定后，鼠标可操作框下的窗口。" : "按住画面任意位置拖动，靠近中心时吸附；点击不会传到下方窗口。";
+    public string MovementHint => IsFixedMode ? "位置固定，鼠标操作作用于下方窗口。" : "拖动画面移动，接近屏幕中心时自动吸附；鼠标操作仅作用于放大框。";
     public bool IsFavorite
     {
         get => _favorite;
@@ -146,7 +146,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public bool SetShortcut(KeyboardShortcut? shortcut)
     {
         var preferences = _preferences with { ToggleShortcut=shortcut };
-        if (!preferences.IsValid) { Status="这个按键不能用作快捷键。"; return false; }
+        if (!preferences.IsValid) { Status="该按键不可作为快捷键。"; return false; }
         Stop();
         SavePreferences(preferences);
         Notify(nameof(ToggleShortcut)); Notify(nameof(ToggleShortcutText));

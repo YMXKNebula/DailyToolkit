@@ -236,7 +236,7 @@ internal static partial class Program
                 model.ExitFavoritesCommand.Execute(null);
             }
             settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            Require(model.IsSettings && !model.IsFavorites && model.PageTitle == "软件设置" &&
+            Require(model.IsSettings && !model.IsFavorites && model.PageTitle == "主题配色" &&
                 ((UIElement)window.FindName("SettingsScroll")).IsVisible && settingsButton.ToolTip as string == "返回工具" &&
                 settingsButton.TranslatePoint(new Point(),root).X > favoriteButton.TranslatePoint(new Point(),root).X,
                 "The gear did not sit beside the star or open software settings");
@@ -287,6 +287,41 @@ internal static partial class Program
                 ((System.Windows.Media.SolidColorBrush)window.FindResource("WindowBrush")).Color.ToString() == "#FF171D1B",
                 "The live theme and preview did not receive the selected palette");
             model.LightThemeCommand.Execute(null);
+            var settingsCards=new[] { "ThemeSettingsCard","AnimationSettingsCard","BackgroundSettingsCard","StartupSettingsCard","AboutSettingsCard" };
+            foreach (var (item,index) in model.NavigationItems.ToArray().Select((item,index) => (item,index)))
+            {
+                model.NavigateCommand.Execute(item); window.UpdateLayout();
+                Require(model.IsSettings && item.IsSelected && model.PageTitle == item.Name &&
+                    settingsCards.Count(name => ((UIElement)window.FindName(name)).IsVisible) == 1 &&
+                    ((UIElement)window.FindName(settingsCards[index])).IsVisible,
+                    "Settings navigation did not select exactly one category page");
+            }
+            Require(!Buttons(window).Any(button => button.Content as string == "应用启动设置"),
+                "The removed startup apply button was still present");
+            model.Page="settings-animation"; window.UpdateLayout();
+            var animationPicker=(DailyToolkit.Desktop.Controls.ColorPicker)window.FindName("AnimationColorPicker");
+            var customButton=(System.Windows.Controls.Button)animationPicker.FindName("CustomColorButton");
+            Require(customButton.Content is DailyToolkit.Desktop.Controls.ColorWheelIcon,"Custom colors still used a monochrome glyph");
+            var wheel=(FrameworkElement)customButton.Content;
+            var wheelDpi=System.Windows.Media.VisualTreeHelper.GetDpi(wheel);
+            var wheelBitmap=new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Ceiling(wheel.ActualWidth*wheelDpi.DpiScaleX),
+                (int)Math.Ceiling(wheel.ActualHeight*wheelDpi.DpiScaleY),wheelDpi.PixelsPerInchX,wheelDpi.PixelsPerInchY,System.Windows.Media.PixelFormats.Pbgra32);
+            wheelBitmap.Render(wheel);
+            var wheelColors=new HashSet<int>();
+            for (var segment=0;segment<6;segment++)
+            {
+                var angle=(-60+segment*60)*Math.PI/180;
+                var rgba=new byte[4];
+                wheelBitmap.CopyPixels(new Int32Rect((int)(wheelBitmap.PixelWidth*(.5+.30*Math.Cos(angle))),
+                    (int)(wheelBitmap.PixelHeight*(.5+.30*Math.Sin(angle))),1,1),rgba,4,0);
+                Require(rgba[3] > 200 && rgba.Take(3).Max()-rgba.Take(3).Min() > 35,"The custom color icon was obscured or lost its colors");
+                wheelColors.Add(rgba[0] | rgba[1]<<8 | rgba[2]<<16);
+            }
+            Require(wheelColors.Count == 6,"The custom color icon did not display all six colors");
+            Require(Buttons(picker).Any(button => button.Name == "CustomColorButton") &&
+                ((System.Windows.Controls.StackPanel)Buttons(picker).Single(button => button.Name == "CustomColorButton").Content)
+                    .Children.OfType<DailyToolkit.Desktop.Controls.ColorWheelIcon>().Any(),
+                "The lens color picker did not reuse the same color icon");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
                 settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));

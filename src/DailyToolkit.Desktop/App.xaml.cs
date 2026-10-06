@@ -174,13 +174,14 @@ public partial class App : Application
             await viewModel.CurrentLocalStatusTask;
             viewModel.Page = ReadArgument(e.Args, "--page") ?? "home";
             if (ReadArgument(e.Args,"--theme") == "dark") viewModel.DarkThemeCommand.Execute(null);
+            else if (ReadArgument(e.Args,"--theme") == "light") viewModel.LightThemeCommand.Execute(null);
             if (ReadArgument(e.Args,"--animation-color") is { } animationColor) viewModel.AnimationColor=animationColor;
             if (e.Args.Contains("--details") || e.Args.Contains("--software"))
                 window.ShowPreviewDetails(e.Args.Contains("--software"));
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
             if (viewModel.IsSettings && ReadArgument(e.Args,"--settings-section") == "startup")
             {
-                ((System.Windows.Controls.ScrollViewer)window.FindName("SettingsScroll")).ScrollToEnd();
+                viewModel.Page="settings-startup";
                 await Dispatcher.InvokeAsync(window.UpdateLayout,DispatcherPriority.ContextIdle);
             }
             await window.WaitForLensPreviewAsync().WaitAsync(TimeSpan.FromSeconds(15));

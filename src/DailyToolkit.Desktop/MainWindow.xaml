@@ -44,7 +44,6 @@
             <Image Source="Assets/dt.png" Width="28" Height="28" />
             <TextBlock Text="DailyToolkit" Margin="9,0,0,0" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
           </StackPanel>
-          <TextBlock Text="日常小工具" Style="{StaticResource MutedText}" Margin="0,13,0,0" />
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,0">
           <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
@@ -60,7 +59,7 @@
           </Button>
           </StackPanel>
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.5.1</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.5.2</Hyperlink>
           </TextBlock>
         </StackPanel>
         <DockPanel x:Name="NavigationPanel">
@@ -68,8 +67,6 @@
                      Visibility="{Binding IsFavorites, Converter={StaticResource VisibleWhen}}" />
           <TextBlock DockPanel.Dock="Top" Text="设置" FontWeight="SemiBold" Margin="10,10,0,12"
                      Visibility="{Binding IsSettings, Converter={StaticResource VisibleWhen}}" />
-          <TextBlock DockPanel.Dock="Top" Text="拖动排序 · 右键也可调整" FontSize="11" Foreground="{DynamicResource MutedBrush}"
-                     Margin="8,0,0,10" Visibility="{Binding ShowAllTools, Converter={StaticResource VisibleWhen}}" />
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding NavigationItems}">
               <ItemsControl.ItemTemplate>
@@ -79,7 +76,7 @@
                                Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                PreviewMouseLeftButtonDown="NavigationDragStart" PreviewMouseMove="NavigationDragMove"
-                               AllowDrop="True" DragOver="NavigationDragOver" Drop="NavigationDrop" ToolTip="拖动调整顺序">
+                               AllowDrop="True" DragOver="NavigationDragOver" Drop="NavigationDrop" ToolTip="{Binding Name}" AutomationProperties.Name="{Binding Name}">
                     <RadioButton.ContextMenu>
                       <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
                         <MenuItem Header="上移" Command="{Binding MoveUpCommand}"
@@ -107,7 +104,6 @@
         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
         <StackPanel Margin="0,0,14,0">
           <TextBlock Text="{Binding PageTitle}" FontSize="26" FontWeight="SemiBold" />
-          <TextBlock Text="{Binding PageDescription}" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
         </StackPanel>
         <Button x:Name="RefreshButton" Grid.Column="1" Content="{Binding RefreshText}" Command="{Binding RefreshCommand}" VerticalAlignment="Top" Margin="0,5,0,0"
                 Visibility="{Binding ShowRefresh, Converter={StaticResource VisibleWhen}}" />
@@ -147,7 +143,6 @@
                 <TextBlock Text="电源" Style="{StaticResource MutedText}" />
                 <TextBlock Text="{Binding PowerText}" FontSize="20" FontWeight="SemiBold" Margin="0,8,0,7" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding PowerDetail}" Style="{StaticResource MutedText}" />
-                <TextBlock Text="Windows 电源信息" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
               </StackPanel>
             </Border>
           </UniformGrid>
@@ -156,7 +151,7 @@
             <StackPanel>
               <Grid Margin="0,0,0,16">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <TextBlock Text="这台电脑" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="系统信息" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                   <Button Content="复制摘要" Click="CopySummary" Margin="0,0,8,0" Padding="10,7" />
                   <Button Content="保存报告" Click="SaveReport" Padding="10,7" />
@@ -223,14 +218,14 @@
                          MinWidth="62" Margin="12,0,4,0" VerticalContentAlignment="Center"
                          PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur"
                          Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}"
-                         ToolTip="点击后按下想用的组合键。清空后可在详细设置中用按钮控制。"
+                         ToolTip="按下快捷键以设置，按 Esc 取消。"
                          AutomationProperties.Name="开启或关闭放大框的快捷键" />
                 <Button Grid.Column="2" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12" />
               <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="10,0,4,0">
                 <RadioButton Content="按住" GroupName="LensMode" IsChecked="{Binding IsHoldMode}" Style="{StaticResource NavButton}"
                              Padding="8,7" FontSize="13" Margin="0,0,2,0" ToolTip="按住快捷键开启，松开组合键中的任意一键就关闭。" />
                 <RadioButton Content="切换" GroupName="LensMode" IsChecked="{Binding IsToggleMode}" Style="{StaticResource NavButton}"
-                             Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次开启，再按同一个快捷键关闭并释放画面资源。" />
+                             Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次开启，再按一次关闭。" />
               </StackPanel>
                 <Button Grid.Column="4" Command="{Binding ToggleFavoriteCommand}"
                         Padding="4,6" FontSize="17" BorderThickness="0" Background="Transparent"
@@ -240,13 +235,11 @@
               </Grid>
               <Border x:Name="LensDetailsPanel">
                 <StackPanel Margin="0,16,0,0">
-                  <TextBlock Text="快捷键在后台也能用。点击按键框修改，按 Esc 取消。" Style="{StaticResource MutedText}" Margin="0,0,0,18" />
                   <Grid x:Name="LensSettingsGrid" SizeChanged="LensSettingsSizeChanged">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                   <StackPanel x:Name="LensSettingsControls">
                     <StackPanel IsEnabled="{Binding CanConfigure}">
-                    <TextBlock Text="使用鼠标所在屏幕，支持跨屏拖动。" Style="{StaticResource MutedText}" Margin="0,0,0,8" />
                     <TextBlock Text="{Binding SelectedMonitor.Name}" Style="{StaticResource MutedText}" Margin="0,0,0,18" />
                     </StackPanel>
                     <TextBlock Text="位置" FontWeight="SemiBold" Margin="0,0,0,10" />
@@ -302,8 +295,6 @@
                     <Button Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" Margin="0,0,8,8" />
                   </WrapPanel>
                   <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
-                  <TextBlock Text="按住：松手即关闭。切换：再按一次关闭。大小和帧率请在关闭后调整。" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
-                  <TextBlock Text="游戏建议用窗口或无边框模式。放大效果取决于原画面清晰度。" Style="{StaticResource MutedText}" />
                   <Separator Margin="0,18,0,14" />
                   <Button Content="恢复默认" Command="{Binding ResetDefaultsCommand}" HorizontalAlignment="Left"
                           ToolTip="关闭放大框，恢复默认画面、居中位置和固定模式；保留快捷键、按住／切换模式和收藏。" />
@@ -317,32 +308,28 @@
       <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     Visibility="{Binding IsSettings, Converter={StaticResource VisibleWhen}}">
         <StackPanel Margin="0,0,8,0">
-          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+          <Border x:Name="AnimationSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowAnimationSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
-              <TextBlock Text="切换动画" Style="{StaticResource SectionTitle}" />
-              <CheckBox x:Name="PageAnimationSwitch" Content="播放页面切换动画" IsChecked="{Binding PageAnimationsEnabled, Mode=TwoWay}"
+              <CheckBox x:Name="PageAnimationSwitch" Content="启用切换动画" IsChecked="{Binding PageAnimationsEnabled, Mode=TwoWay}"
                         FontFamily="Microsoft YaHei UI" FontSize="14" Foreground="{DynamicResource TextBrush}" />
-              <TextBlock Text="打开时展开，关闭时收回，颜色保持一致。标题栏不受影响。" Style="{StaticResource MutedText}" Margin="0,10,0,12" />
+              <TextBlock Text="动画颜色" FontSize="13" Margin="0,18,0,10" />
               <controls:ColorPicker x:Name="AnimationColorPicker" Color="{Binding AnimationColor, Mode=TwoWay}" />
               <WrapPanel Margin="0,10,0,0">
                 <Button Content="预览星形" Click="PreviewStar" Margin="0,0,8,0" />
                 <Button Content="预览齿轮" Click="PreviewGear" />
               </WrapPanel>
-              <TextBlock Text="遵循 Windows 的动画和高对比度设置。" Style="{StaticResource MutedText}" Margin="0,10,0,0" />
             </StackPanel>
           </Border>
-          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+          <Border x:Name="ThemeSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowThemeSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
-              <TextBlock Text="主题配色" Style="{StaticResource SectionTitle}" />
               <WrapPanel Margin="0,0,0,14">
                 <Button Content="浅色" Command="{Binding LightThemeCommand}" Margin="0,0,8,0" />
                 <Button Content="深色" Command="{Binding DarkThemeCommand}" Margin="0,0,8,0" />
-                <Button Content="恢复界面默认" Command="{Binding ResetAppearanceCommand}" />
+                <Button Content="恢复外观默认" Command="{Binding ResetAppearanceCommand}" />
               </WrapPanel>
               <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="1" Margin="0,0,0,8" MaxWidth="480" HorizontalAlignment="Left">
                 <Viewbox Stretch="Uniform" MaxHeight="240"><controls:ThemePreview x:Name="PalettePreview" Width="480" Height="240" Palette="{Binding Theme}" AnimationColor="{Binding AnimationColor}" /></Viewbox>
               </Border>
-              <TextBlock Text="预览随颜色变化。可选色块、输入色号，也可打开颜色选择器。" Style="{StaticResource MutedText}" Margin="0,0,0,14" />
               <ItemsControl ItemsSource="{Binding ThemeColors}">
                 <ItemsControl.ItemTemplate><DataTemplate>
                   <Grid Margin="0,0,0,10">
@@ -354,37 +341,31 @@
               </ItemsControl>
             </StackPanel>
           </Border>
-          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+          <Border x:Name="BackgroundSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowBackgroundSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
-              <TextBlock Text="后台运行" Style="{StaticResource SectionTitle}" />
               <CheckBox Content="关闭窗口后留在托盘" IsChecked="{Binding CloseToTray}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12" />
               <CheckBox Content="最小化时留在托盘" IsChecked="{Binding MinimizeToTray}" Foreground="{DynamicResource TextBrush}" />
-              <TextBlock Text="留在托盘时快捷键仍可用。点击托盘图标打开窗口，右键选择退出可关闭软件。" Style="{StaticResource MutedText}" Margin="0,12,0,0" />
             </StackPanel>
           </Border>
-          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+          <Border x:Name="StartupSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowStartupSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
-              <TextBlock Text="启动" Style="{StaticResource SectionTitle}" />
               <StackPanel IsEnabled="{Binding CanEditStartup}">
                 <CheckBox x:Name="LoginStartupSwitch" Content="开机自启动" IsChecked="{Binding StartAtLogin}" Foreground="{DynamicResource TextBrush}" />
                 <StackPanel Margin="24,12,0,0">
-                  <CheckBox x:Name="AdminStartupSwitch" Content="以管理员权限启动全部功能" IsChecked="{Binding AdminStartup}" IsEnabled="{Binding StartAtLogin}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12" />
-                  <CheckBox x:Name="SilentStartupSwitch" Content="静默启动，只显示托盘图标" IsChecked="{Binding SilentStartup}" Foreground="{DynamicResource TextBrush}" />
+                  <CheckBox x:Name="AdminStartupSwitch" Content="以管理员权限启动" IsChecked="{Binding AdminStartup}" IsEnabled="{Binding StartAtLogin}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12"
+                            ToolTip="首次启用及重新启用时需要授权。" />
+                  <CheckBox x:Name="SilentStartupSwitch" Content="静默启动" IsChecked="{Binding SilentStartup}" Foreground="{DynamicResource TextBrush}" ToolTip="启动后仅显示托盘图标。" />
                 </StackPanel>
               </StackPanel>
-              <TextBlock Text="管理员自启在启用时请求一次授权。关闭后重新启用会再次授权；已启用的自启不再弹出 UAC。静默启动可同时开启。" Style="{StaticResource MutedText}" Margin="0,14,0,12" />
-              <Button Content="应用启动设置" Command="{Binding ApplyStartupCommand}" HorizontalAlignment="Left" />
-              <TextBlock Text="{Binding StartupStatus}" Style="{StaticResource MutedText}" Margin="0,12,0,0" />
+              <TextBlock Text="{Binding StartupStatus}" Style="{StaticResource MutedText}" Margin="0,12,0,0" Visibility="{Binding HasStartupStatus, Converter={StaticResource VisibleWhen}}" />
               <TextBlock Text="{Binding PrivilegeText}" FontSize="13" Margin="0,14,0,10" />
-              <Button Content="立即以管理员权限重启" Command="{Binding RunAdministratorCommand}" HorizontalAlignment="Left" />
+              <Button Content="以管理员权限重启" Command="{Binding RunAdministratorCommand}" HorizontalAlignment="Left" />
             </StackPanel>
           </Border>
-          <Border Style="{StaticResource Card}">
+          <Border x:Name="AboutSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowAboutSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
-              <TextBlock Text="关于" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="DailyToolkit 0.5.1" FontWeight="SemiBold" />
-              <TextBlock Text="把自己常用的小工具放在一起。设置保存在这台电脑上。" Style="{StaticResource MutedText}" Margin="0,10,0,14" />
-              <TextBlock><Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">项目主页</Hyperlink></TextBlock>
+              <TextBlock Text="DailyToolkit 0.5.2" FontWeight="SemiBold" />
+              <TextBlock Margin="0,14,0,0"><Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">项目主页</Hyperlink></TextBlock>
             </StackPanel>
           </Border>
         </StackPanel>
@@ -393,9 +374,8 @@
       <Border Grid.Row="1" Style="{StaticResource Card}" VerticalAlignment="Top"
               Visibility="{Binding ShowFavoritesEmpty, Converter={StaticResource VisibleWhen}}">
         <StackPanel>
-          <TextBlock Text="还没有收藏" FontSize="18" FontWeight="SemiBold" />
-          <TextBlock Text="点击工具旁的星标，把它放到这里。" Style="{StaticResource MutedText}" Margin="0,10,0,16" />
-          <Button Content="查看全部工具" Click="ExitFavorites" HorizontalAlignment="Left" />
+          <TextBlock Text="暂无收藏" FontSize="18" FontWeight="SemiBold" />
+          <Button Content="查看全部工具" Click="ExitFavorites" HorizontalAlignment="Left" Margin="0,16,0,0" />
         </StackPanel>
       </Border>
 

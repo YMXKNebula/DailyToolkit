@@ -16,14 +16,22 @@ internal static partial class Program
     {
         public StartupChoice Choice=new(false,false,false);
         public bool IsAdministrator => false;
-        public int Authorizations,Launches;
+        public int Authorizations,Launches,ApplyCalls,ActiveCalls,MaximumActiveCalls;
         public bool Cancel;
+        public TaskCompletionSource? Pending,Started;
         public StartupChoice Read() => Choice;
-        public Task ApplyAsync(StartupChoice choice)
+        public async Task ApplyAsync(StartupChoice choice)
         {
-            if (choice.Enabled && choice.Administrator && !Choice.Administrator)
-            { Authorizations++; if (Cancel) throw new Win32Exception(1223); }
-            Choice=choice; return Task.CompletedTask;
+            ApplyCalls++; MaximumActiveCalls=Math.Max(MaximumActiveCalls,++ActiveCalls);
+            try
+            {
+                Started?.TrySetResult();
+                if (Pending is not null) await Pending.Task;
+                if (choice.Enabled && choice.Administrator && !Choice.Administrator)
+                { Authorizations++; if (Cancel) throw new Win32Exception(1223); }
+                Choice=choice;
+            }
+            finally { ActiveCalls--; }
         }
         public void LaunchAdministrator(bool requireRegisteredTask=false) { Launches++; }
     }
@@ -40,24 +48,58 @@ internal static partial class Program
                 navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),appPreferencesStore:store,startupRegistration:startup);
             Require(!model.StartAtLogin && !model.AdminStartup && !model.SilentStartup && !model.CloseToTray && !model.MinimizeToTray,
                 "New runtime options changed defaults or enabled autostart without user action");
+            Require(startup.ApplyCalls == 0,"Loading startup settings changed Windows registration");
             model.AdminStartup=true; Require(!model.AdminStartup,"Administrator startup was available without autostart");
             var restarts=0; model.AdministratorRestartRequested += () => restarts++;
             model.StartAtLogin=true; model.AdminStartup=true; model.SilentStartup=true;
-            Require(startup.Authorizations == 0 && !store.Load().StartAtLogin,"Changing checkboxes applied system startup settings immediately");
-            await model.ApplyStartupAsync();
+            await model.PendingStartupChange;
             Require(startup.Authorizations == 1 && startup.Launches == 1 && restarts == 1 &&
-                store.Load() is { StartAtLogin:true,AdminStartup:true,SilentStartup:true } && !model.StartupDirty,
+                store.Load() is { StartAtLogin:true,AdminStartup:true,SilentStartup:true } && model.CanEditStartup,
                 "Combined admin/silent startup did not save and restart the entire app after one authorization");
-            model.SilentStartup=false; await model.ApplyStartupAsync();
-            Require(startup.Authorizations == 1,"Changing silent startup prompted for authorization again");
-            model.StartAtLogin=false; await model.ApplyStartupAsync();
+            model.SilentStartup=false; await model.PendingStartupChange;
+            Require(startup.Authorizations == 1 && startup.ApplyCalls == 1 && startup.Launches == 1,
+                "Changing only silent startup rewrote Windows registration, requested authorization or restarted the app");
+            model.StartAtLogin=false; await model.PendingStartupChange;
             Require(!startup.Choice.Enabled && !startup.Choice.Administrator,"Disabling startup retained the administrator task");
-            model.StartAtLogin=true; model.AdminStartup=true; await model.ApplyStartupAsync();
+            model.StartAtLogin=true; model.AdminStartup=true; await model.PendingStartupChange;
             Require(startup.Authorizations == 2,"Re-enabling administrator startup skipped the required new authorization");
-            model.StartAtLogin=false; await model.ApplyStartupAsync();
-            startup.Cancel=true; model.StartAtLogin=true; model.AdminStartup=true; model.SilentStartup=true; await model.ApplyStartupAsync();
-            Require(!startup.Choice.Enabled && !store.Load().StartAtLogin && model.StartupStatus.Contains("取消") && model.CanEditStartup,
+            model.StartAtLogin=false; await model.PendingStartupChange;
+            startup.Cancel=true; model.StartAtLogin=true; model.AdminStartup=true; model.SilentStartup=true; await model.PendingStartupChange;
+            Require(!startup.Choice.Enabled && !store.Load().StartAtLogin && !model.StartAtLogin && !model.AdminStartup && !model.SilentStartup &&
+                model.StartupStatus.Contains("取消") && model.CanEditStartup,
                 "Canceled UAC enabled startup, saved unapproved choices or left controls disabled");
+            startup.Pending=new(TaskCreationOptions.RunContinuationsAsynchronously);
+            startup.Started=new(TaskCreationOptions.RunContinuationsAsynchronously);
+            model.StartAtLogin=true; model.AdminStartup=true;
+            await startup.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Require(!model.CanEditStartup,"Startup controls stayed editable during an authorization request");
+            model.AnimationColor="#123456";
+            startup.Pending.SetResult(); await model.PendingStartupChange;
+            Require(!model.StartAtLogin && store.Load().AnimationColor == "#123456",
+                "Canceled authorization reverted unrelated appearance changes");
+            startup.Cancel=false;
+            startup.Pending=new(TaskCreationOptions.RunContinuationsAsynchronously);
+            startup.Started=new(TaskCreationOptions.RunContinuationsAsynchronously);
+            model.StartAtLogin=true;
+            await startup.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            model.SilentStartup=true; model.StartAtLogin=false;
+            startup.Pending.SetResult(); await model.PendingStartupChange;
+            Require(startup.MaximumActiveCalls == 1 && !startup.Choice.Enabled &&
+                store.Load() is { StartAtLogin:false,AdminStartup:false,SilentStartup:true } && model.CanEditStartup,
+                "Queued checkbox changes overlapped registration or lost the latest selection");
+            startup.Pending=null; startup.Started=null;
+            var blocked=Path.Combine(directory.FullName,"blocked"); File.WriteAllText(blocked,"file");
+            var blockedStartup=new StartupFake();
+            using (var blockedModel=new MainViewModel(new ControlledProbe(display),display,new LocalProbe(),
+                favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites-blocked.json")),
+                gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming-blocked.json")),
+                navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation-blocked.json")),
+                appPreferencesStore:new AppPreferencesStore(Path.Combine(blocked,"settings.json")),startupRegistration:blockedStartup))
+            {
+                blockedModel.StartAtLogin=true; await blockedModel.PendingStartupChange;
+                Require(!blockedModel.StartAtLogin && blockedStartup.ApplyCalls == 0 && blockedModel.HasStartupStatus && blockedModel.CanEditStartup,
+                    "A failed local save changed Windows registration or retained an unsaved checkbox");
+            }
             model.CloseToTray=true; model.MinimizeToTray=true; model.AnimationColor="#123456";
             model.ThemeColors.Single(option => option.Key == "Text").Value="#654321";
             Require(store.Load() is { CloseToTray:true,MinimizeToTray:true,AnimationColor:"#123456",Theme.Text:"#654321" },
@@ -85,7 +127,7 @@ internal static partial class Program
                     "Windows rejected the administrator startup task definition");
             }
             finally { if (scheduler is not null) Marshal.FinalReleaseComObject(scheduler); }
-            Console.WriteLine("PASS Admin and silent startup coexist; explicit apply, re-enable authorization, canceled UAC and task policy verified without changing Windows startup");
+            Console.WriteLine("PASS Startup checkbox changes save automatically; authorization, rollback, serialization and silent changes verified without changing Windows startup");
         }
         finally
         {

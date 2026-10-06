@@ -25,7 +25,8 @@ internal static partial class Program
                 model.Page="screen-lens"; model.Gaming.Zoom=4; model.Gaming.WheelZoomEnabled=false;
                 model.OpenSettingsCommand.Execute(null);
                 Require(model.IsSettings && !model.IsFavorites && !model.ShowFavoritesEmpty && !model.ShowRefresh &&
-                    model.PageTitle == "软件设置" && model.NavigationItems.Single() is { Id:"settings",IsSelected:true } &&
+                    model.PageTitle == "主题配色" && model.NavigationItems.Count == 5 &&
+                    model.NavigationItems.Single(item => item.IsSelected).Id == "settings-theme" &&
                     !model.RefreshCommand.CanExecute(null) && !model.MoveNavigationItem("settings","computer") &&
                     model.Gaming.Zoom == 4 && !model.Gaming.IsActive,"Opening settings changed tool state or kept unrelated navigation");
                 model.ExitSettingsCommand.Execute(null);
@@ -36,7 +37,10 @@ internal static partial class Program
                 Require(model.IsSettings && !model.ShowFavoritesEmpty && !model.ShowAllTools && model.SettingsToggleHint == "返回收藏夹",
                     "Settings displayed the empty-favorites card or forgot its return destination");
                 model.Gaming.IsFavorite=true;
-                Require(model.IsSettings && model.NavigationItems.Single().Id == "settings","Updating a favorite replaced the open settings page");
+                model.Page="settings-startup";
+                Require(model.ShowStartupSettings && !model.ShowThemeSettings && model.NavigationItems.Single(item => item.IsSelected).Id == "settings-startup",
+                    "Selecting a settings category exited settings or lost its selection");
+                Require(model.IsSettings && model.NavigationItems.Count == 5,"Updating a favorite replaced the open settings page");
                 model.ExitSettingsCommand.Execute(null);
                 Require(model.IsFavorites && model.ShowScreenLens,"Returning from settings lost the favorites context");
                 model.OpenSettingsCommand.Execute(null);

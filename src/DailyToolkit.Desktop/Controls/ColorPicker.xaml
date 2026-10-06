@@ -1,5 +1,6 @@
 <UserControl x:Class="DailyToolkit.Desktop.Controls.ColorPicker" x:Name="Picker"
- xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:controls="clr-namespace:DailyToolkit.Desktop.Controls">
  <WrapPanel>
   <ItemsControl x:Name="Palette">
    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -8,8 +9,8 @@
      BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" ToolTip="{Binding}" Click="SelectColor" AutomationProperties.Name="{Binding}" />
    </DataTemplate></ItemsControl.ItemTemplate>
   </ItemsControl>
-  <Button Width="26" Height="24" Padding="0" Margin="0,0,6,5" Background="{Binding Color, ElementName=Picker}" ToolTip="选择其他颜色" Click="ChooseCustomColor" AutomationProperties.Name="选择其他颜色">
-   <TextBlock Text="…" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" />
+  <Button x:Name="CustomColorButton" Width="26" Height="24" Padding="0" Margin="0,0,6,5" Background="{DynamicResource SurfaceBrush}" ToolTip="自选颜色" Click="ChooseCustomColor" AutomationProperties.Name="自选颜色">
+   <controls:ColorWheelIcon Width="20" Height="20" />
   </Button>
   <TextBox x:Name="HexInput" Width="82" Height="24" Padding="5,2" FontSize="12" Margin="0,0,0,5" MaxLength="7"
    Text="{Binding Color, ElementName=Picker, Mode=OneWay}" LostKeyboardFocus="CommitColor" KeyDown="ColorKeyDown"

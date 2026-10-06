@@ -25,7 +25,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _clockTimer;
     private int _ticks;
     private LensShortcutController? _shortcuts;
-    private const string HotkeyConflictNotice="快捷键可能被其他软件占用，请换一个按键，或用放大工具中的按钮。";
+    private const string HotkeyConflictNotice="快捷键注册失败，可能已被其他程序占用。";
     private Point _navigationDragStart;
     private NavigationItem? _navigationDragItem;
     private int _pageTransitionGeneration;
@@ -201,6 +201,7 @@ public partial class MainWindow : Window
 
     private void OnAppSettingsChanged(object? sender,PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainViewModel.Page) && _viewModel.IsSettings) SettingsScroll.ScrollToTop();
         if (e.PropertyName == nameof(MainViewModel.PageAnimationsEnabled) && !_viewModel.PageAnimationsEnabled) FinishPageTransition();
         if (e.PropertyName is nameof(MainViewModel.Theme) or nameof(MainViewModel.AnimationColor)) _viewModel.ApplyTheme(Resources);
     }
@@ -343,7 +344,7 @@ public partial class MainWindow : Window
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             Trace.WriteLine(exception);
-            _viewModel.Notice = "没有保存成功，请换一个位置再试。";
+            _viewModel.Notice = "无法保存报告，请选择其他位置。";
         }
     }
 

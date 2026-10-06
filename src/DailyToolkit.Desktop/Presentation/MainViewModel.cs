@@ -30,7 +30,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private string _pageBeforeSettings="computer";
     private readonly AppPreferencesStore _appPreferencesStore;
     private AppPreferences _appPreferences;
-    private readonly NavigationItem _settingsNavigation=new("settings","软件设置","\uE713");
+    private string _settingsPage="settings-theme";
+    private readonly NavigationItem[] _settingsNavigation=[
+        new("settings-theme","主题配色","\uE790"), new("settings-animation","切换动画","\uE768"),
+        new("settings-background","后台运行","\uE737"), new("settings-startup","启动","\uE7E8"),
+        new("settings-about","关于","\uE946")];
     private readonly NavigationOrderStore _navigationStore;
     private readonly List<string> _navigationOrder;
     // Each installed tool gets one entry here; favorites reuse the same entries and tool state.
@@ -80,8 +84,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ExitFavoritesCommand=new(_ => ExitFavorites());
         OpenSettingsCommand=new(_ => OpenSettings());
         ExitSettingsCommand=new(_ => ExitSettings());
-        MoveUpCommand=new(parameter => MoveBy(parameter,-1),() => NavigationItems.Count > 1);
-        MoveDownCommand=new(parameter => MoveBy(parameter,1),() => NavigationItems.Count > 1);
+        MoveUpCommand=new(parameter => MoveBy(parameter,-1),() => !IsSettings && NavigationItems.Count > 1);
+        MoveDownCommand=new(parameter => MoveBy(parameter,1),() => !IsSettings && NavigationItems.Count > 1);
         RefreshCommand = new(_ =>
         {
             if (IsSettings) return;
@@ -126,7 +130,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         set
         {
             if (value == "favorites") { OpenFavorites(); return; }
-            if (value == "settings") { OpenSettings(); return; }
+            if (value == "settings" || _settingsNavigation.Any(item => item.Id == value))
+            {
+                OpenSettings();
+                if (value != "settings") { _settingsPage=value; _page=value; NotifyNavigation(); }
+                return;
+            }
             if (IsSettings) ExitSettings();
             var id=value == "gaming" ? "screen-lens" : _navigation.Any(item => item.Id == value) ? value : "computer";
             if (IsFavorites && !_favoriteIds.Contains(id)) ExitFavorites();
@@ -137,6 +146,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool IsHome => Page == "computer";
     public bool IsFavorites => _favoritesOpen && !IsSettings;
     public bool IsSettings => _settingsOpen;
+    public bool ShowThemeSettings => IsSettings && Page == "settings-theme";
+    public bool ShowAnimationSettings => IsSettings && Page == "settings-animation";
+    public bool ShowBackgroundSettings => IsSettings && Page == "settings-background";
+    public bool ShowStartupSettings => IsSettings && Page == "settings-startup";
+    public bool ShowAboutSettings => IsSettings && Page == "settings-about";
     public bool HasFavorites => _navigation.Any(item => _favoriteIds.Contains(item.Id));
     public bool ShowScreenLens => Page == "screen-lens";
     public bool ShowFavoritesEmpty => IsFavorites && !HasFavorites;
@@ -144,10 +158,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool ShowRefresh => !IsSettings;
     public string FavoritesToggleHint => IsFavorites ? "关闭收藏夹" : "打开收藏夹";
     public string SettingsToggleHint => IsSettings ? (_favoritesOpen ? "返回收藏夹" : "返回工具") : "打开软件设置";
-    public string PageTitle => IsSettings ? "软件设置" : ShowFavoritesEmpty ? "收藏夹" : _navigation.First(item => item.Id == Page).Name;
-    public string PageDescription => IsSettings ? "配色、后台与启动方式" : ShowScreenLens ? "局部放大桌面或游戏画面" : ShowFavoritesEmpty ? "把常用工具放在这里" : "日期、天气和电脑状态";
+    public string PageTitle => IsSettings ? _settingsNavigation.First(item => item.Id == Page).Name : ShowFavoritesEmpty ? "收藏夹" : _navigation.First(item => item.Id == Page).Name;
     public string RefreshText => ShowScreenLens ? "刷新屏幕" : "刷新";
-    public string FooterStatusText => IsSettings ? "设置保存在本机" : ShowScreenLens ? (Gaming.IsActive ? "放大运行中" : "快捷键在后台也可用") : ShowFavoritesEmpty ? "收藏保存在本机" : StatusText;
+    public string FooterStatusText => IsSettings || ShowFavoritesEmpty ? "" : ShowScreenLens ? (Gaming.IsActive ? "放大运行中" : "未开启") : StatusText;
     public string FooterSourceText => IsSettings || ShowFavoritesEmpty ? "" : ShowScreenLens ? "本机显示" : LocalSourceText;
     public bool PageAnimationsEnabled
     {
@@ -187,7 +200,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (IsSettings) return;
         _pageBeforeSettings=Page;
         _settingsOpen=true;
-        _page="settings";
+        _page=_settingsPage;
         RefreshNavigation(); NotifyNavigation();
     }
 
@@ -206,7 +219,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         NavigationItems.Clear();
         if (IsSettings)
         {
-            NavigationItems.Add(_settingsNavigation);
+            foreach (var item in _settingsNavigation) NavigationItems.Add(item);
             MoveUpCommand.Refresh(); MoveDownCommand.Refresh();
             return;
         }
@@ -221,8 +234,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void NotifyNavigation()
     {
         foreach (var item in _navigation) item.IsSelected=item.Id == Page;
-        _settingsNavigation.IsSelected=IsSettings;
-        Notify(""); RefreshCommand.Refresh();
+        foreach (var item in _settingsNavigation) item.IsSelected=IsSettings && item.Id == Page;
+        Notify(nameof(Page)); Notify(""); RefreshCommand.Refresh();
     }
 
     private void MoveBy(object? parameter,int offset)
@@ -426,7 +439,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyToolkit", Version = "0.5.1", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyToolkit", Version = "0.5.2", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);
@@ -475,7 +488,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public void CancelPending() => _lifetime.Cancel();
-    public void Dispose() { Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { _startupDisposed=true; Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 
     private static string FormatBytes(long? bytes) => bytes is null ? "未知" :
         bytes >= 1024L * 1024 * 1024 ? $"{bytes.Value / (1024d * 1024 * 1024):0.#} GB" :
