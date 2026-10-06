@@ -88,6 +88,16 @@
 
 本地证据：`artifacts/fix-shortcut-check.json`、`artifacts/fix-capture-check.json`、`artifacts/fix-render-check.json`；这些诊断输出不提交公开仓库。
 
+## 0.3.9 交互调整
+
+移除屏幕选择和锐化调节，开启时自动识别鼠标所在屏幕；画面继续使用原有默认处理强度。通过 Windows 无边框捕获许可关闭屏幕四周的黄色提示，渲染框边线保留。
+
+可移动模式支持按住左键跨屏往返，切换对应的捕获来源和中心辅助线，保留浮窗和鼠标拖动。输出尺寸相同时复用渲染器，进入较小屏幕时限制尺寸，返回大屏时恢复；资源切换从鼠标钩子移到界面线程，合并待处理位置。每个捕获实例各自发送首帧信号，防止复用渲染器后漏掉新来源的首帧。停止和重新开启仍有代次检查。
+
+本次改变了屏幕识别和跨屏行为，实时帧仍直接进入 GPU 渲染器。构建为 0 警告、0 错误，Core 31/31、Desktop 18/18、桌面交互 47/47 通过。本机两块屏幕实际验证了自动选择、10× 大尺寸框跨屏往返、对应画面来源及尺寸恢复；无边框捕获返回 `Allowed`，会话的 `IsBorderRequired` 为 `false`。
+
+本地证据：`artifacts/screens-shortcut-check.json`、`artifacts/screens-capture-check.json`、`artifacts/DailyToolkit-gaming.png`。单屏运行时跨屏检查记为未执行，不计为通过。未覆盖所有显卡、屏幕组合或系统权限策略。
+
 ## 其他更名文件（仅名称和引用）
 
 - `DailyToolkit.slnx`

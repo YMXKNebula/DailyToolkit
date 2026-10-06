@@ -21,7 +21,7 @@ internal static partial class Program
         PixelBounds? bounds=new(10,20,320,192);
         var moved=(0,0); var wheel=0;
         var canMove=true; var ended=0; var canZoom=true;
-        using var controller=new LensPointerController(() => bounds,(x,y) => moved=(x,y),delta => wheel+=delta,install:false,
+        using var controller=new LensPointerController(() => bounds,(x,y,_,_) => moved=(x,y),delta => wheel+=delta,install:false,
             canMove:() => canMove,dragEnded:() => ended++,canZoom:() => canZoom);
         Require(!controller.Process(0x201,0,0),"Clicks outside the lens were intercepted");
         Require(!controller.Process(0x20A,0,0,120),"Wheel outside the lens was intercepted");

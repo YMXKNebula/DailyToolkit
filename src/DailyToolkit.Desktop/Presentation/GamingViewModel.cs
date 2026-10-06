@@ -25,8 +25,9 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         _session.VisibilityChanged += () => Notify(nameof(IsVisible));
         _session.StatusChanged += value => Status=value;
         _session.ZoomRequested += AdjustZoom;
+        _session.MonitorChanged += monitor => SelectedMonitor=monitor;
         Monitors = LensNativeWindow.Monitors();
-        _monitor = Monitors.FirstOrDefault();
+        _monitor = MonitorUnderCursor();
         StartCommand = new(_ => Start(), () => !IsActive && SelectedMonitor is not null);
         StopCommand = new(_ => Stop(), () => IsActive);
         ToggleCommand = new(_ => Toggle(), () => IsActive || SelectedMonitor is not null);
@@ -38,18 +39,23 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public void RefreshMonitors()
     {
         if (IsActive) return;
-        var selected=_monitor?.Handle;
         Monitors=LensNativeWindow.Monitors();
         Notify(nameof(Monitors));
-        SelectedMonitor=Monitors.FirstOrDefault(m => m.Handle == selected) ?? Monitors.FirstOrDefault();
+        SelectedMonitor=MonitorUnderCursor();
+    }
+    private CaptureMonitor? MonitorUnderCursor()
+    {
+        if (Monitors.Count == 0) return null;
+        var cursor=LensNativeWindow.Cursor();
+        return Monitors[LensPlacement.MonitorAt(Monitors.Select(m => m.Bounds).ToArray(),cursor.X,cursor.Y)];
     }
     public IReadOnlyList<LensFrameRate> FrameRates { get; } = new LensFrameRate[] { new(0,"跟随画面"),new(30,"30 帧/秒"),new(60,"60 帧/秒"),new(120,"120 帧/秒"),new(144,"144 帧/秒"),new(240,"240 帧/秒") };
-    public CaptureMonitor? SelectedMonitor { get => _monitor; set { if (Set(ref _monitor,value)) { StartCommand.Refresh(); ToggleCommand.Refresh(); } } }
+    public CaptureMonitor? SelectedMonitor { get => _monitor; private set { if (Set(ref _monitor,value)) { StartCommand.Refresh(); ToggleCommand.Refresh(); } } }
     public double MaximumZoom => LensLayout.MaximumZoom;
     public double Zoom { get => _zoom; set { if (double.IsFinite(value) && Set(ref _zoom,Math.Clamp(value,1,MaximumZoom))) { Notify(nameof(ZoomText)); _session.UpdatePicture(Zoom,Sharpening); } } }
     public double FrameWidth { get => _width; set { if (double.IsFinite(value) && Set(ref _width,Math.Round(Math.Clamp(value,160,1600)))) Notify(nameof(FrameSizeText)); } }
     public double FrameHeight { get => _height; set { if (double.IsFinite(value) && Set(ref _height,Math.Round(Math.Clamp(value,120,1200)))) Notify(nameof(FrameSizeText)); } }
-    public double Sharpening { get => _sharpening; set { if (double.IsFinite(value) && Set(ref _sharpening,Math.Clamp(value,0,1))) _session.UpdatePicture(Zoom,Sharpening); } }
+    internal double Sharpening { get => _sharpening; set { if (double.IsFinite(value) && Set(ref _sharpening,Math.Clamp(value,0,1))) _session.UpdatePicture(Zoom,Sharpening); } }
     public int FrameRate { get => _fps; set => Set(ref _fps,FrameRates.Any(rate => rate.Value == value) ? value : 0); }
     public string FrameRateText => FrameRates.First(rate => rate.Value == FrameRate).Label;
     public void AdjustZoom(int wheelDelta) { if (WheelZoomEnabled) Zoom += wheelDelta/120d*0.25; }
@@ -144,14 +150,14 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         if (IsActive) return;
         RefreshMonitors();
         if (SelectedMonitor is not { } monitor) { Status="未找到可用的显示器。"; return; }
-        _session.Start(monitor,(int)Math.Round(FrameWidth),(int)Math.Round(FrameHeight),Zoom,Sharpening,FrameRate);
+        _session.Start(Monitors,monitor,(int)Math.Round(FrameWidth),(int)Math.Round(FrameHeight),Zoom,Sharpening,FrameRate);
     }
 
     public void ResetDefaults()
     {
         Stop();
         Zoom=2; FrameWidth=640; FrameHeight=384; Sharpening=0.35; FrameRate=0;
-        SelectedMonitor=Monitors.FirstOrDefault();
+        RefreshMonitors();
         MovementMode=LensMovementMode.Fixed; WheelZoomEnabled=true;
         _session.ResetPosition(SelectedMonitor);
         _positionResetVersion++;

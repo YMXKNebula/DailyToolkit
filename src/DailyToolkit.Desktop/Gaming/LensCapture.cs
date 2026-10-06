@@ -4,6 +4,7 @@ using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Foundation.Metadata;
+using Windows.Security.Authorization.AppCapabilityAccess;
 
 namespace DailyToolkit.Desktop.Gaming;
 
@@ -21,6 +22,11 @@ internal sealed class LensCapture : IDisposable
     private int _refreshRequested,_refreshWorker;
     private bool _stopped, _failed;
     private volatile bool _paused;
+    private bool _firstFrameDelivered;
+    private static readonly Lazy<Task<bool>> BorderlessAccess=new(RequestBorderlessAccessAsync);
+    internal bool BorderlessAllowed { get; private set; }
+    internal bool? BorderRequired => ApiInformation.IsPropertyPresent("Windows.Graphics.Capture.GraphicsCaptureSession","IsBorderRequired")
+        ? _session.IsBorderRequired : null;
     public bool Paused { get => _paused; set => _paused=value; }
     public event Action<string>? Failed;
     public event Action? FirstFrame;
@@ -51,7 +57,24 @@ internal sealed class LensCapture : IDisposable
         catch { _device.Dispose(); throw; }
     }
 
-    public void Start() => _session.StartCapture();
+    private static async Task<bool> RequestBorderlessAccessAsync()
+    {
+        if (!ApiInformation.IsPropertyPresent("Windows.Graphics.Capture.GraphicsCaptureSession","IsBorderRequired")) return false;
+        try { return await GraphicsCaptureAccess.RequestAccessAsync(GraphicsCaptureAccessKind.Borderless) == AppCapabilityAccessStatus.Allowed; }
+        catch (Exception exception) { Trace.WriteLine(exception); return false; }
+    }
+
+    public async Task StartAsync()
+    {
+        var allowed=await BorderlessAccess.Value;
+        lock (_gate)
+        {
+            if (_stopped) return;
+            BorderlessAllowed=allowed;
+            if (BorderRequired is not null) _session.IsBorderRequired=false;
+            _session.StartCapture();
+        }
+    }
 
     private void OnFrame(Direct3D11CaptureFramePool sender, object args)
     {
@@ -76,7 +99,7 @@ internal sealed class LensCapture : IDisposable
                     using var texture = CaptureInterop.Texture(frame.Surface);
                     var settings=Volatile.Read(ref _settings);
                     _renderer.Render(texture,settings.Source,settings.Sharpening);
-                    if (_renderer.FramesRendered == 1) FirstFrame?.Invoke();
+                    if (!_firstFrameDelivered) { _firstFrameDelivered=true; FirstFrame?.Invoke(); }
                 }
                 finally { frame.Dispose(); }
             }

@@ -96,7 +96,7 @@ public partial class LensPreview : UserControl
             FrameImage.Source=DetailImage.Source=result.Magnified;
             FrameBorder.Visibility=Visibility.Visible;
             ScreenInfo.Text=$"{settings.ScreenWidth} × {settings.ScreenHeight} · 显示器比例";
-            FrameInfo.Text=$"{result.Layout.Output.Width} × {result.Layout.Output.Height} 像素 · {settings.Zoom:0.##}× · 锐化 {settings.Sharpening:P0}";
+            FrameInfo.Text=$"{result.Layout.Output.Width} × {result.Layout.Output.Height} 像素 · {settings.Zoom:0.##}×";
             var clamped=result.Layout.Output.Width != settings.Width || result.Layout.Output.Height != settings.Height;
             PreviewNote.Text=(settings.FrameRate == 0 ? "跟随捕获画面的新帧。" : $"上限 {settings.FrameRate} 帧/秒。") +
                 (clamped ? "框已限制在显示器范围内。" : "") +

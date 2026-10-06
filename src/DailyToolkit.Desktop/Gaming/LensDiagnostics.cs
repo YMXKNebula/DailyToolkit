@@ -90,7 +90,7 @@ internal static class LensDiagnostics
             var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             capture.FirstFrame += () => first.TrySetResult();
             capture.Failed += reason => first.TrySetException(new InvalidOperationException(reason));
-            capture.Start();
+            await capture.StartAsync();
             await first.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var firstOutput = capture.ReadOutput();
             lens.Show();
@@ -126,7 +126,8 @@ internal static class LensDiagnostics
             await File.WriteAllTextAsync(Path.ChangeExtension(outputPath,".json"),JsonSerializer.Serialize(new
             {
                 Shader="Catmull-Rom + bounded sharpening",ShaderCheck=true,MonitorCapture=true,
-                OverlayExcluded=true,MousePassThrough=true,Frames=capture.FramesRendered,OutputWidth=320,OutputHeight=192
+                OverlayExcluded=true,MousePassThrough=true,BorderlessAllowed=capture.BorderlessAllowed,
+                BorderRequired=capture.BorderRequired,Frames=capture.FramesRendered,OutputWidth=320,OutputHeight=192
             }));
         }
         finally { lens?.Hide(); capture?.Dispose(); renderer?.Dispose(); lens?.Dispose(); scene.Close(); }

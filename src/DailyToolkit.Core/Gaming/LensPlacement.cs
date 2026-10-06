@@ -2,6 +2,23 @@ namespace DailyToolkit.Core.Gaming;
 
 public sealed record LensPlacement(PixelBounds Bounds, bool VerticalGuide, bool HorizontalGuide)
 {
+    public static int MonitorAt(IReadOnlyList<PixelBounds> monitors,int x,int y)
+    {
+        if (monitors.Count == 0) throw new ArgumentException("No monitors are available.",nameof(monitors));
+        var closest=0;
+        var best=double.PositiveInfinity;
+        for(var index=0;index<monitors.Count;index++)
+        {
+            var bounds=monitors[index];
+            var dx=Math.Max(0,Math.Max((double)bounds.Left-x,(double)x-bounds.Left-bounds.Width+1));
+            var dy=Math.Max(0,Math.Max((double)bounds.Top-y,(double)y-bounds.Top-bounds.Height+1));
+            var distance=dx*dx+dy*dy;
+            if (distance == 0) return index;
+            if (distance < best) { best=distance; closest=index; }
+        }
+        return closest;
+    }
+
     // Physical pixels: snapping stays consistent on monitors with different DPI and negative origins.
     public static LensPlacement Snap(PixelBounds monitor, int width, int height, int left, int top, int distance = 24)
     {

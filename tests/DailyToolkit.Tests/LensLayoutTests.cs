@@ -12,6 +12,25 @@ internal static partial class Program
 {
     private static void RegisterLensTests()
     {
+        Test("Cursor selects screens across shared edges, negative origins, gaps and different dimensions", () =>
+        {
+            PixelBounds[] monitors=[new(0,0,2560,1440),new(-1920,-240,1920,1080),new(2560,120,1280,720)];
+            Require(LensPlacement.MonitorAt(monitors,1200,700) == 0);
+            Require(LensPlacement.MonitorAt(monitors,-1,400) == 1);
+            Require(LensPlacement.MonitorAt(monitors,0,400) == 0);
+            Require(LensPlacement.MonitorAt(monitors,2560,400) == 2);
+            Require(LensPlacement.MonitorAt(monitors,-1000,-230) == 1);
+            Require(LensPlacement.MonitorAt(monitors,3800,900) == 2);
+            Require(LensPlacement.MonitorAt(monitors,2500,-100) == 0);
+            var target=monitors[LensPlacement.MonitorAt(monitors,-960,300)];
+            var placed=LensPlacement.Snap(target,640,384,-1280,108);
+            var layout=LensLayout.Calculate(target,placed.Bounds.Width,placed.Bounds.Height,10,
+                placed.Bounds.Left+placed.Bounds.Width/2,placed.Bounds.Top+placed.Bounds.Height/2);
+            Require(layout.Output == new PixelBounds(-1280,108,640,384) &&
+                layout.Source == new SourceArea(928,520.8,64,38.4));
+            var smaller=monitors[LensPlacement.MonitorAt(monitors,3000,500)];
+            Require(LensPlacement.Snap(smaller,1600,1200,2700,400).Bounds == new PixelBounds(2560,120,1280,720));
+        });
         Test("Lens geometry magnifies only the requested frame at native pixel coordinates", () =>
         {
             var layout=LensLayout.Calculate(new(0,0,2560,1600),640,384,2,1280,800);
