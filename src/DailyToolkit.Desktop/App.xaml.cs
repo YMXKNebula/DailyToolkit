@@ -16,6 +16,7 @@ namespace DailyToolkit.Desktop;
 public partial class App : Application
 {
     private readonly Stopwatch _startup = Stopwatch.StartNew();
+    private SingleInstance? _instance;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -66,6 +67,12 @@ public partial class App : Application
             Shutdown();
             return;
         }
+        var preview=e.Args.Length >= 2 && e.Args[0] == "--preview";
+        if (!preview && !(e.Args.Length == 2 && e.Args[0] == "--diagnose"))
+        {
+            _instance=new();
+            if (!_instance.IsPrimary) { _instance.ActivateExistingWindow(); Shutdown(); return; }
+        }
         ApplyAccessibilityColors();
         var viewModel = new MainViewModel(new WindowsEnvironmentProbe(), NativeWindowsInfo.ReadDisplay());
         try
@@ -81,7 +88,6 @@ public partial class App : Application
                 return;
             }
 
-            var preview = e.Args.Length >= 2 && e.Args[0] == "--preview";
             var window = new MainWindow(viewModel, enableShortcuts: !preview);
             MainWindow = window;
             var firstFrame = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -147,6 +153,12 @@ public partial class App : Application
             viewModel.Dispose();
             Shutdown(1);
         }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _instance?.Dispose(); _instance=null;
+        base.OnExit(e);
     }
 
     private static string? ReadArgument(string[] args, string name)

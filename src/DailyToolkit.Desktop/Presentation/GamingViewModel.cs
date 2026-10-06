@@ -120,7 +120,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     }
     public bool IsFixedMode { get => MovementMode == LensMovementMode.Fixed; set { if (value) MovementMode=LensMovementMode.Fixed; } }
     public bool IsMovableMode { get => MovementMode == LensMovementMode.Movable; set { if (value) MovementMode=LensMovementMode.Movable; } }
-    public string MovementHint => IsFixedMode ? "固定后，鼠标可操作框下的窗口。" : "按住放大画面拖动，靠近屏幕中心时吸附。";
+    public string MovementHint => IsFixedMode ? "固定后，鼠标可操作框下的窗口。" : "按住画面任意位置拖动，靠近中心时吸附；点击不会传到下方窗口。";
     public bool IsFavorite
     {
         get => _favorite;

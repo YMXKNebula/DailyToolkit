@@ -35,7 +35,7 @@
             <TextBlock Text="★" FontFamily="Segoe UI Symbol" FontSize="25" />
           </Button>
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.4.1</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.4.2</Hyperlink>
           </TextBlock>
         </StackPanel>
         <DockPanel x:Name="NavigationPanel">

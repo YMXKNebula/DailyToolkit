@@ -51,8 +51,13 @@ internal sealed class LensNativeWindow : IDisposable
         _movable=movable;
         if (!movable) ReleasePointer();
         var style=GetWindowLongPtr(Handle,-20).ToInt64();
-        SetWindowLongPtr(Handle,-20,new IntPtr(movable ? style & ~0x20L : style | 0x20L));
-        SetWindowPos(Handle,IntPtr.Zero,0,0,0,0,0x0010 | 0x0020 | 0x0001 | 0x0002 | 0x0004);
+        Marshal.SetLastPInvokeError(0);
+        if (SetWindowLongPtr(Handle,-20,new IntPtr(movable ? style & ~0x20L : style | 0x20L)) == IntPtr.Zero &&
+            Marshal.GetLastPInvokeError() != 0) throw new Win32Exception(Marshal.GetLastPInvokeError());
+        // A click through a fixed lens can raise another topmost window above it. Restore
+        // the lens's position in that group when switching modes, without taking focus.
+        if (!SetWindowPos(Handle,new IntPtr(-1),0,0,0,0,0x0010 | 0x0020 | 0x0001 | 0x0002))
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
     }
     public void ReleasePointer() { if (GetCapture() == Handle) ReleaseCapture(); }
     public void Dispose()
@@ -120,14 +125,14 @@ internal sealed class LensNativeWindow : IDisposable
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern IntPtr DefWindowProc(IntPtr h,uint m,IntPtr w,IntPtr l);
     [DllImport("user32.dll")] private static extern bool DestroyWindow(IntPtr h);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h,int command);
-    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int height,uint flags);
+    [DllImport("user32.dll",SetLastError=true)] private static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int w,int height,uint flags);
     [DllImport("user32.dll",SetLastError=true)] private static extern bool SetLayeredWindowAttributes(IntPtr h,uint key,byte alpha,uint flags);
     [DllImport("user32.dll",SetLastError=true)] private static extern bool SetWindowDisplayAffinity(IntPtr h,uint affinity);
     [DllImport("user32.dll")] private static extern bool EnumDisplayMonitors(IntPtr dc,IntPtr clip,MonitorProcedure callback,IntPtr data);
     [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr h,ref MonitorInfo info);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern IntPtr GetWindowLongPtr(IntPtr window,int index);
-    [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] private static extern IntPtr SetWindowLongPtr(IntPtr window,int index,IntPtr value);
     [DllImport("user32.dll")] private static extern IntPtr SetCapture(IntPtr window);
     [DllImport("user32.dll")] private static extern IntPtr GetCapture();
     [DllImport("user32.dll")] private static extern bool ReleaseCapture();

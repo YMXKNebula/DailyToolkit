@@ -47,6 +47,7 @@ internal static partial class Program
         CheckRenamedSettingsCompatibility();
         CheckFavorites();
         CheckNavigation();
+        await CheckSingleInstanceAsync();
         await CheckBackgroundShortcutAsync();
         LensDiagnostics.CheckShader();
         Console.WriteLine("PASS Actual Direct3D shader preserves colors and reconstructs subpixel edges");
@@ -55,6 +56,6 @@ internal static partial class Program
         await CheckPreviewLayoutAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("19/19 desktop checks passed");
+        Console.WriteLine("20/20 desktop checks passed");
     }
 }

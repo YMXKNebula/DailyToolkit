@@ -39,6 +39,7 @@ internal static class LensShortcutDiagnostics
         private bool? relativeCrossMonitorDrag;
         private byte[] before=null!,borderColor=null!,backdropColor=null!;
         private double previewX,previewY;
+        private int backdropClicks;
 
         public CheckSession()
         {
@@ -62,6 +63,7 @@ internal static class LensShortcutDiagnostics
                     WindowStartupLocation=WindowStartupLocation.Manual,Left=-20000,Top=-20000,
                     Background=new SolidColorBrush(System.Windows.Media.Color.FromRgb(32,64,100))
                 };
+                backdrop.PreviewMouseDown += (_,_) => backdropClicks++;
                 var testScene=new System.Windows.Controls.Canvas();
                 var label=new System.Windows.Controls.TextBlock { Text="DailyToolkit",FontSize=28,Foreground=Brushes.White };
                 System.Windows.Controls.Canvas.SetLeft(label,210); System.Windows.Controls.Canvas.SetTop(label,200);
@@ -540,16 +542,49 @@ internal static class LensShortcutDiagnostics
                 throw new InvalidOperationException("Fixed mode still allowed dragging.");
             pointer.Process(0x20A,moved.Left+20,moved.Top+20,120);
             if (gaming.Zoom != 1.25 || !gaming.IsVisible) throw new InvalidOperationException("Fixed mode disabled wheel zoom.");
+            MoveMouse(moved.Left+160,moved.Top+120);
+            await Task.Delay(30);
+            if (WindowFromPoint(new() { X=moved.Left+160,Y=moved.Top+120 }) != new WindowInteropHelper(backdrop).Handle)
+                throw new InvalidOperationException("Fixed mode did not let the test backdrop receive mouse input.");
+            var clicks=backdropClicks;
+            Mouse(2); Mouse(4);
+            await Wait(() => backdropClicks == clicks+1,"A real click through a fixed lens did not reach the test backdrop.");
+            if (!At(moved)) throw new InvalidOperationException("Clicking through the fixed lens moved it.");
+            clicks=backdropClicks;
+            var liveHandle=gaming.LensHandle;
+            var liveCapture=gaming.CaptureForDiagnostics;
+            var liveForeground=GetForegroundWindow();
             gaming.IsMovableMode=true;
-            pointer.Process(0x201,moved.Left+160,moved.Top+120);
-            pointer.Process(0x200,initial.Left+170,initial.Top+130);
+            await Task.Delay(30);
+            if (WindowFromPoint(new() { X=moved.Left+160,Y=moved.Top+120 }) != liveHandle ||
+                gaming.LensHandle != liveHandle || gaming.CaptureForDiagnostics != liveCapture)
+                throw new InvalidOperationException($"Switching the active lens to movable did not change hit testing without restarting capture. Hit={WindowFromPoint(new() { X=moved.Left+160,Y=moved.Top+120 })}; lens={liveHandle}; backdrop={new WindowInteropHelper(backdrop).Handle}; style={GetWindowLongPtr(liveHandle,-20).ToInt64():X}; captureReused={gaming.CaptureForDiagnostics == liveCapture}");
+            Mouse(2);
+            await Wait(() => gaming.GuidesForDiagnostics?.Visible == true,"The first real click after fixed-to-movable did not start dragging.");
+            MoveMouse(initial.Left+170,initial.Top+130);
             await Wait(() => At(initial),"Center assistance did not snap the native window.");
             if (!gaming.VerticalGuide || !gaming.HorizontalGuide) throw new InvalidOperationException("Snapping did not activate center guides.");
-            pointer.Process(0x202,initial.Left+170,initial.Top+130);
+            Mouse(4);
+            await Task.Delay(30);
+            if (backdropClicks != clicks) throw new InvalidOperationException("Movable lens clicks leaked into the test backdrop.");
+            if (GetForegroundWindow() != liveForeground) throw new InvalidOperationException("Switching mode or dragging the lens stole foreground focus.");
             if (gaming.VerticalGuide || gaming.HorizontalGuide) throw new InvalidOperationException("Releasing the drag left center guides enabled.");
-            pointer.Process(0x201,initial.Left+2,initial.Top+2);
-            pointer.Process(0x200,initial.Left+82,initial.Top+72);
-            pointer.Process(0x202,initial.Left+82,initial.Top+72);
+            gaming.IsFixedMode=true;
+            if (!At(initial)) throw new InvalidOperationException("Switching back to fixed reset the dragged position.");
+            gaming.IsMovableMode=true;
+            MoveMouse(initial.Left+160,initial.Top+120);
+            await Task.Delay(30);
+            Mouse(2);
+            await Wait(() => gaming.GuidesForDiagnostics?.Visible == true,"A second fixed-to-movable switch lost native drag input.");
+            MoveMouse(initial.Left+240,initial.Top+190);
+            var secondDrag=LensPlacement.Snap(monitor,320,240,initial.Left+80,initial.Top+70).Bounds;
+            await Wait(() => At(secondDrag),"The second native drag after changing mode did not move the floating frame.");
+            Mouse(4);
+            await Task.Delay(30);
+            if (backdropClicks != clicks) throw new InvalidOperationException("Repeated movable dragging clicked the underlying window.");
+            pointer.Process(0x201,secondDrag.Left+2,secondDrag.Top+2);
+            pointer.Process(0x200,secondDrag.Left+82,secondDrag.Top+72);
+            pointer.Process(0x202,secondDrag.Left+82,secondDrag.Top+72);
             gaming.IsFixedMode=true;
             var resetHandle=gaming.LensHandle;
             gaming.IsFavorite=true;
@@ -611,6 +646,8 @@ internal static class LensShortcutDiagnostics
                 IndependentLiveDimensions=true,NativePictureDrag=true,RealMouseHookDrag=true,RealWheelInput=true,
                 WheelLimitsRemainVisible=true,FollowCaptureFrames=gaming.FrameRate == 0,
                 FixedIsDefault=true,FixedLocksCurrentPosition=true,FixedReopenPreservesPosition=true,FixedWheelZoom=true,
+                FixedClicksReachBackdrop=true,LiveFixedToMovableReceivesNativeInput=true,RepeatedMovementSwitchCanDrag=true,
+                MovableClicksDoNotReachBackdrop=true,MovementSwitchReusesCapture=true,MovementSwitchAndDragKeepFocus=true,
                 CenterSnapAndGuideRelease=true,ResetDefaultsRecenters=true,ResetDefaultsPreservesPersonalChoices=true,
                 LiveDragIndependent=true,PreviewDragIndependent=true,PreviewFixedKeepsPosition=true,ResetDefaultsResetsPreview=true,
                 NativeWindowReceivesDrag=true,CompositedPictureActuallyMoves=true,DesktopGuideCoordinates=true,DesktopGuidesHideOnRelease=true,

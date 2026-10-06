@@ -366,7 +366,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyToolkit", Version = "0.4.1", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyToolkit", Version = "0.4.2", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);
