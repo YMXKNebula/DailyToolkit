@@ -115,6 +115,7 @@ internal static partial class Program
             }
             model.CloseToTray=true; model.MinimizeToTray=true; model.AnimationColor="#123456";
             model.ThemeColors.Single(option => option.Key == "Text").Value="#654321";
+            model.SaveThemeCommand.Execute(null);
             Require(store.Load() is { CloseToTray:true,MinimizeToTray:true,AnimationColor:"#123456",Theme.Text:"#654321" },
                 "Background and independent appearance preferences did not persist");
             File.WriteAllText(path,"{\"Theme\":{\"Accent\":\"oops\",\"Text\":\"#abcdef\"},\"AnimationColor\":\"#GGGGGG\"}");

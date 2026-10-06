@@ -112,17 +112,24 @@ public partial class MainWindow : Window
     {
         var animate=_viewModel.PageAnimationsEnabled && SystemParameters.ClientAreaAnimation &&
             !SystemParameters.HighContrast && BodyContent.ActualWidth > 0;
-        RenderTargetBitmap? snapshot=null;
+        BitmapSource? snapshot=null;
         if (animate)
         {
-            var dpi=VisualTreeHelper.GetDpi(BodyContent);
-            snapshot=new RenderTargetBitmap((int)Math.Ceiling(BodyContent.ActualWidth*dpi.DpiScaleX),
-                (int)Math.Ceiling(BodyContent.ActualHeight*dpi.DpiScaleY),dpi.PixelsPerInchX,dpi.PixelsPerInchY,PixelFormats.Pbgra32);
-            snapshot.Render(BodyContent); snapshot.Freeze();
+            RootContent.UpdateLayout();
+            var dpi=VisualTreeHelper.GetDpi(RootContent);
+            var frame=new RenderTargetBitmap((int)Math.Ceiling(RootContent.ActualWidth*dpi.DpiScaleX),
+                (int)Math.Ceiling(RootContent.ActualHeight*dpi.DpiScaleY),dpi.PixelsPerInchX,dpi.PixelsPerInchY,PixelFormats.Pbgra32);
+            // Capture the opaque window content at its original pixel coordinates,
+            // then crop below the caption. Rendering the attached body directly
+            // includes its layout offset and exposes the new page through gaps.
+            frame.Render(RootContent); frame.Freeze();
+            var origin=BodyContent.TranslatePoint(new Point(),RootContent);
+            snapshot=new CroppedBitmap(frame,new Int32Rect((int)Math.Round(origin.X*dpi.DpiScaleX),(int)Math.Round(origin.Y*dpi.DpiScaleY),
+                (int)Math.Ceiling(BodyContent.ActualWidth*dpi.DpiScaleX),(int)Math.Ceiling(BodyContent.ActualHeight*dpi.DpiScaleY)));
+            snapshot.Freeze();
         }
         FinishPageTransition();
-        switchPage();
-        if (!animate) return;
+        if (!animate) { switchPage(); return; }
         var generation=_pageTransitionGeneration;
         PageTransition.Source=snapshot;
         var center=button.TranslatePoint(new(button.ActualWidth/2,button.ActualHeight/2),BodyContent);
@@ -152,6 +159,8 @@ public partial class MainWindow : Window
         PageTransitionCover.Visibility=Visibility.Visible;
         PageTransitionCover.Opacity=opening ? 1 : 0;
         NavigationPanel.IsHitTestVisible=MainContent.IsHitTestVisible=false;
+        // Install the outgoing frame and its initial mask before changing bindings.
+        switchPage();
         RegisterName("PageTransitionScale",scale); RegisterName("PageTransitionRotation",rotation);
         _pageTransitionNamesRegistered=true;
         var storyboard=_pageTransitionStoryboard=new Storyboard();

@@ -158,6 +158,9 @@ public partial class App : Application
                 window.Top = -20000;
                 window.Width = ReadDimension(e.Args, "--width", 1040, 680);
                 window.Height = ReadDimension(e.Args, "--height", 800, 540);
+                // Exported frames have no physical LCD subpixels; set this before
+                // capturing an animation snapshot as well as the final bitmap.
+                TextOptions.SetTextRenderingMode(window.PreviewContent,TextRenderingMode.Grayscale);
             }
             if (!preview && startupRecoveryNotice is null && new AppPreferencesStore().Load().SilentStartup && !e.Args.Contains("--show"))
             {
@@ -175,7 +178,13 @@ public partial class App : Application
             viewModel.Page = ReadArgument(e.Args, "--page") ?? "home";
             if (ReadArgument(e.Args,"--theme") == "dark") viewModel.DarkThemeCommand.Execute(null);
             else if (ReadArgument(e.Args,"--theme") == "light") viewModel.LightThemeCommand.Execute(null);
+            else if (viewModel.ThemePresets.FirstOrDefault(preset => preset.Name == ReadArgument(e.Args,"--theme")) is { } preset)
+                viewModel.SelectThemePresetCommand.Execute(preset);
             if (ReadArgument(e.Args,"--animation-color") is { } animationColor) viewModel.AnimationColor=animationColor;
+            if (e.Args.Contains("--theme-details")) ((System.Windows.Controls.Expander)window.FindName("ThemeDetails")).IsExpanded=true;
+            if (ReadArgument(e.Args,"--preview-color")?.Split('=',2) is [var key,var color] &&
+                viewModel.ThemeColors.FirstOrDefault(option => option.Key == key) is { } previewColor)
+                previewColor.Value=color;
             if (e.Args.Contains("--details") || e.Args.Contains("--software"))
                 window.ShowPreviewDetails(e.Args.Contains("--software"));
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);

@@ -57,8 +57,10 @@ internal static partial class Program
         await CheckPhotoPreviewAsync();
         CheckLensPointer();
         await CheckPreviewLayoutAsync();
+        await CheckTransitionContinuityAsync();
+        await CheckThemeEditingAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("23/23 desktop checks passed");
+        Console.WriteLine("25/25 desktop checks passed");
     }
 }

@@ -28,7 +28,7 @@
         </Button>
       </StackPanel>
     </Grid>
-    <Grid x:Name="BodyContent" Grid.Row="1" ClipToBounds="True">
+    <Grid x:Name="BodyContent" Grid.Row="1" Background="{DynamicResource WindowBrush}" ClipToBounds="True">
     <Grid.ColumnDefinitions><ColumnDefinition Width="188" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
     <Grid x:Name="SidebarSurface" ClipToBounds="True">
     <Border x:Name="SidebarBase" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
@@ -312,15 +312,45 @@
           </Border>
           <Border x:Name="ThemeSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowThemeSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
-              <WrapPanel Margin="0,0,0,14">
-                <Button Content="浅色" Command="{Binding LightThemeCommand}" Margin="0,0,8,0" />
-                <Button Content="深色" Command="{Binding DarkThemeCommand}" Margin="0,0,8,0" />
-                <Button Content="恢复外观默认" Command="{Binding ResetAppearanceCommand}" />
-              </WrapPanel>
+              <TextBlock Text="配色预设" FontWeight="SemiBold" Margin="0,0,0,12" />
+              <ItemsControl x:Name="ThemePresetList" ItemsSource="{Binding ThemePresets}" Margin="0,0,0,14">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate><DataTemplate>
+                  <Button Width="112" Padding="10,9" Margin="0,0,10,10" CommandParameter="{Binding}"
+                          Command="{Binding DataContext.SelectThemePresetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                          AutomationProperties.Name="{Binding Name}">
+                    <Button.Style>
+                      <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Style.Triggers><DataTrigger Binding="{Binding IsSelected}" Value="True">
+                          <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                          <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                        </DataTrigger></Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                    <StackPanel>
+                      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Border Width="22" Height="18" Background="{Binding Palette.Accent}" BorderBrush="{Binding Palette.Border}" BorderThickness="1" CornerRadius="4" Margin="0,0,4,0" />
+                        <Border Width="22" Height="18" Background="{Binding Palette.AccentSoft}" BorderBrush="{Binding Palette.Border}" BorderThickness="1" CornerRadius="4" Margin="0,0,4,0" />
+                        <Border Width="22" Height="18" Background="{Binding Palette.Window}" BorderBrush="{Binding Palette.Border}" BorderThickness="1" CornerRadius="4" />
+                      </StackPanel>
+                      <TextBlock Text="{Binding Name}" HorizontalAlignment="Center" Margin="0,7,0,0" />
+                    </StackPanel>
+                  </Button>
+                </DataTemplate></ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock Text="配色预览" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="未保存" Style="{StaticResource MutedText}"
+                           Visibility="{Binding HasThemeChanges, Converter={StaticResource VisibleWhen}}" />
+              </Grid>
               <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="1" Margin="0,0,0,8" MaxWidth="480" HorizontalAlignment="Left">
-                <Viewbox Stretch="Uniform" MaxHeight="240"><controls:ThemePreview x:Name="PalettePreview" Width="480" Height="240" Palette="{Binding Theme}" AnimationColor="{Binding AnimationColor}" /></Viewbox>
+                <Viewbox Stretch="Uniform" MaxHeight="240"><controls:ThemePreview x:Name="PalettePreview" Width="480" Height="240" Palette="{Binding PreviewTheme}" AnimationColor="{Binding AnimationColor}" /></Viewbox>
               </Border>
-              <ItemsControl ItemsSource="{Binding ThemeColors}">
+              <Expander x:Name="ThemeDetails" Header="颜色详细配置" Margin="0,18,0,0" Foreground="{DynamicResource TextBrush}" FontSize="14">
+                <StackPanel Margin="0,14,0,0">
+                  <TextBlock Text="修改仅更新预览，保存后应用。" Style="{StaticResource MutedText}" Margin="0,0,0,14" />
+              <ItemsControl x:Name="ThemeColorDetails" ItemsSource="{Binding ThemeColors}">
                 <ItemsControl.ItemTemplate><DataTemplate>
                   <Grid Margin="0,0,0,10">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -329,6 +359,13 @@
                   </Grid>
                 </DataTemplate></ItemsControl.ItemTemplate>
               </ItemsControl>
+                  <WrapPanel Margin="0,6,0,0">
+                    <Button x:Name="SaveThemeButton" Content="保存配色" Command="{Binding SaveThemeCommand}" Style="{StaticResource AccentButton}" Margin="0,0,8,8" />
+                    <Button Content="撤销修改" Command="{Binding DiscardThemeCommand}" Margin="0,0,8,8" />
+                    <Button Content="恢复默认配色" Command="{Binding ResetThemePreviewCommand}" Margin="0,0,0,8" />
+                  </WrapPanel>
+                </StackPanel>
+              </Expander>
             </StackPanel>
           </Border>
           <Border x:Name="BackgroundSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowBackgroundSettings, Converter={StaticResource VisibleWhen}}">
@@ -358,7 +395,7 @@
                 <Image Source="Assets/dt.png" Width="56" Height="56" Margin="0,0,16,0" />
                 <StackPanel VerticalAlignment="Center">
                   <TextBlock Text="DailyToolkit" FontSize="22" FontWeight="SemiBold" />
-                  <TextBlock x:Name="ProductVersion" Text="版本 0.5.3" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+                  <TextBlock x:Name="ProductVersion" Text="版本 0.5.4" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
                 </StackPanel>
               </StackPanel>
               <TextBlock Text="Windows 本地工具集合" Margin="0,0,0,14" />
@@ -389,7 +426,7 @@
       </StackPanel>
     </Grid>
     <Image x:Name="PageTransition" Grid.ColumnSpan="2" Panel.ZIndex="100" Visibility="Collapsed"
-           IsHitTestVisible="False" Stretch="Fill" />
+           IsHitTestVisible="False" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top" />
     <Grid x:Name="PageTransitionCover" Grid.ColumnSpan="2" Panel.ZIndex="101" Visibility="Collapsed" IsHitTestVisible="False">
       <Path x:Name="PageTransitionShape" Fill="{DynamicResource AnimationBrush}" />
     </Grid>
