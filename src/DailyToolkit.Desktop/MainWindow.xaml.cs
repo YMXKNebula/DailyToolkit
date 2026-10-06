@@ -168,13 +168,14 @@ public partial class MainWindow : Window
             Storyboard.SetTargetProperty(animation,new PropertyPath(property));
             storyboard.Children.Add(animation);
         }
-        // Opening expands the color over the old page before revealing the new one.
-        // Closing tints the old page first, then retracts it into the same button.
-        var motionDelay=opening ? 0 : 140;
-        Animate(scale,ScaleTransform.ScaleXProperty,opening ? 0 : fullScale,opening ? fullScale : 0,320,motionDelay);
-        Animate(scale,ScaleTransform.ScaleYProperty,opening ? 0 : fullScale,opening ? fullScale : 0,320,motionDelay);
-        Animate(rotation,RotateTransform.AngleProperty,opening ? 0 : 120,opening ? 120 : 0,320,motionDelay);
-        Animate(PageTransitionCover,OpacityProperty,opening ? 1 : 0,opening ? 0 : 1,140,opening ? 320 : 0);
+        // Blend the button color into the destination while expanding, and the
+        // outgoing page back into that same color while retracting. All clocks
+        // move together; the destination stays live behind the single snapshot.
+        const int duration=460;
+        Animate(scale,ScaleTransform.ScaleXProperty,opening ? 0 : fullScale,opening ? fullScale : 0,duration);
+        Animate(scale,ScaleTransform.ScaleYProperty,opening ? 0 : fullScale,opening ? fullScale : 0,duration);
+        Animate(rotation,RotateTransform.AngleProperty,opening ? 0 : 120,opening ? 120 : 0,duration);
+        Animate(PageTransitionCover,OpacityProperty,opening ? 1 : 0,opening ? 0 : 1,duration);
         storyboard.Completed += (_,_) =>
         {
             if (generation == _pageTransitionGeneration) FinishPageTransition();

@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using DailyToolkit.Core.Environment;
 using DailyToolkit.Desktop.Runtime;
 using DailyToolkit.Desktop.Gaming;
@@ -15,7 +16,7 @@ internal static partial class Program
     private sealed class StartupFake : IStartupRegistration
     {
         public StartupChoice Choice=new(false,false,false);
-        public bool IsAdministrator => false;
+        public bool IsAdministrator { get; set; }
         public int Authorizations,Launches,ApplyCalls,ActiveCalls,MaximumActiveCalls;
         public bool Cancel;
         public TaskCompletionSource? Pending,Started;
@@ -27,7 +28,7 @@ internal static partial class Program
             {
                 Started?.TrySetResult();
                 if (Pending is not null) await Pending.Task;
-                if (choice.Enabled && choice.Administrator && !Choice.Administrator)
+                if (choice.Enabled && choice.Administrator && !Choice.Administrator && !IsAdministrator)
                 { Authorizations++; if (Cancel) throw new Win32Exception(1223); }
                 Choice=choice;
             }
@@ -88,6 +89,18 @@ internal static partial class Program
                 store.Load() is { StartAtLogin:false,AdminStartup:false,SilentStartup:true } && model.CanEditStartup,
                 "Queued checkbox changes overlapped registration or lost the latest selection");
             startup.Pending=null; startup.Started=null;
+            var authorizations=startup.Authorizations; var launches=startup.Launches; var previousRestarts=restarts;
+            startup.IsAdministrator=true;
+            model.StartAtLogin=true; model.AdminStartup=true; await model.PendingStartupChange;
+            Require(store.Load() is { StartAtLogin:true,AdminStartup:true } && startup.Choice.Administrator &&
+                startup.Authorizations == authorizations && startup.Launches == launches && restarts == previousRestarts &&
+                model.CanEditStartup && !model.HasStartupStatus && !model.RunAdministratorCommand.CanExecute(null),
+                "An already elevated app could not enable administrator startup without another authorization or restart");
+            model.AdminStartup=false; await model.PendingStartupChange;
+            Require(startup.Choice is { Enabled:true,Administrator:false } && store.Load().StartAtLogin,
+                "An elevated app could not switch back to normal startup");
+            model.StartAtLogin=false; await model.PendingStartupChange;
+            Require(!startup.Choice.Enabled && !model.AdminStartup,"An elevated app could not disable startup");
             var blocked=Path.Combine(directory.FullName,"blocked"); File.WriteAllText(blocked,"file");
             var blockedStartup=new StartupFake();
             using (var blockedModel=new MainViewModel(new ControlledProbe(display),display,new LocalProbe(),
@@ -125,6 +138,22 @@ internal static partial class Program
                 definition.XmlText=xml.ToString();
                 Require(definition.Principal.RunLevel == 1 && definition.Principal.LogonType == 3,
                     "Windows rejected the administrator startup task definition");
+                using var identity=WindowsIdentity.GetCurrent(); var sid=identity.User!.Value;
+                Require(StartupRegistration.IsCurrentUser(sid) && StartupRegistration.IsCurrentUser(identity.Name) &&
+                    !StartupRegistration.IsCurrentUser("S-1-5-18") &&
+                    !StartupRegistration.IsCurrentUser("DailyToolkit.Missing."+Guid.NewGuid().ToString("N")) &&
+                    !StartupRegistration.IsCurrentUser(""),"Task accounts were not compared by resolved SID");
+                definition.XmlText=StartupRegistration.CreateTaskXml(@"C:\工具\DailyToolkit.exe",sid);
+                definition.Principal.UserId=identity.Name;
+                dynamic task=new System.Dynamic.ExpandoObject(); task.Definition=definition;
+                Require(StartupRegistration.OwnedTask(task),"An owned task returned with an account name was rejected");
+                definition.Principal.UserId="S-1-5-18";
+                Require(!StartupRegistration.OwnedTask(task),"A task for a different identity passed the ownership check");
+                definition.Principal.UserId=sid; definition.RegistrationInfo.Description="Other application";
+                Require(!StartupRegistration.OwnedTask(task),"A foreign task passed the ownership check");
+                var registered=StartupRegistration.FindTask(((dynamic)scheduler).GetFolder("\\"),"DailyToolkit-"+sid);
+                if (registered is not null && registered.Definition.RegistrationInfo.Description == "DailyToolkit automatic startup. Owner: "+sid)
+                    Require(StartupRegistration.OwnedTask(registered),"Windows' existing DailyToolkit task was not recognized");
             }
             finally { if (scheduler is not null) Marshal.FinalReleaseComObject(scheduler); }
             Console.WriteLine("PASS Startup checkbox changes save automatically; authorization, rollback, serialization and silent changes verified without changing Windows startup");

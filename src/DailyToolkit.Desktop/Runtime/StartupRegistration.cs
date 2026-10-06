@@ -24,10 +24,19 @@ public sealed class StartupRegistration : IStartupRegistration
         var service=Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service")!)!;
         ((dynamic)service).Connect(); return service;
     }
-    private static bool OwnedTask(dynamic task) => task.Definition.RegistrationInfo.Description == Description+UserSid &&
-        task.Definition.Principal.UserId == UserSid && task.Definition.Actions.Count == 1 &&
+    internal static bool OwnedTask(dynamic task) => task.Definition.RegistrationInfo.Description == Description+UserSid &&
+        IsCurrentUser((string)task.Definition.Principal.UserId) && task.Definition.Actions.Count == 1 &&
         Path.GetFileName((string)task.Definition.Actions[1].Path).Equals("DailyToolkit.exe",StringComparison.OrdinalIgnoreCase) &&
         task.Definition.Actions[1].Arguments == "--startup --admin-task";
+    internal static bool IsCurrentUser(string account)
+    {
+        // Task Scheduler can return the account name even when registration used a SID.
+        // Resolve it to an identity; never accept a matching display name alone.
+        if (account.Equals(UserSid,StringComparison.OrdinalIgnoreCase)) return true;
+        try { return new NTAccount(account).Translate(typeof(SecurityIdentifier)).Value == UserSid; }
+        catch (Exception e) when (e is IdentityNotMappedException or ArgumentException or System.Security.SecurityException)
+        { return false; }
+    }
     private static bool OwnedRun(string? value) => value is not null && value.StartsWith('"') && value.EndsWith("\" --startup",StringComparison.Ordinal) &&
         Path.GetFileName(value.Substring(1,value.LastIndexOf('"')-1)).Equals("DailyToolkit.exe",StringComparison.OrdinalIgnoreCase);
     internal static dynamic? FindTask(dynamic folder,string? name=null)

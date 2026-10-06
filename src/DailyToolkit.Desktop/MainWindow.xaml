@@ -39,29 +39,19 @@
         </Style>
       </Border.Style>
       <DockPanel Margin="16,26,16,20">
-        <StackPanel DockPanel.Dock="Top" Margin="10,0,0,30">
-          <StackPanel Orientation="Horizontal">
-            <Image Source="Assets/dt.png" Width="28" Height="28" />
-            <TextBlock Text="DailyToolkit" Margin="9,0,0,0" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-          </StackPanel>
-        </StackPanel>
-        <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,0">
-          <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+        <Grid x:Name="SidebarFooter" DockPanel.Dock="Bottom">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
           <Button x:Name="FavoritesButton" Click="ToggleFavorites" Width="46" Height="46" Padding="0"
-                  FontSize="25" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AccentBrush}"
+                  HorizontalAlignment="Center" FontSize="25" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AnimationBrush}"
                   ToolTip="{Binding FavoritesToggleHint}" AutomationProperties.Name="{Binding FavoritesToggleHint}">
-            <Path x:Name="FavoritesIcon" Width="26" Height="26" Stretch="Fill" Fill="{DynamicResource AccentBrush}" />
+            <Path x:Name="FavoritesIcon" Width="26" Height="26" Stretch="Fill" Fill="{DynamicResource AnimationBrush}" />
           </Button>
-          <Button x:Name="SettingsButton" Click="ToggleSettings" Width="46" Height="46" Padding="0" Margin="8,0,0,0"
-                  BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AccentBrush}"
+          <Button x:Name="SettingsButton" Grid.Column="1" Click="ToggleSettings" Width="46" Height="46" Padding="0"
+                  HorizontalAlignment="Center" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AnimationBrush}"
                   ToolTip="{Binding SettingsToggleHint}" AutomationProperties.Name="{Binding SettingsToggleHint}">
-            <Path x:Name="SettingsIcon" Width="26" Height="26" Stretch="Fill" Fill="{DynamicResource AccentBrush}" />
+            <Path x:Name="SettingsIcon" Width="26" Height="26" Stretch="Fill" Fill="{DynamicResource AnimationBrush}" />
           </Button>
-          </StackPanel>
-          <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.5.2</Hyperlink>
-          </TextBlock>
-        </StackPanel>
+        </Grid>
         <DockPanel x:Name="NavigationPanel">
           <TextBlock DockPanel.Dock="Top" Text="收藏夹" FontWeight="SemiBold" Margin="10,10,0,12"
                      Visibility="{Binding IsFavorites, Converter={StaticResource VisibleWhen}}" />
@@ -312,7 +302,7 @@
             <StackPanel>
               <CheckBox x:Name="PageAnimationSwitch" Content="启用切换动画" IsChecked="{Binding PageAnimationsEnabled, Mode=TwoWay}"
                         FontFamily="Microsoft YaHei UI" FontSize="14" Foreground="{DynamicResource TextBrush}" />
-              <TextBlock Text="动画颜色" FontSize="13" Margin="0,18,0,10" />
+              <TextBlock Text="按钮与动画颜色" FontSize="13" Margin="0,18,0,10" />
               <controls:ColorPicker x:Name="AnimationColorPicker" Color="{Binding AnimationColor, Mode=TwoWay}" />
               <WrapPanel Margin="0,10,0,0">
                 <Button Content="预览星形" Click="PreviewStar" Margin="0,0,8,0" />
@@ -364,7 +354,16 @@
           </Border>
           <Border x:Name="AboutSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowAboutSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
-              <TextBlock Text="DailyToolkit 0.5.2" FontWeight="SemiBold" />
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                <Image Source="Assets/dt.png" Width="56" Height="56" Margin="0,0,16,0" />
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="DailyToolkit" FontSize="22" FontWeight="SemiBold" />
+                  <TextBlock x:Name="ProductVersion" Text="版本 0.5.3" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+                </StackPanel>
+              </StackPanel>
+              <TextBlock Text="Windows 本地工具集合" Margin="0,0,0,14" />
+              <TextBlock Text="作者：YMXKNebula" Style="{StaticResource MutedText}" Margin="0,0,0,8" />
+              <TextBlock Text="代码许可证：MIT" Style="{StaticResource MutedText}" />
               <TextBlock Margin="0,14,0,0"><Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">项目主页</Hyperlink></TextBlock>
             </StackPanel>
           </Border>

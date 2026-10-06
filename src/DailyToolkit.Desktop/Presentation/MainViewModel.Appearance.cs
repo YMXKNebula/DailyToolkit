@@ -61,6 +61,7 @@ public sealed partial class MainViewModel
             else { brush=new SolidColorBrush((Color)ColorConverter.ConvertFromString(option.Value)); brush.Freeze(); }
             resources[option.Key+"Brush"]=brush;
         }
-        var animation=new SolidColorBrush((Color)ColorConverter.ConvertFromString(AnimationColor)); animation.Freeze(); resources["AnimationBrush"]=animation;
+        var animation=new SolidColorBrush((Color)ColorConverter.ConvertFromString(AnimationColor)); animation.Freeze();
+        resources["AnimationBrush"]=SystemParameters.HighContrast ? SystemColors.HighlightBrush : animation;
     }
 }
