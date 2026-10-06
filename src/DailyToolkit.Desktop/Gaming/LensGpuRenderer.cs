@@ -49,7 +49,7 @@ internal sealed class LensGpuRenderer : IDisposable
             var shader=shaderSource is null ? CompiledShader.Value : CompileShader(shaderSource);
             _vertex=Device.CreateVertexShader(shader.Vertex);
             _pixel=Device.CreatePixelShader(shader.Pixel);
-            _parameters = Device.CreateBuffer(new BufferDescription(48, BindFlags.ConstantBuffer, ResourceUsage.Default));
+            _parameters = Device.CreateBuffer(new BufferDescription(64, BindFlags.ConstantBuffer, ResourceUsage.Default));
             if (window != IntPtr.Zero)
             {
                 using var dxgiDevice = Device.QueryInterface<IDXGIDevice1>();
@@ -92,7 +92,8 @@ internal sealed class LensGpuRenderer : IDisposable
         CreateOutput();
     }
 
-    public void Render(ID3D11Texture2D texture, SourceArea source, double sharpening, bool present = true)
+    public void Render(ID3D11Texture2D texture, SourceArea source, double sharpening, bool present = true,
+        uint borderColor = LensBorderColor.DefaultRgb)
     {
         var description = texture.Description;
         if (_source is null || _source.Description.Width != description.Width || _source.Description.Height != description.Height)
@@ -106,10 +107,11 @@ internal sealed class LensGpuRenderer : IDisposable
             _sourceView = Device.CreateShaderResourceView(_source);
         }
         _context.CopyResource(_source, texture);
-        RenderLast(source,sharpening,present);
+        RenderLast(source,sharpening,present,borderColor);
     }
 
-    public void RenderLast(SourceArea source, double sharpening, bool present = true)
+    public void RenderLast(SourceArea source, double sharpening, bool present = true,
+        uint borderColor = LensBorderColor.DefaultRgb)
     {
         if (_source is null) return;
         var description=_source.Description;
@@ -117,7 +119,10 @@ internal sealed class LensGpuRenderer : IDisposable
         {
             Source = new((float)source.Left, (float)source.Top, (float)source.Width, (float)source.Height),
             Dimensions = new(description.Width, description.Height, _width, _height),
-            Options = new((float)Math.Clamp(sharpening,0,1),2,0,0)
+            Options = new((float)Math.Clamp(sharpening,0,1),2,0,0),
+            // Keep the original default's shader values; custom colors use exact RGB bytes.
+            BorderColor = borderColor == LensBorderColor.DefaultRgb ? new(0.20f,0.70f,0.54f,1) :
+                new((borderColor >> 16 & 255)/255f,(borderColor >> 8 & 255)/255f,(borderColor & 255)/255f,1)
         };
         _context.UpdateSubresource(in parameters, _parameters!);
         _context.OMSetRenderTargets(_target!);
@@ -183,5 +188,5 @@ internal sealed class LensGpuRenderer : IDisposable
         _sourceView?.Dispose(); _source?.Dispose(); _target?.Dispose(); _output?.Dispose(); _backBuffer?.Dispose();
         _parameters?.Dispose(); _pixel?.Dispose(); _vertex?.Dispose(); _swapChain?.Dispose(); _context?.Dispose(); Device?.Dispose();
     }
-    [StructLayout(LayoutKind.Sequential)] private struct Parameters { public Vector4 Source, Dimensions, Options; }
+    [StructLayout(LayoutKind.Sequential)] private struct Parameters { public Vector4 Source, Dimensions, Options, BorderColor; }
 }

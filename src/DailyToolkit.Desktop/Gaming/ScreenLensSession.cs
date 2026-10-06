@@ -19,6 +19,7 @@ internal sealed class ScreenLensSession : IDisposable
     private double _positionX=0.5,_positionY=0.5;
     private int _centerX,_centerY;
     private double _zoom=2,_sharpening=0.35;
+    private uint _borderColor=LensBorderColor.DefaultRgb;
     private bool _active;
     private bool _visible;
     private IReadOnlyList<CaptureMonitor> _monitors=[];
@@ -71,6 +72,12 @@ internal sealed class ScreenLensSession : IDisposable
         Reposition();
     }
 
+    public void SetBorderColor(uint color)
+    {
+        _borderColor=color;
+        if (_layout is not null) _capture?.UpdateSource(_layout.Source,_sharpening,color);
+    }
+
     public void Start(IReadOnlyList<CaptureMonitor> monitors,CaptureMonitor monitor,int width,int height,double zoom,double sharpening,int frameRate)
     {
         if (IsActive) return;
@@ -113,7 +120,7 @@ internal sealed class ScreenLensSession : IDisposable
     private void BeginCapture(CaptureMonitor monitor,LensLayout layout)
     {
         var generation=++_generation;
-        var capture=_capture=new(_renderer!,CaptureInterop.ForMonitor(monitor.Handle),layout.Source,_sharpening,_frameRate);
+        var capture=_capture=new(_renderer!,CaptureInterop.ForMonitor(monitor.Handle),layout.Source,_sharpening,_frameRate,_borderColor);
         capture.FirstFrame += () => Application.Current.Dispatcher.BeginInvoke(() =>
         {
             if (generation != _generation || !IsActive) return;
@@ -252,7 +259,7 @@ internal sealed class ScreenLensSession : IDisposable
         if (_window?.Move(layout.Output) != true) { Status="浮窗移动失败，请重新开启放大框。"; return; }
         _layout=layout;
         if (_guides is { Visible:true }) _guides.Update(layout.Output,_verticalGuide,_horizontalGuide);
-        _capture?.UpdateSource(layout.Source,_sharpening);
+        _capture?.UpdateSource(layout.Source,_sharpening,_borderColor);
         UpdateActiveStatus();
     }
 

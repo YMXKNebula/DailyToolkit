@@ -21,6 +21,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         _preferences = _preferencesStore.Load();
         _session.SetMovement(IsMovableMode);
         _session.SetWheelZoom(WheelZoomEnabled);
+        _session.SetBorderColor(BorderColorRgb);
         _session.StateChanged += RefreshState;
         _session.VisibilityChanged += () => Notify(nameof(IsVisible));
         _session.StatusChanged += value => Status=value;
@@ -71,6 +72,20 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         }
     }
     public bool IsActive => _session.IsActive;
+    public string BorderColor
+    {
+        get => _preferences.BorderColor;
+        set
+        {
+            if (!LensBorderColor.TryParse(value,out var rgb)) return;
+            var color=$"#{rgb:X6}";
+            if (color == BorderColor) return;
+            SavePreferences(_preferences with { BorderColor=color });
+            _session.SetBorderColor(rgb);
+            Notify(nameof(BorderColor));
+        }
+    }
+    internal uint BorderColorRgb => LensBorderColor.TryParse(BorderColor,out var rgb) ? rgb : LensBorderColor.DefaultRgb;
     internal PixelBounds? ActiveBounds => _session.ActiveBounds;
     internal LensPointerController? PointerForDiagnostics => _session.PointerForDiagnostics;
     internal bool VerticalGuide => _session.VerticalGuide;
@@ -105,9 +120,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     }
     public bool IsFixedMode { get => MovementMode == LensMovementMode.Fixed; set { if (value) MovementMode=LensMovementMode.Fixed; } }
     public bool IsMovableMode { get => MovementMode == LensMovementMode.Movable; set { if (value) MovementMode=LensMovementMode.Movable; } }
-    public string MovementHint => (IsFixedMode ? "锁住当前位置，点击可操作下面的窗口。"
-        : "按住放大画面拖动整个浮窗。拖动时显示屏幕中心辅助线，靠近时吸附；摆好位置后可切回固定。") +
-        (WheelZoomEnabled ? "框内滚轮调倍率（1–10×）。" : "滚轮调节已关闭，可用上方滑块调整倍率。");
+    public string MovementHint => IsFixedMode ? "固定后，鼠标可操作框下的窗口。" : "按住放大画面拖动，靠近屏幕中心时吸附。";
     public bool IsFavorite
     {
         get => _favorite;
@@ -142,7 +155,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     private void SavePreferences(GamingPreferences preferences)
     {
         _preferences = preferences;
-        if (!_preferencesStore.Save(preferences)) Status="设置已在本次运行中修改，但没有保存成功。";
+        if (!_preferencesStore.Save(preferences)) Status="设置未能保存，退出后会丢失。";
     }
 
     public void Start()
@@ -158,11 +171,11 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         Stop();
         Zoom=2; FrameWidth=640; FrameHeight=384; Sharpening=0.35; FrameRate=0;
         RefreshMonitors();
-        MovementMode=LensMovementMode.Fixed; WheelZoomEnabled=true;
+        MovementMode=LensMovementMode.Fixed; WheelZoomEnabled=true; BorderColor=LensBorderColor.Default;
         _session.ResetPosition(SelectedMonitor);
         _positionResetVersion++;
         Notify(nameof(PositionResetVersion));
-        Status="已恢复默认画面设置，快捷键、按住／切换模式和收藏保留。";
+        Status="已恢复默认。快捷键、按键模式和收藏已保留。";
     }
 
     public void Toggle()

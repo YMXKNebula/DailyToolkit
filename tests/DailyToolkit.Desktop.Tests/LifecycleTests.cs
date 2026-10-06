@@ -57,9 +57,9 @@ internal static partial class Program
         Console.WriteLine("PASS UI stays responsive while detailed detection is pending");
 
         model.NavigateCommand.Execute("tools");
-        Require(model.IsDaily && model.PageTitle == "日常", "The daily section or legacy navigation failed");
+        Require(model.IsHome && model.PageTitle == "电脑", "Legacy category navigation did not resolve to computer");
         model.NavigateCommand.Execute("gaming");
-        Require(model.IsGaming && model.PageTitle == "游戏" && !model.Gaming.IsActive, "The separate DailyToolkit game page was not ready");
+        Require(model.ShowScreenLens && model.PageTitle == "屏幕局部放大" && !model.Gaming.IsActive, "Direct tool navigation was not ready");
         Console.WriteLine("PASS Game navigation keeps screen capture off until explicitly enabled");
         model.NavigateCommand.Execute("computer");
         Require(model.IsHome, "The former computer page did not resolve to the merged home");

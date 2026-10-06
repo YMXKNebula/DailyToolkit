@@ -9,8 +9,15 @@
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="Auto"
         TextOptions.TextHintingMode="Fixed" WindowStartupLocation="CenterScreen">
   <Grid x:Name="RootContent" Background="{DynamicResource WindowBrush}" RenderOptions.ClearTypeHint="Enabled">
-    <Grid.ColumnDefinitions><ColumnDefinition Width="168" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="188" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+    <Grid x:Name="SidebarSurface" ClipToBounds="True">
+    <Border x:Name="SidebarBase" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
+      <Border.Style>
+        <Style TargetType="Border">
+          <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+          <Style.Triggers><DataTrigger Binding="{Binding IsFavorites}" Value="True"><Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" /></DataTrigger></Style.Triggers>
+        </Style>
+      </Border.Style>
       <DockPanel Margin="16,26,16,20">
         <StackPanel DockPanel.Dock="Top" Margin="10,0,0,30">
           <StackPanel Orientation="Horizontal">
@@ -19,26 +26,56 @@
             </Border>
             <TextBlock Text="DailyToolkit" Margin="9,0,0,0" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
           </StackPanel>
-          <TextBlock Text="日常用的小工具" Style="{StaticResource MutedText}" Margin="0,13,0,0" />
+          <TextBlock Text="日常小工具" Style="{StaticResource MutedText}" Margin="0,13,0,0" />
         </StackPanel>
-        <StackPanel DockPanel.Dock="Bottom" Margin="12,0,0,0">
-          <TextBlock Text="本机运行" Style="{StaticResource MutedText}" />
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,0">
+          <Button x:Name="FavoritesButton" Click="OpenFavorites" HorizontalAlignment="Left" Padding="11,7"
+                  FontSize="25" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AccentBrush}"
+                  ToolTip="收藏夹" AutomationProperties.Name="打开收藏夹" Margin="0,0,0,16">
+            <TextBlock Text="★" FontFamily="Segoe UI Symbol" FontSize="25" />
+          </Button>
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.3.10</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.4.0</Hyperlink>
           </TextBlock>
         </StackPanel>
-        <StackPanel>
-          <RadioButton Content="首页" GroupName="Navigation" Style="{StaticResource NavButton}"
-                       IsChecked="{Binding IsHome, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="home" />
-          <RadioButton Content="日常" GroupName="Navigation" Style="{StaticResource NavButton}"
-                       IsChecked="{Binding IsDaily, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="daily" />
-          <RadioButton Content="游戏" GroupName="Navigation" Style="{StaticResource NavButton}"
-                       IsChecked="{Binding IsGaming, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="gaming" />
-          <RadioButton Content="收藏夹" GroupName="Navigation" Style="{StaticResource NavButton}"
-                       IsChecked="{Binding IsFavorites, Mode=OneWay}" Command="{Binding NavigateCommand}" CommandParameter="favorites" />
-        </StackPanel>
+        <DockPanel>
+          <Button DockPanel.Dock="Top" Content="← 退出收藏夹" Click="ExitFavorites" Padding="10,10"
+                  HorizontalContentAlignment="Left" BorderThickness="0" Background="Transparent" Margin="0,0,0,12"
+                  Visibility="{Binding IsFavorites, Converter={StaticResource VisibleWhen}}" />
+          <TextBlock DockPanel.Dock="Top" Text="拖动排序 · 右键也可调整" FontSize="11" Foreground="{DynamicResource MutedBrush}"
+                     Margin="8,0,0,10" Visibility="{Binding ShowAllTools, Converter={StaticResource VisibleWhen}}" />
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding NavigationItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <RadioButton GroupName="Navigation" Style="{StaticResource NavButton}" Padding="10,12"
+                               IsChecked="{Binding IsSelected, Mode=OneWay}" CommandParameter="{Binding}"
+                               Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                               Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                               PreviewMouseLeftButtonDown="NavigationDragStart" PreviewMouseMove="NavigationDragMove"
+                               AllowDrop="True" DragOver="NavigationDragOver" Drop="NavigationDrop" ToolTip="拖动调整顺序">
+                    <RadioButton.ContextMenu>
+                      <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                        <MenuItem Header="上移" Command="{Binding MoveUpCommand}"
+                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                        <MenuItem Header="下移" Command="{Binding MoveDownCommand}"
+                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                      </ContextMenu>
+                    </RadioButton.ContextMenu>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="15" VerticalAlignment="Center" Margin="0,0,9,0" />
+                      <TextBlock Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </RadioButton>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
       </DockPanel>
     </Border>
+    <Image x:Name="SidebarTransition" Visibility="Collapsed" IsHitTestVisible="False" Stretch="Fill" />
+    </Grid>
     <Grid Grid.Column="1" Margin="{Binding ContentPadding}">
       <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
       <Grid Margin="0,0,0,20">
@@ -145,14 +182,6 @@
         </StackPanel>
       </ScrollViewer>
 
-      <Border Grid.Row="1" Style="{StaticResource Card}" VerticalAlignment="Top"
-              Visibility="{Binding IsDaily, Converter={StaticResource VisibleWhen}}">
-        <StackPanel Margin="0,4">
-          <TextBlock Text="还没有添加工具" FontSize="18" FontWeight="SemiBold" />
-          <TextBlock Text="日常小工具会放在这里。电脑信息已经并入首页。" Style="{StaticResource MutedText}" Margin="0,10,0,0" />
-        </StackPanel>
-      </Border>
-
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     Visibility="{Binding ShowScreenLens, Converter={StaticResource VisibleWhen}}">
         <StackPanel DataContext="{Binding Gaming}" Margin="0,0,8,0">
@@ -163,7 +192,7 @@
                   <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Button Content="屏幕局部放大" Click="ToggleLensDetails" FontSize="15" FontWeight="SemiBold"
+                <Button Content="快捷键" Click="ToggleLensDetails" FontSize="13" FontWeight="SemiBold"
                         Padding="0,6" BorderThickness="0" Background="Transparent" ToolTip="展开或收起详细设置" />
                 <TextBox Grid.Column="1" Text="{Binding ToggleShortcutText, Mode=OneWay}" IsReadOnly="True" Padding="8,6"
                          MinWidth="62" Margin="12,0,4,0" VerticalContentAlignment="Center"
@@ -178,22 +207,24 @@
                 <RadioButton Content="切换" GroupName="LensMode" IsChecked="{Binding IsToggleMode}" Style="{StaticResource NavButton}"
                              Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次开启，再按同一个快捷键关闭并释放画面资源。" />
               </StackPanel>
-                <Button Grid.Column="4" Content="{Binding FavoriteSymbol}" Command="{Binding ToggleFavoriteCommand}"
+                <Button Grid.Column="4" Command="{Binding ToggleFavoriteCommand}"
                         Padding="4,6" FontSize="17" BorderThickness="0" Background="Transparent"
-                        Foreground="{DynamicResource AccentBrush}" ToolTip="{Binding FavoriteHint}" AutomationProperties.Name="{Binding FavoriteHint}" />
+                        Foreground="{DynamicResource AccentBrush}" ToolTip="{Binding FavoriteHint}" AutomationProperties.Name="{Binding FavoriteHint}">
+                  <TextBlock Text="{Binding FavoriteSymbol}" FontFamily="Segoe UI Symbol" FontSize="17" />
+                </Button>
                 <Button x:Name="LensDetailsToggle" Grid.Column="5" Content="▾" Click="ToggleLensDetails" Padding="6,6"
                         FontSize="16" BorderThickness="0" Background="Transparent" ToolTip="展开或收起详细设置"
                         AutomationProperties.Name="屏幕局部放大的详细设置" />
               </Grid>
               <Border x:Name="LensDetailsPanel" Visibility="Collapsed">
                 <StackPanel Margin="0,16,0,0">
-                  <TextBlock Text="软件最小化或其他窗口在前台时，快捷键同样可用。点击快捷键框可以修改，按 Esc 退出输入。" Style="{StaticResource MutedText}" Margin="0,0,0,18" />
+                  <TextBlock Text="快捷键在后台也能用。点击按键框修改，按 Esc 取消。" Style="{StaticResource MutedText}" Margin="0,0,0,18" />
                   <Grid x:Name="LensSettingsGrid" SizeChanged="LensSettingsSizeChanged">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                   <StackPanel x:Name="LensSettingsControls">
                     <StackPanel IsEnabled="{Binding CanConfigure}">
-                    <TextBlock Text="自动使用鼠标所在屏幕，拖动时可跨屏。" Style="{StaticResource MutedText}" Margin="0,0,0,8" />
+                    <TextBlock Text="使用鼠标所在屏幕，支持跨屏拖动。" Style="{StaticResource MutedText}" Margin="0,0,0,8" />
                     <TextBlock Text="{Binding SelectedMonitor.Name}" Style="{StaticResource MutedText}" Margin="0,0,0,18" />
                     </StackPanel>
                     <TextBlock Text="位置" FontWeight="SemiBold" Margin="0,0,0,10" />
@@ -209,6 +240,8 @@
                     <Slider Minimum="1" Maximum="{Binding MaximumZoom}" TickFrequency="0.25" IsSnapToTickEnabled="True" Value="{Binding Zoom}" Margin="0,10,0,10" AutomationProperties.Name="放大倍率" />
                     <CheckBox x:Name="LensWheelZoom" Content="滚轮调节" IsChecked="{Binding WheelZoomEnabled, Mode=TwoWay}" Margin="0,0,0,18"
                               ToolTip="在放大框或预览图内用滚轮调节倍率。关闭后仍可使用上方滑块。" />
+                    <TextBlock Text="框体颜色" FontWeight="SemiBold" Margin="0,0,0,10" />
+                    <controls:LensColorPicker x:Name="LensFrameColor" Margin="0,0,0,18" />
                     <StackPanel IsEnabled="{Binding CanConfigure}">
                     <TextBlock Text="放大框大小" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding FrameSizeText}" Style="{StaticResource MutedText}" Margin="0,6,0,10" />
@@ -247,8 +280,8 @@
                     <Button Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" Margin="0,0,8,8" />
                   </WrapPanel>
                   <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
-                  <TextBlock Text="按住模式：按下开启，松开关闭。切换模式：按一次开启，再按一次关闭。关闭时释放画面资源，之后可调整设置；同一快捷键仍可再次开启。" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
-                  <TextBlock Text="框内对画面做高质量放大，固定模式下可直接操作下面的窗口。建议游戏使用窗口或无边框模式。实际细节取决于原画面的分辨率，画面仅用于本机实时显示。" Style="{StaticResource MutedText}" />
+                  <TextBlock Text="按住：松手即关闭。切换：再按一次关闭。大小和帧率请在关闭后调整。" Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+                  <TextBlock Text="游戏建议用窗口或无边框模式。放大效果取决于原画面清晰度。" Style="{StaticResource MutedText}" />
                   <Separator Margin="0,18,0,14" />
                   <Button Content="恢复默认" Command="{Binding ResetDefaultsCommand}" HorizontalAlignment="Left"
                           ToolTip="关闭放大框，恢复默认画面、居中位置和固定模式；保留快捷键、按住／切换模式和收藏。" />
@@ -264,7 +297,7 @@
         <StackPanel>
           <TextBlock Text="还没有收藏" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="点击工具旁的星标，把它放到这里。" Style="{StaticResource MutedText}" Margin="0,10,0,16" />
-          <Button Content="查看游戏工具" Command="{Binding NavigateCommand}" CommandParameter="gaming" HorizontalAlignment="Left" />
+          <Button Content="查看全部工具" Click="ExitFavorites" HorizontalAlignment="Left" />
         </StackPanel>
       </Border>
 
@@ -273,8 +306,8 @@
                    Visibility="{Binding HasNotice, Converter={StaticResource VisibleWhen}}" />
         <Grid>
           <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-          <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" />
-          <TextBlock Grid.Column="1" Text="{Binding LocalSourceText}" Style="{StaticResource MutedText}" Margin="12,0,0,0" />
+          <TextBlock Text="{Binding FooterStatusText}" Style="{StaticResource MutedText}" />
+          <TextBlock Grid.Column="1" Text="{Binding FooterSourceText}" Style="{StaticResource MutedText}" Margin="12,0,0,0" />
         </Grid>
       </StackPanel>
     </Grid>

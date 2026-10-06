@@ -93,6 +93,7 @@ internal static class LensShortcutDiagnostics
             await CheckNativeDragAsync(outputPath);
             await CheckWheelZoomAsync();
             await CheckLiveParameterUpdatesAsync();
+            await CheckLiveBorderColorAsync();
             await CheckPreviewDragAsync();
             await CheckToggleLifecycleAsync();
             await CheckFixedAndResetAsync();
@@ -271,6 +272,21 @@ internal static class LensShortcutDiagnostics
             if (activeCapture.SourceForDiagnostics != (expected,originalSharpness) ||
                 gaming.LensHandle != handle || gaming.CaptureForDiagnostics != activeCapture || !gaming.IsVisible)
                 throw new InvalidOperationException("A completed refresh worker overwrote the final source or sharpening settings.");
+        }
+
+        private async Task CheckLiveBorderColorAsync()
+        {
+            var activeCapture=gaming.CaptureForDiagnostics!;
+            var handle=gaming.LensHandle;
+            var originalColor=gaming.BorderColor;
+            var frames=activeCapture.FramesRendered;
+            gaming.BorderColor="#123456";
+            await Wait(() => activeCapture.FramesRendered > frames && activeCapture.ReadOutput().Take(3).SequenceEqual(new byte[] { 0x56,0x34,0x12 }),
+                "The live lens did not update its border to the selected RGB color.");
+            await Wait(() => preview.CurrentFrame?.Settings.BorderColor == 0x123456,"The photo preview did not share the selected color.");
+            if (gaming.LensHandle != handle || gaming.CaptureForDiagnostics != activeCapture || !gaming.IsVisible)
+                throw new InvalidOperationException("Changing border color recreated the live lens or capture.");
+            gaming.BorderColor=originalColor;
         }
 
         private async Task CheckFailureCleanupAsync()
@@ -602,6 +618,7 @@ internal static class LensShortcutDiagnostics
                 RealCursorFollowsDrag=true,ContinuousRelativeMouseDrag=true,TenTimesRemainsVisible=true,
                 LiveWheelCanBeDisabled=true,PreviewWheelCanBeDisabled=true,
                 LiveParametersReuseCapture=true,LatestSourceSettingsWin=true,ResizedPreviewDragUsesDisplayedCenter=true,
+                LiveBorderColorUpdatesWithoutRestart=true,PreviewBorderColorMatchesLive=true,
                 SimulatedCaptureFailureCleanup=true,MonitorSelectionAndDispose=true,CursorMonitorOnStart=true,
                 AvailableMonitors=gaming.Monitors.Count,CrossMonitorDragVerified=crossMonitorDrag,
                 QueuedCrossMonitorDragVerified=queuedCrossMonitorDrag,RelativeCrossMonitorDragVerified=relativeCrossMonitorDrag

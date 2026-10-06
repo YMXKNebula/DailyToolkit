@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
 using System.Windows;
@@ -22,7 +23,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly HashSet<string> _favoriteIds;
     private readonly CancellationTokenSource _lifetime = new();
     private MachineReport _report;
-    private string _page = "home";
+    private string _page = "computer";
+    private bool _favoritesOpen;
+    private string _pageBeforeFavorites="computer";
+    private readonly NavigationOrderStore _navigationStore;
+    private readonly List<string> _navigationOrder;
+    // Each installed tool gets one entry here; favorites reuse the same entries and tool state.
+    private readonly NavigationItem[] _navigation=[new("computer","电脑","\uE770"),new("screen-lens","屏幕局部放大","\uE71E")];
     private string _softwareSearch = "";
     private string _notice = "";
     private bool _isRefreshing;
@@ -36,7 +43,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isReadingStatus;
 
     public MainViewModel(IEnvironmentProbe probe, DisplayInfo display, ILocalStatusProbe? localStatus = null,
-        TimeProvider? clock = null, FavoritesStore? favoritesStore = null, GamingPreferencesStore? gamingPreferencesStore = null)
+        TimeProvider? clock = null, FavoritesStore? favoritesStore = null, GamingPreferencesStore? gamingPreferencesStore = null,
+        NavigationOrderStore? navigationStore = null)
     {
         _probe = probe;
         _display = display;
@@ -44,6 +52,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _clock = clock ?? TimeProvider.System;
         _favoritesStore = favoritesStore ?? new();
         _favoriteIds = _favoritesStore.Load();
+        _navigationStore=navigationStore ?? new();
+        _navigationOrder=_navigationStore.Load().ToList();
+        foreach (var item in _navigation) if (!_navigationOrder.Contains(item.Id)) _navigationOrder.Add(item.Id);
         Gaming = new(gamingPreferencesStore);
         Gaming.IsFavorite = _favoriteIds.Contains("screen-lens");
         _now = _clock.GetLocalNow();
@@ -54,25 +65,38 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Power = new(null, null)
         };
         _softwareView = CreateSoftwareView();
-        NavigateCommand = new(parameter => Page = parameter as string ?? "home");
+        NavigateCommand = new(parameter => Page = parameter is NavigationItem item ? item.Id : parameter as string ?? "computer");
+        OpenFavoritesCommand=new(_ => OpenFavorites());
+        ExitFavoritesCommand=new(_ => ExitFavorites());
+        MoveUpCommand=new(parameter => MoveBy(parameter,-1),() => NavigationItems.Count > 1);
+        MoveDownCommand=new(parameter => MoveBy(parameter,1),() => NavigationItems.Count > 1);
         RefreshCommand = new(_ =>
         {
             if (ShowScreenLens) Gaming.RefreshMonitors(); else _ = InitializeAsync();
         }, () => ShowScreenLens ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus);
         Gaming.PropertyChanged += OnGamingChanged;
+        RefreshNavigation();
+        NotifyNavigation();
     }
 
     private void OnGamingChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(GamingViewModel.IsActive)) RefreshCommand.Refresh();
+        if (e.PropertyName == nameof(GamingViewModel.IsActive)) { RefreshCommand.Refresh(); Notify(nameof(FooterStatusText)); }
         if (e.PropertyName != nameof(GamingViewModel.IsFavorite)) return;
         if (Gaming.IsFavorite) _favoriteIds.Add("screen-lens"); else _favoriteIds.Remove("screen-lens");
-        if (!_favoritesStore.Save(_favoriteIds)) Notice="收藏已在本次运行中修改，但没有保存成功。";
-        Notify(nameof(HasFavorites)); Notify(nameof(ShowScreenLens)); Notify(nameof(ShowFavoritesEmpty)); Notify(nameof(RefreshText));
+        if (!_favoritesStore.Save(_favoriteIds)) Notice="收藏未能保存，退出后会丢失。";
+        RefreshNavigation();
+        if (IsFavorites && !NavigationItems.Any(item => item.Id == Page)) _page=NavigationItems.FirstOrDefault()?.Id ?? "favorites-empty";
+        NotifyNavigation();
         RefreshCommand.Refresh();
     }
 
     public RelayCommand NavigateCommand { get; }
+    public RelayCommand OpenFavoritesCommand { get; }
+    public RelayCommand ExitFavoritesCommand { get; }
+    public RelayCommand MoveUpCommand { get; }
+    public RelayCommand MoveDownCommand { get; }
+    public ObservableCollection<NavigationItem> NavigationItems { get; } = [];
     public GamingViewModel Gaming { get; }
     public RelayCommand RefreshCommand { get; }
     public Task CurrentProbeTask { get; private set; } = Task.CompletedTask;
@@ -84,19 +108,81 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string Page
     {
         get => _page;
-        set { if (Set(ref _page, value is "tools" ? "daily" : value is "daily" or "gaming" or "favorites" ? value : "home")) { Notify(""); RefreshCommand.Refresh(); } }
+        set
+        {
+            if (value == "favorites") { OpenFavorites(); return; }
+            var id=value == "gaming" ? "screen-lens" : _navigation.Any(item => item.Id == value) ? value : "computer";
+            if (IsFavorites && !_favoriteIds.Contains(id)) ExitFavorites();
+            _page=id;
+            NotifyNavigation();
+        }
     }
-    public bool IsHome => Page == "home";
-    public bool IsDaily => Page == "daily";
-    public bool IsTools => IsDaily;
-    public bool IsGaming => Page == "gaming";
-    public bool IsFavorites => Page == "favorites";
-    public bool HasFavorites => Gaming.IsFavorite;
-    public bool ShowScreenLens => IsGaming || (IsFavorites && HasFavorites);
+    public bool IsHome => Page == "computer";
+    public bool IsFavorites => _favoritesOpen;
+    public bool HasFavorites => _navigation.Any(item => _favoriteIds.Contains(item.Id));
+    public bool ShowScreenLens => Page == "screen-lens";
     public bool ShowFavoritesEmpty => IsFavorites && !HasFavorites;
-    public string PageTitle => IsGaming ? "游戏" : IsDaily ? "日常" : IsFavorites ? "收藏夹" : "首页";
-    public string PageDescription => IsGaming ? "玩游戏时用的小工具。" : IsDaily ? "日常用的小工具。" : IsFavorites ? "常用的放在这里。" : "今天和这台电脑的状态。";
+    public bool ShowAllTools => !IsFavorites;
+    public string PageTitle => ShowFavoritesEmpty ? "收藏夹" : _navigation.First(item => item.Id == Page).Name;
+    public string PageDescription => ShowScreenLens ? "局部放大桌面或游戏画面" : ShowFavoritesEmpty ? "把常用工具放在这里" : "日期、天气和电脑状态";
     public string RefreshText => ShowScreenLens ? "刷新屏幕" : "刷新";
+    public string FooterStatusText => ShowScreenLens ? (Gaming.IsActive ? "放大运行中" : "快捷键在后台也可用") : ShowFavoritesEmpty ? "收藏保存在本机" : StatusText;
+    public string FooterSourceText => ShowScreenLens ? "本机显示" : ShowFavoritesEmpty ? "" : LocalSourceText;
+
+    private void OpenFavorites()
+    {
+        if (IsFavorites) return;
+        _pageBeforeFavorites=Page;
+        _favoritesOpen=true;
+        RefreshNavigation();
+        if (!NavigationItems.Any(item => item.Id == Page)) _page=NavigationItems.FirstOrDefault()?.Id ?? "favorites-empty";
+        NotifyNavigation();
+    }
+
+    private void ExitFavorites()
+    {
+        if (!IsFavorites) return;
+        _favoritesOpen=false;
+        _page=_pageBeforeFavorites;
+        RefreshNavigation();
+        NotifyNavigation();
+    }
+
+    private void RefreshNavigation()
+    {
+        NavigationItems.Clear();
+        foreach (var id in _navigationOrder)
+        {
+            var item=_navigation.FirstOrDefault(item => item.Id == id);
+            if (item is not null && (!IsFavorites || _favoriteIds.Contains(id))) NavigationItems.Add(item);
+        }
+        MoveUpCommand.Refresh(); MoveDownCommand.Refresh();
+    }
+
+    private void NotifyNavigation()
+    {
+        foreach (var item in _navigation) item.IsSelected=item.Id == Page;
+        Notify(""); RefreshCommand.Refresh();
+    }
+
+    private void MoveBy(object? parameter,int offset)
+    {
+        if (parameter is not NavigationItem item) return;
+        var index=NavigationItems.IndexOf(item);
+        var target=index+offset;
+        if (index >= 0 && target >= 0 && target < NavigationItems.Count)
+            MoveNavigationItem(item.Id,NavigationItems[target].Id,after:offset > 0);
+    }
+
+    public bool MoveNavigationItem(string id,string targetId,bool after=false)
+    {
+        if (id == targetId || !NavigationItems.Any(item => item.Id == id) || !NavigationItems.Any(item => item.Id == targetId)) return false;
+        _navigationOrder.Remove(id);
+        _navigationOrder.Insert(_navigationOrder.IndexOf(targetId)+(after ? 1 : 0),id);
+        RefreshNavigation();
+        if (!_navigationStore.Save(_navigationOrder)) Notice="排序未能保存，退出后会丢失。";
+        return true;
+    }
     public string TimeText => _now.ToString("HH:mm");
     public string DateText => _now.ToString("yyyy年M月d日 dddd", CultureInfo.GetCultureInfo("zh-CN"));
     public NetworkInfo Network => _network;
@@ -135,7 +221,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         ProbeStage.Complete => "电脑信息已更新",
         ProbeStage.Partial => "部分信息暂时不可用",
-        _ => "基础信息已就绪"
+        _ => "已读取基础信息"
     };
     public string CpuName => Report.Cpu.Name;
     public string CpuDetail => Report.Cpu.PhysicalCores is int cores
@@ -279,7 +365,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyToolkit", Version = "0.3.10", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyToolkit", Version = "0.4.0", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);

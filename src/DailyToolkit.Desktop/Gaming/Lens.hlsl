@@ -3,6 +3,7 @@ cbuffer LensParameters : register(b0)
     float4 SourceRect; // x/y/width/height in source pixels
     float4 Dimensions; // source width/height, output width/height
     float4 Options;    // sharpening, border width, reserved, reserved
+    float4 BorderColor;
 };
 Texture2D<float4> Source : register(t0);
 
@@ -49,6 +50,6 @@ float4 PS(VertexOutput input) : SV_TARGET
     float strength=Options.x*2.5/(1+contrast);
     float3 color=clamp(center+strength*(center-bilinearValue),low,high);
     float2 edge = min(input.position.xy, Dimensions.zw-input.position.xy);
-    if (min(edge.x,edge.y) < Options.y) color = float3(0.20,0.70,0.54);
+    if (min(edge.x,edge.y) < Options.y) color = BorderColor.rgb;
     return float4(saturate(color),1);
 }

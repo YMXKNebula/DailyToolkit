@@ -31,6 +31,11 @@ internal static partial class Program
                 return pixels;
             }
             var original=Pixels(first.Magnified);
+            var colored=Pixels(renderer.Render(settings with { BorderColor=0x123456 }).Magnified);
+            Require(colored[0] == 0x56 && colored[1] == 0x34 && colored[2] == 0x12,"The selected RGB color did not reach the GPU border");
+            for (var y=2;y<192-2;y++)
+                Require(original.AsSpan((y*320+2)*4,(320-4)*4).SequenceEqual(colored.AsSpan((y*320+2)*4,(320-4)*4)),
+                    "Changing border color altered the magnified picture");
             var guided=Pixels(renderer.Render(settings with { VerticalGuide=true,HorizontalGuide=true }).Magnified);
             Require(guided.SequenceEqual(original),"Desktop guides were painted inside the magnified photo");
             Require(Pixels(renderer.Render(settings).Magnified).SequenceEqual(original),"Ending assistance left guide pixels in the output");
@@ -71,7 +76,9 @@ internal static partial class Program
         var probe=new ControlledProbe(display);
         probe.Finish.TrySetResult();
         var model=new MainViewModel(probe,display,new LocalProbe(),
-            gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")));
+            gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),
+            favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
+            navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")));
         model.Page="gaming";
         var window=new MainWindow(model,enableShortcuts:false)
         {
@@ -99,6 +106,50 @@ internal static partial class Program
             Require(model.Gaming.WheelZoomEnabled,"The settings wheel switch did not reenable zoom");
             Require(preview.CurrentFrame is not null && !model.Gaming.IsActive && System.Windows.Controls.Grid.GetColumn(preview) == 1,
                 "Expanded preview was missing or did not sit beside settings");
+            var picker=(DailyToolkit.Desktop.Controls.LensColorPicker)window.FindName("LensFrameColor");
+            IEnumerable<System.Windows.Controls.Button> Buttons(DependencyObject root)
+            {
+                for(var i=0;i<System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);i++)
+                {
+                    var child=System.Windows.Media.VisualTreeHelper.GetChild(root,i);
+                    if (child is System.Windows.Controls.Button button) yield return button;
+                    foreach(var descendant in Buttons(child)) yield return descendant;
+                }
+            }
+            Buttons(picker).Single(button => button.Tag as string == "#4285F4").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Require(model.Gaming.BorderColor == "#4285F4","Clicking a color swatch did not change settings");
+            var timeout=DateTime.UtcNow.AddSeconds(5);
+            while(preview.CurrentFrame?.Settings.BorderColor != 0x4285F4 && DateTime.UtcNow < timeout) await Task.Delay(20);
+            Require(preview.CurrentFrame?.Settings.BorderColor == 0x4285F4,"The selected swatch did not refresh the photo preview");
+            model.Gaming.IsFavorite=true;
+            var favoriteButton=(System.Windows.Controls.Button)window.FindName("FavoritesButton");
+            favoriteButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            var transition=(System.Windows.Controls.Image)window.FindName("SidebarTransition");
+            if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
+            {
+                Require(transition.IsVisible && transition.Clip is System.Windows.Media.GeometryGroup group &&
+                    group.Children[1] is System.Windows.Media.StreamGeometry star && star.Transform is System.Windows.Media.TransformGroup transforms &&
+                    transforms.Children[0].HasAnimatedProperties && transforms.Children[1].HasAnimatedProperties,
+                    "Favorites did not animate a growing and rotating star from the sidebar");
+                await Task.Delay(600);
+                Require(!transition.IsVisible && transition.Source is null && ((UIElement)window.FindName("SidebarBase")).IsHitTestVisible,
+                    "The transition retained its snapshot or blocked sidebar input");
+            }
+            Require(model.IsFavorites && model.NavigationItems.Single().Id == "screen-lens" && !model.Gaming.IsActive,
+                "The animated favorites button did not replace the sidebar");
+            Buttons(window).Single(button => button.Content as string == "← 退出收藏夹").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
+            {
+                Require(transition.IsVisible && transition.Clip is System.Windows.Media.StreamGeometry,"Exiting favorites did not reverse the star reveal");
+                // A quick second entry must not be cleared by the previous animation's completion.
+                await Task.Delay(180);
+                favoriteButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                await Task.Delay(140);
+                Require(model.IsFavorites && transition.IsVisible,"An older transition cleared a newer one");
+                await Task.Delay(400);
+                Require(!transition.IsVisible && transition.Source is null,"Rapid transitions leaked their snapshot");
+                model.ExitFavoritesCommand.Execute(null);
+            }
             window.Width=680;
             window.UpdateLayout();
             Require(System.Windows.Controls.Grid.GetRow(preview) == 1 && System.Windows.Controls.Grid.GetColumn(preview) == 0,

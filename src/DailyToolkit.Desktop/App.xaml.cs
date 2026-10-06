@@ -118,6 +118,13 @@ public partial class App : Application
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
             await window.WaitForLensPreviewAsync().WaitAsync(TimeSpan.FromSeconds(15));
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+            if (ReadArgument(e.Args,"--transition") == "favorites")
+            {
+                ((System.Windows.Controls.Button)window.FindName("FavoritesButton")).RaiseEvent(
+                    new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                await Task.Delay(120);
+                window.UpdateLayout();
+            }
             var content = window.PreviewContent;
             // An exported bitmap has no physical LCD subpixels; avoid colored fringes when it is scaled.
             TextOptions.SetTextRenderingMode(content, TextRenderingMode.Grayscale);

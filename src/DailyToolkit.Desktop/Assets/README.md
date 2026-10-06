@@ -1,5 +1,5 @@
 # 预览素材
 
-`lens-preview.jpg` 是经提供者授权，随 DailyToolkit 发布的荷花预览照片，普通预览和放大预览共用这张图片。
+`lens-preview.jpg` 是随 DailyToolkit 发布的荷花照片，已获提供者授权，用于普通和放大预览。
 
 照片不适用项目代码的 MIT 许可证。若需用于其他项目，请联系项目作者另行取得授权。

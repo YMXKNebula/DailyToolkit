@@ -20,7 +20,8 @@ public sealed record GamingPreferences
     public LensActivationMode ActivationMode { get; init; } = LensActivationMode.Toggle;
     public LensMovementMode MovementMode { get; init; } = LensMovementMode.Fixed;
     public bool WheelZoomEnabled { get; init; } = true;
+    public string BorderColor { get; init; } = LensBorderColor.Default;
     [JsonIgnore] public bool IsValid => (ToggleShortcut is null || ToggleShortcut.IsValid) &&
         (ActivationMode is LensActivationMode.Toggle or LensActivationMode.Hold) &&
-        (MovementMode is LensMovementMode.Movable or LensMovementMode.Fixed);
+        (MovementMode is LensMovementMode.Movable or LensMovementMode.Fixed) && LensBorderColor.TryParse(BorderColor,out _);
 }

@@ -57,7 +57,7 @@ public partial class LensPreview : UserControl
             or nameof(GamingViewModel.Zoom) or nameof(GamingViewModel.Sharpening)
             or nameof(GamingViewModel.SelectedMonitor) or nameof(GamingViewModel.FrameRate)
             or nameof(GamingViewModel.MovementMode) or nameof(GamingViewModel.PositionResetVersion)
-            or nameof(GamingViewModel.WheelZoomEnabled))) return;
+            or nameof(GamingViewModel.WheelZoomEnabled) or nameof(GamingViewModel.BorderColor))) return;
         _dirty=true;
         UpdateTimer();
     }
@@ -86,7 +86,7 @@ public partial class LensPreview : UserControl
         var renderer=_renderer ??= new();
         var settings = new LensPreviewSettings(monitor.Bounds.Width,monitor.Bounds.Height,
             (int)_model.FrameWidth,(int)_model.FrameHeight,_model.Zoom,_model.Sharpening,_model.FrameRate,
-            _pointerX,_pointerY,_verticalGuide,_horizontalGuide);
+            _pointerX,_pointerY,_verticalGuide,_horizontalGuide,_model.BorderColorRgb);
         try
         {
             var result=await Task.Run(() => renderer.Render(settings));
@@ -94,15 +94,15 @@ public partial class LensPreview : UserControl
             _frame=result;
             BackgroundPhoto.Source=result.Photo;
             FrameImage.Source=DetailImage.Source=result.Magnified;
+            FrameBorder.BorderBrush=new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(
+                (byte)(settings.BorderColor >> 16),(byte)(settings.BorderColor >> 8),(byte)settings.BorderColor));
             FrameBorder.Visibility=Visibility.Visible;
             ScreenInfo.Text=$"{settings.ScreenWidth} × {settings.ScreenHeight} · 显示器比例";
             FrameInfo.Text=$"{result.Layout.Output.Width} × {result.Layout.Output.Height} 像素 · {settings.Zoom:0.##}×";
             var clamped=result.Layout.Output.Width != settings.Width || result.Layout.Output.Height != settings.Height;
-            PreviewNote.Text=(settings.FrameRate == 0 ? "跟随捕获画面的新帧。" : $"上限 {settings.FrameRate} 帧/秒。") +
-                (clamped ? "框已限制在显示器范围内。" : "") +
-                (_model.IsFixedMode ? "锁住当前位置。" : "拖拽上方放大框，接近中心会吸附。") +
-                (_model.WheelZoomEnabled ? "滚轮可试倍率。" : "滚轮调节已关闭。") +
-                "预览位置独立，照片在本机读取。";
+            PreviewNote.Text=(clamped ? "放大框已缩小到屏幕范围内。" : "") +
+                (_model.IsFixedMode ? "选择“可移动”可试拖动。" : "拖动照片中的放大框可试位置。") +
+                "预览位置与屏幕上的位置互不影响。";
             PositionFrame();
         }
         catch (Exception exception)

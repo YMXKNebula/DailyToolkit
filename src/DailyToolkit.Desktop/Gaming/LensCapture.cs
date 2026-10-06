@@ -33,10 +33,10 @@ internal sealed class LensCapture : IDisposable
     public long FramesRendered => _renderer.FramesRendered;
 
     public LensCapture(LensGpuRenderer renderer, GraphicsCaptureItem item, SourceArea source, double sharpening,
-        int framesPerSecond = 0)
+        int framesPerSecond = 0,uint borderColor = LensBorderColor.DefaultRgb)
     {
         _renderer = renderer; _item = item;
-        _settings=new(source,sharpening);
+        _settings=new(source,sharpening,borderColor);
         _pacer=new(framesPerSecond,Stopwatch.Frequency);
         _sourceWidth=item.Size.Width; _sourceHeight=item.Size.Height;
         _device = CaptureInterop.Wrap(renderer.Device);
@@ -98,7 +98,7 @@ internal sealed class LensCapture : IDisposable
                     if (!_pacer.ShouldRender(now)) return;
                     using var texture = CaptureInterop.Texture(frame.Surface);
                     var settings=Volatile.Read(ref _settings);
-                    _renderer.Render(texture,settings.Source,settings.Sharpening);
+                    _renderer.Render(texture,settings.Source,settings.Sharpening,borderColor:settings.BorderColor);
                     if (!_firstFrameDelivered) { _firstFrameDelivered=true; FirstFrame?.Invoke(); }
                 }
                 finally { frame.Dispose(); }
@@ -112,9 +112,9 @@ internal sealed class LensCapture : IDisposable
         }
     }
 
-    public void UpdateSource(SourceArea source,double sharpening)
+    public void UpdateSource(SourceArea source,double sharpening,uint? borderColor=null)
     {
-        Volatile.Write(ref _settings,new(source,sharpening));
+        Volatile.Write(ref _settings,new(source,sharpening,borderColor ?? Volatile.Read(ref _settings).BorderColor));
         RequestRefresh();
     }
 
@@ -132,7 +132,7 @@ internal sealed class LensCapture : IDisposable
                     {
                         if (_stopped || _failed || Paused) return;
                         var settings=Volatile.Read(ref _settings);
-                        _renderer.RenderLast(settings.Source,settings.Sharpening);
+                        _renderer.RenderLast(settings.Source,settings.Sharpening,borderColor:settings.BorderColor);
                     }
                 }
             }
@@ -146,7 +146,7 @@ internal sealed class LensCapture : IDisposable
         });
     }
 
-    private sealed record RenderSettings(SourceArea Source,double Sharpening);
+    private sealed record RenderSettings(SourceArea Source,double Sharpening,uint BorderColor);
 
     internal (SourceArea Source,double Sharpening) SourceForDiagnostics
     {

@@ -110,10 +110,11 @@ internal static partial class Program
                 gaming.ActivationMode=LensActivationMode.Hold;
                 gaming.IsFixedMode=true;
                 gaming.WheelZoomEnabled=false;
+                gaming.BorderColor="#1a2b3c";
             }
             using(var reopened=new GamingViewModel(store))
             {
-                Require(reopened.ToggleShortcut?.Name == "Ctrl + Alt + Z" && reopened.IsHoldMode && reopened.IsFixedMode && !reopened.WheelZoomEnabled,
+                Require(reopened.ToggleShortcut?.Name == "Ctrl + Alt + Z" && reopened.IsHoldMode && reopened.IsFixedMode && !reopened.WheelZoomEnabled && reopened.BorderColor == "#1A2B3C",
                     "Shortcut, activation or movement mode was not restored");
                 reopened.FrameWidth=800; reopened.FrameHeight=600; reopened.Zoom=7;
                 reopened.AdjustZoom(120);
@@ -121,11 +122,13 @@ internal static partial class Program
                 reopened.Zoom=10;
                 Require(reopened.Zoom == 10,"The slider path could not reach 10x with wheel zoom off");
                 reopened.Sharpening=1; reopened.FrameRate=144; reopened.IsFavorite=true;
+                reopened.BorderColor="#notrgb";
+                Require(reopened.BorderColor == "#1A2B3C","Invalid frame colors were accepted");
                 var revision=reopened.PositionResetVersion;
                 reopened.ResetDefaultsCommand.Execute(null);
                 Require(reopened.FrameWidth == 640 && reopened.FrameHeight == 384 && reopened.Zoom == 2 &&
                     reopened.Sharpening == 0.35 && reopened.FrameRate == 0 && reopened.IsFixedMode && reopened.WheelZoomEnabled &&
-                    reopened.PositionResetVersion > revision && !reopened.IsActive && !reopened.HasCaptureResources,
+                    reopened.PositionResetVersion > revision && !reopened.IsActive && !reopened.HasCaptureResources && reopened.BorderColor == LensBorderColor.Default,
                     "Restoring defaults did not reset picture, placement and resource state");
                 Require(reopened.ToggleShortcut?.Name == "Ctrl + Alt + Z" && reopened.IsHoldMode && reopened.IsFavorite,
                     "Restoring defaults overwrote the user's shortcut, activation mode or favorite");
@@ -144,6 +147,7 @@ internal static partial class Program
                 "Legacy empty shortcut or the new fixed default was not preserved");
             File.WriteAllText(path,"{\"ToggleShortcut\":{\"Modifiers\":3,\"VirtualKey\":90,\"Name\":\"Ctrl + Alt + Z\"},\"CloseShortcut\":null}");
             Require(store.Load().ToggleShortcut?.Name == "Ctrl + Alt + Z","Legacy custom shortcut was not preserved");
+            Require(store.Load().BorderColor == LensBorderColor.Default,"Older settings did not receive the default frame color");
             File.WriteAllText(path,"{\"ToggleShortcut\":null,\"MovementMode\":0}");
             Require(store.Load() is { ToggleShortcut:null,MovementMode:LensMovementMode.Movable },"An explicitly saved movable choice was overwritten");
             File.WriteAllText(path,"{");
