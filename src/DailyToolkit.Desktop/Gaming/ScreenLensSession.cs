@@ -27,6 +27,8 @@ internal sealed class ScreenLensSession : IDisposable
     private (int Left,int Top,int X,int Y)? _pendingMove;
     private bool _moveQueued;
     private int _generation;
+    // Changing capture sources must not invalidate an already queued drag.
+    private int _movementGeneration;
     private bool _verticalGuide,_horizontalGuide;
     private DispatcherTimer? _startupTimer;
 
@@ -160,14 +162,14 @@ internal sealed class ScreenLensSession : IDisposable
             _pendingMove=(left,top,cursorX,cursorY);
             if (_moveQueued) return;
             _moveQueued=true;
-            var generation=_generation;
+            var generation=_movementGeneration;
             // Switch capture outside the low-level mouse hook; keep only the newest drag position.
             Application.Current.Dispatcher.BeginInvoke(() =>
             {
-                if (generation != _generation) return;
+                if (generation != _movementGeneration) return;
                 _moveQueued=false;
                 var move=_pendingMove; _pendingMove=null;
-                if (generation != _generation || !IsActive || !IsMovableMode || move is null) return;
+                if (!IsActive || !IsMovableMode || move is null) return;
                 try { MoveOnMonitor(move.Value.Left,move.Value.Top,
                     _monitors[LensPlacement.MonitorAt(_monitorBounds,move.Value.X,move.Value.Y)]); }
                 catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); Stop(); Status="跨屏移动失败，请重新开启放大框。"; }
@@ -257,6 +259,7 @@ internal sealed class ScreenLensSession : IDisposable
     public void Stop()
     {
         _generation++;
+        _movementGeneration++;
         _pointer?.Dispose(); _pointer=null;
         _guides?.Dispose(); _guides=null;
         _startupTimer?.Stop(); _startupTimer=null;

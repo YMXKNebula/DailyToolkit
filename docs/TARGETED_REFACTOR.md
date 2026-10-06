@@ -98,6 +98,14 @@
 
 本地证据：`artifacts/screens-shortcut-check.json`、`artifacts/screens-capture-check.json`、`artifacts/DailyToolkit-gaming.png`。单屏运行时跨屏检查记为未执行，不计为通过。未覆盖所有显卡、屏幕组合或系统权限策略。
 
+## 0.3.10 跨屏拖动修复
+
+捕获来源切换曾使已经排队的移动请求失效，但仍保留“正在排队”标记，后续鼠标移动只能覆盖待处理位置，无法再执行。拖动请求现在使用独立的有效期：切换捕获来源时保留，停止工具时作废，不再与首帧和失败回调共用代次。
+
+新增检查在 0.3.9 中复现了切换中丢失移动请求的问题。修复后的便携包通过 Core 31/31、Desktop 18/18、实际桌面交互 49/49；双屏检查包含切换中的排队输入、连续小步的相对鼠标移动、在另一屏幕继续拖动和返回原屏幕。显卡渲染、着色器和限帧代码未改动。
+
+本地证据：`artifacts/drag-queue-before.json.error.txt`、`artifacts/drag-queue-fixed.json`；未提交公开仓库。
+
 ## 其他更名文件（仅名称和引用）
 
 - `DailyToolkit.slnx`

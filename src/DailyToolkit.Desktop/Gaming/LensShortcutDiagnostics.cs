@@ -35,6 +35,8 @@ internal static class LensShortcutDiagnostics
         private LensCapture capture=null!;
         private KeyboardShortcut binding=null!;
         private bool? crossMonitorDrag;
+        private bool? queuedCrossMonitorDrag;
+        private bool? relativeCrossMonitorDrag;
         private byte[] before=null!,borderColor=null!,backdropColor=null!;
         private double previewX,previewY;
 
@@ -160,7 +162,7 @@ internal static class LensShortcutDiagnostics
             if (WindowFromPoint(new() { X=initial.Left+160,Y=initial.Top+120 }) != initialHandle)
                 throw new InvalidOperationException("Movable mode still made the magnified window mouse transparent.");
             Mouse(2);
-            await Task.Delay(30);
+            await Wait(() => gaming.GuidesForDiagnostics?.Visible == true,"Dragging did not show the desktop guides.");
             var guides=gaming.GuidesForDiagnostics!;
             if (!guides.Visible || !GetWindowRect(guides.VerticalHandle,out var vertical) ||
                 !GetWindowRect(guides.HorizontalHandle,out var horizontal) ||
@@ -349,9 +351,72 @@ internal static class LensShortcutDiagnostics
                 var returned=gaming.ActiveBounds!;
                 if (returned.Width != Math.Min(800,origin.Bounds.Width) || returned.Height != Math.Min(1200,origin.Bounds.Height))
                     throw new InvalidOperationException("Returning to a larger monitor did not restore the requested frame dimensions.");
+                var session=(ScreenLensSession)typeof(GamingViewModel).GetField("_session",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(gaming)!;
+                var injected=false;
+                var originX=origin.Bounds.Left+origin.Bounds.Width/2;
+                var originY=origin.Bounds.Top+origin.Bounds.Height/2;
+                void MoveDuringSwitch(string _)
+                {
+                    var bounds=gaming.ActiveBounds;
+                    if (injected || bounds is null || bounds.Left < target.Bounds.Left ||
+                        bounds.Top < target.Bounds.Top || bounds.Left+bounds.Width > target.Bounds.Left+target.Bounds.Width ||
+                        bounds.Top+bounds.Height > target.Bounds.Top+target.Bounds.Height) return;
+                    injected=true;
+                    // Input can arrive while a native/COM call pumps messages during a handoff.
+                    // Route it through the real controller before the new capture finishes starting.
+                    MoveMouse(originX,originY);
+                    oldPointer!.Process(0x200,originX,originY);
+                }
+                session.StatusChanged+=MoveDuringSwitch;
+                try
+                {
+                    MoveMouse(x,y);
+                    await Wait(() => injected && gaming.SelectedMonitor?.Handle == origin.Handle && ColorMatches(32,64,100),
+                        "A drag queued during capture handoff was lost or left the move queue stuck.");
+                    MoveMouse(originX+80,originY+40);
+                    await Wait(() => gaming.ActiveBounds?.Left == originX+80-returned.Width/2,
+                        "New mouse movement stayed blocked after a queued cross-screen drag.");
+                    queuedCrossMonitorDrag=true;
+                }
+                finally { session.StatusChanged-=MoveDuringSwitch; }
                 Mouse(4);
                 gaming.Stop(); RequireReleased(handle);
+                gaming.FrameWidth=640; gaming.FrameHeight=384;
+                MoveMouse(originX,originY);
+                gaming.Start();
+                await Wait(() => gaming.IsVisible,"Continuous cross-screen drag did not start.");
+                var starting=gaming.ActiveBounds!;
+                MoveMouse(starting.Left+starting.Width/2,starting.Top+starting.Height/2);
+                await Task.Delay(30); Mouse(2);
+                await Wait(() => gaming.GuidesForDiagnostics?.Visible == true,"Continuous drag did not acquire the picture.");
+                GetCursorPos(out var grip);
+                var offsetX=grip.X-starting.Left; var offsetY=grip.Y-starting.Top;
+                await WalkToAsync(x,y);
+                await WalkToAsync(originX,originY);
+                Mouse(4);
+                relativeCrossMonitorDrag=true;
+                handle=gaming.LensHandle;
+                gaming.Stop(); RequireReleased(handle);
                 crossMonitorDrag=true;
+
+                async Task WalkToAsync(int destinationX,int destinationY)
+                {
+                    var bounds=gaming.Monitors.Select(m => m.Bounds).ToArray();
+                    for(var step=0;step<160;step++)
+                    {
+                        GetCursorPos(out var current);
+                        if (Math.Abs(current.X-destinationX)<=40 && Math.Abs(current.Y-destinationY)<=40) return;
+                        Mouse(1,Math.Clamp(destinationX-current.X,-24,24),Math.Clamp(destinationY-current.Y,-24,24));
+                        await Task.Delay(15);
+                        GetCursorPos(out current);
+                        var screen=gaming.Monitors[LensPlacement.MonitorAt(bounds,current.X,current.Y)];
+                        var expected=LensPlacement.Snap(screen.Bounds,640,384,current.X-offsetX,current.Y-offsetY).Bounds;
+                        await Wait(() => gaming.SelectedMonitor?.Handle == screen.Handle && gaming.ActiveBounds == expected,
+                            "The lens stopped following consecutive relative mouse moves across screens.");
+                    }
+                    throw new InvalidOperationException("Consecutive relative mouse movement could not reach the other screen.");
+                }
             }
             finally { Mouse(4); gaming.Stop(); targetScene.Close(); backdrop.Content=originalScene; }
 
@@ -538,7 +603,8 @@ internal static class LensShortcutDiagnostics
                 LiveWheelCanBeDisabled=true,PreviewWheelCanBeDisabled=true,
                 LiveParametersReuseCapture=true,LatestSourceSettingsWin=true,ResizedPreviewDragUsesDisplayedCenter=true,
                 SimulatedCaptureFailureCleanup=true,MonitorSelectionAndDispose=true,CursorMonitorOnStart=true,
-                AvailableMonitors=gaming.Monitors.Count,CrossMonitorDragVerified=crossMonitorDrag
+                AvailableMonitors=gaming.Monitors.Count,CrossMonitorDragVerified=crossMonitorDrag,
+                QueuedCrossMonitorDragVerified=queuedCrossMonitorDrag,RelativeCrossMonitorDragVerified=relativeCrossMonitorDrag
             }));
 
         }
