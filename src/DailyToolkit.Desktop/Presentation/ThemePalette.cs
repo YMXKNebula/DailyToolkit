@@ -25,18 +25,26 @@ public sealed record ThemePalette
     public static IReadOnlyList<ThemePreset> Presets =>
     [
         new("浅色",new()), new("深色",Dark),
-        new("薄荷",new() { Window="#F0F8F5",Sidebar="#F5FCF8",Text="#203B31",Muted="#506E60",Border="#CFE4DA",
-            Accent="#18745A",AccentSoft="#DDF0E7",Hover="#E8F5EE" }),
-        new("海蓝",new() { Window="#F3F7FC",Sidebar="#F6F9FF",Text="#23364D",Muted="#566B85",Border="#D9E3F0",
-            Accent="#2B62A4",AccentSoft="#E3EDFA",Hover="#ECF3FC" }),
-        new("薰衣草",new() { Window="#F7F5FC",Sidebar="#FCFAFF",Text="#352D45",Muted="#6B5D7F",Border="#E5DDEC",
-            Accent="#72509C",AccentSoft="#EDE4F8",Hover="#F1EBF8" }),
-        new("暖沙",new() { Window="#FAF6EF",Surface="#FFFDFA",Sidebar="#FFFBF5",Text="#43362C",Muted="#786B5E",Border="#E9DFD1",
-            Accent="#895B30",AccentSoft="#F1E6D4",Hover="#F5EDDF",Warning="#FFF0D0",WarningText="#7A5626" }),
-        new("玫瑰",new() { Window="#FCF4F6",Sidebar="#FFF9FB",Text="#462D37",Muted="#7D5968",Border="#EBD8DF",
-            Accent="#A24568",AccentSoft="#F6E2EA",Hover="#FBEAF0" }),
+        new("薄荷",new() { Window="#DDEFE4",Surface="#F3FBF5",Sidebar="#CFE6D9",Text="#203B31",Muted="#435F51",Border="#ACCDBB",
+            Accent="#176045",AccentSoft="#C1E0CC",Hover="#D0E8D8" }),
+        new("海蓝",new() { Window="#DAE7F5",Surface="#F4F8FD",Sidebar="#C9DDF1",Text="#23364D",Muted="#465C77",Border="#A8C4DF",
+            Accent="#24548F",AccentSoft="#C4DAF1",Hover="#D5E5F7" }),
+        new("薰衣草",new() { Window="#E7DDF3",Surface="#FAF6FE",Sidebar="#DCD0EE",Text="#352D45",Muted="#5E4F72",Border="#C3AEDB",
+            Accent="#65438C",AccentSoft="#DCCCED",Hover="#E5D9F2" }),
+        new("暖沙",new() { Window="#EFE2CA",Surface="#FFFAF1",Sidebar="#E4D4B7",Text="#43362C",Muted="#6B5947",Border="#CCB993",
+            Accent="#75491F",AccentSoft="#E7D5B5",Hover="#EFE1C8",Warning="#FFF0D0",WarningText="#7A5626" }),
+        new("玫瑰",new() { Window="#F5DCE5",Surface="#FFF5F8",Sidebar="#EFCBD9",Text="#462D37",Muted="#714757",Border="#D8A7BA",
+            Accent="#913458",AccentSoft="#F0CBDA",Hover="#F5D9E3" }),
         new("石墨",new() { Window="#1C1D21",Surface="#26282D",Sidebar="#222429",Text="#F0F1F4",Muted="#B4B7C0",Border="#42454D",
-            Accent="#8CAAF2",AccentSoft="#303D59",AccentForeground="#15223B",Hover="#30333B",Warning="#463B24",WarningText="#EED492" })
+            Accent="#8CAAF2",AccentSoft="#303D59",AccentForeground="#15223B",Hover="#30333B",Warning="#463B24",WarningText="#EED492" }),
+        new("纯白",new() { Window="#F3F3F3",Surface="#FFFFFF",Sidebar="#FFFFFF",Text="#202020",Muted="#5C5C5C",Border="#D8D8D8",
+            Accent="#333333",AccentSoft="#E3E3E3",Hover="#EBEBEB",Warning="#F3EDDA",WarningText="#695327" }),
+        new("深海",new() { Window="#101D32",Surface="#172C47",Sidebar="#12233C",Text="#E5F2FF",Muted="#ACC4DE",Border="#345370",
+            Accent="#78C9EF",AccentSoft="#233F5A",AccentForeground="#102A3C",Hover="#203A56",Warning="#443B24",WarningText="#F2D48E" }),
+        new("暮紫",new() { Window="#22192F",Surface="#302340",Sidebar="#291D39",Text="#F3EAFE",Muted="#C5B1D8",Border="#554063",
+            Accent="#D3A8F1",AccentSoft="#463057",AccentForeground="#322044",Hover="#3B2B4D",Warning="#49352B",WarningText="#F0C796" }),
+        new("琥珀",new() { Window="#282019",Surface="#372C20",Sidebar="#2F251B",Text="#FFF0D7",Muted="#CDBA9C",Border="#5B4830",
+            Accent="#F1BD6E",AccentSoft="#4C3A24",AccentForeground="#382613",Hover="#433323",Warning="#4D3C1C",WarningText="#F4D186" })
     ];
     public static string NormalizeColor(string? value,string fallback) =>
         LensBorderColor.TryParse(value,out var rgb) ? $"#{rgb:X6}" : fallback;

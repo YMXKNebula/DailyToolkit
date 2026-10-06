@@ -25,7 +25,7 @@ internal static partial class Program
                 model.Page="screen-lens"; model.Gaming.Zoom=4; model.Gaming.WheelZoomEnabled=false;
                 model.OpenSettingsCommand.Execute(null);
                 Require(model.IsSettings && !model.IsFavorites && !model.ShowFavoritesEmpty && !model.ShowRefresh &&
-                    model.PageTitle == "主题配色" && model.NavigationItems.Count == 5 &&
+                    model.PageTitle == "主题配色" && model.NavigationItems.Count == 4 &&
                     model.NavigationItems.Single(item => item.IsSelected).Id == "settings-theme" &&
                     !model.RefreshCommand.CanExecute(null) && !model.MoveNavigationItem("settings","computer") &&
                     model.Gaming.Zoom == 4 && !model.Gaming.IsActive,"Opening settings changed tool state or kept unrelated navigation");
@@ -34,15 +34,16 @@ internal static partial class Program
                 model.OpenFavoritesCommand.Execute(null);
                 Require(model.ShowFavoritesEmpty,"The check did not start with empty favorites");
                 model.OpenSettingsCommand.Execute(null);
-                Require(model.IsSettings && !model.ShowFavoritesEmpty && !model.ShowAllTools && model.SettingsToggleHint == "返回收藏夹",
-                    "Settings displayed the empty-favorites card or forgot its return destination");
+                Require(model.IsSettings && !model.IsFavorites && !model.ShowFavoritesEmpty && !model.ShowAllTools && model.SettingsToggleHint == "关闭软件设置",
+                    "Settings retained favorites behind its navigation");
                 model.Gaming.IsFavorite=true;
                 model.Page="settings-startup";
                 Require(model.ShowStartupSettings && !model.ShowThemeSettings && model.NavigationItems.Single(item => item.IsSelected).Id == "settings-startup",
                     "Selecting a settings category exited settings or lost its selection");
-                Require(model.IsSettings && model.NavigationItems.Count == 5,"Updating a favorite replaced the open settings page");
+                Require(model.IsSettings && model.NavigationItems.Count == 4,"Updating a favorite replaced the open settings page");
                 model.ExitSettingsCommand.Execute(null);
-                Require(model.IsFavorites && model.ShowScreenLens,"Returning from settings lost the favorites context");
+                Require(!model.IsFavorites && !model.IsSettings && model.ShowAllTools && model.ShowScreenLens,
+                    "Closing settings after switching from favorites returned to another panel");
                 model.OpenSettingsCommand.Execute(null);
                 model.Gaming.IsFavorite=false;
                 model.Page="favorites";
@@ -50,6 +51,26 @@ internal static partial class Program
                 model.OpenSettingsCommand.Execute(null);
                 model.Page="computer";
                 Require(model.IsHome && !model.IsSettings && !model.IsFavorites,"Direct navigation did not leave settings and favorites correctly");
+                foreach (var empty in new[] { true,false })
+                {
+                    model.Gaming.IsFavorite=!empty;
+                    foreach (var firstFavorites in new[] { true,false })
+                    {
+                        for (var repeat=0;repeat<3;repeat++)
+                        {
+                            if (firstFavorites) { model.OpenFavoritesCommand.Execute(null); model.OpenSettingsCommand.Execute(null); }
+                            else { model.OpenSettingsCommand.Execute(null); model.OpenFavoritesCommand.Execute(null); }
+                            Require(model.IsFavorites != model.IsSettings,"Panel entry did not replace the previous panel");
+                        }
+                        if (model.IsSettings) model.ExitSettingsCommand.Execute(null); else model.ExitFavoritesCommand.Execute(null);
+                        Require(model.IsHome && model.ShowAllTools && !model.IsFavorites && !model.IsSettings && model.NavigationItems.Count == 2,
+                            "Repeated peer-panel switching did not return to the main interface");
+                    }
+                }
+                model.Page="settings-animation";
+                Require(model.ShowThemeSettings && model.NavigationItems.All(item => item.Id != "settings-animation"),
+                    "The old animation route did not resolve to theme settings");
+                model.ExitSettingsCommand.Execute(null);
                 model.PageAnimationsEnabled=false;
             }
             using (var reopened=Create()) Require(!reopened.PageAnimationsEnabled && !reopened.Gaming.WheelZoomEnabled,
@@ -62,7 +83,7 @@ internal static partial class Program
             var blocked=Path.Combine(directory.FullName,"blocked");
             File.WriteAllText(blocked,"file");
             Require(!new AppPreferencesStore(Path.Combine(blocked,"settings.json")).Save(new()),"A failed settings write reported success");
-            Console.WriteLine("PASS Software settings restore tool/favorites context, save animation preference and recover safely from unreadable files");
+            Console.WriteLine("PASS Favorites/settings replace each other and close to normal navigation; merged animation route, persistence and unreadable-file recovery");
         }
         finally
         {

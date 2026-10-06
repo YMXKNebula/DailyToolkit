@@ -8,13 +8,23 @@ public sealed partial class MainViewModel
     public IReadOnlyList<ThemePreset> ThemePresets { get; }=ThemePalette.Presets;
     public ThemePalette Theme => _appPreferences.Theme;
     private ThemePalette _previewTheme=new();
+    private string _previewAnimationColor="#267A5D";
     public ThemePalette PreviewTheme => _previewTheme;
-    public bool HasThemeChanges => PreviewTheme != Theme;
+    public bool HasThemeChanges => PreviewTheme != Theme || PreviewAnimationColor != AnimationColor;
+    public string PreviewAnimationColor
+    {
+        get => _previewAnimationColor;
+        set { var color=ThemePalette.NormalizeColor(value,PreviewAnimationColor);
+            if (Set(ref _previewAnimationColor,color)) NotifyThemePreview(); }
+    }
     public string AnimationColor
     {
         get => _appPreferences.AnimationColor;
         set { var color=ThemePalette.NormalizeColor(value,AnimationColor); if (color == AnimationColor) return;
-            _appPreferences=_appPreferences with { AnimationColor=color }; SaveAppPreferences(); Notify(); }
+            var followsApplied=PreviewAnimationColor == AnimationColor;
+            _appPreferences=_appPreferences with { AnimationColor=color }; SaveAppPreferences(); Notify();
+            if (followsApplied) _previewAnimationColor=color;
+            NotifyThemePreview(); UpdateSelectedPreset(); }
     }
     public RelayCommand LightThemeCommand { get; private set; }=null!;
     public RelayCommand DarkThemeCommand { get; private set; }=null!;
@@ -27,6 +37,7 @@ public sealed partial class MainViewModel
     private void InitializeAppearance()
     {
         _previewTheme=Theme;
+        _previewAnimationColor=AnimationColor;
         var fields=new[] { ("Window","窗口背景"),("Surface","卡片与标题栏"),("Sidebar","侧栏背景"),("Text","主要文字"),
             ("Muted","次要文字"),("Border","边框"),("Accent","强调色"),("AccentSoft","选中背景"),
             ("AccentForeground","强调按钮文字"),("Hover","悬停背景"),("Warning","提示背景"),("WarningText","提示文字") };
@@ -41,33 +52,34 @@ public sealed partial class MainViewModel
             };
             ThemeColors.Add(option);
         }
-        LightThemeCommand=new(_ => SetTheme(new())); DarkThemeCommand=new(_ => SetTheme(ThemePalette.Dark));
-        ResetAppearanceCommand=new(_ => { SetTheme(new()); AnimationColor="#267A5D"; PageAnimationsEnabled=true; });
-        SelectThemePresetCommand=new(value => { if (value is ThemePreset preset && ThemePresets.Contains(preset)) SetTheme(preset.Palette); });
-        SaveThemeCommand=new(_ => SetTheme(PreviewTheme),() => HasThemeChanges);
-        DiscardThemeCommand=new(_ => SetThemePreview(Theme),() => HasThemeChanges);
-        ResetThemePreviewCommand=new(_ => SetThemePreview(new()));
+        LightThemeCommand=new(_ => SetTheme(new(),new ThemePalette().Accent));
+        DarkThemeCommand=new(_ => SetTheme(ThemePalette.Dark,ThemePalette.Dark.Accent));
+        ResetAppearanceCommand=new(_ => { LightThemeCommand.Execute(null); PageAnimationsEnabled=true; });
+        SelectThemePresetCommand=new(value => { if (value is ThemePreset preset && ThemePresets.Contains(preset)) SetTheme(preset.Palette,preset.Palette.Accent); });
+        SaveThemeCommand=new(_ => SetTheme(PreviewTheme,PreviewAnimationColor),() => HasThemeChanges);
+        DiscardThemeCommand=new(_ => SetThemePreview(Theme,AnimationColor),() => HasThemeChanges);
+        ResetThemePreviewCommand=new(_ => SetThemePreview(new(),new ThemePalette().Accent));
         UpdateSelectedPreset();
     }
     private void NotifyThemePreview()
     {
-        Notify(nameof(PreviewTheme)); Notify(nameof(HasThemeChanges));
+        Notify(nameof(PreviewTheme)); Notify(nameof(PreviewAnimationColor)); Notify(nameof(HasThemeChanges));
         SaveThemeCommand.Refresh(); DiscardThemeCommand.Refresh();
     }
-    private void SetThemePreview(ThemePalette palette)
+    private void SetThemePreview(ThemePalette palette,string animationColor)
     {
         _updatingPalette=true;
         try { foreach (var option in ThemeColors) option.Value=(string)typeof(ThemePalette).GetProperty(option.Key)!.GetValue(palette)!; }
         finally { _updatingPalette=false; }
-        _previewTheme=palette; NotifyThemePreview();
+        _previewTheme=palette; _previewAnimationColor=animationColor; NotifyThemePreview();
     }
     private void UpdateSelectedPreset()
-    { foreach (var preset in ThemePresets) preset.IsSelected=preset.Palette == Theme; }
-    private void SetTheme(ThemePalette palette)
+    { foreach (var preset in ThemePresets) preset.IsSelected=preset.Palette == Theme && preset.Palette.Accent == AnimationColor; }
+    private void SetTheme(ThemePalette palette,string animationColor)
     {
-        var next=_appPreferences with { Theme=palette.Normalize() };
+        var next=_appPreferences with { Theme=palette.Normalize(),AnimationColor=ThemePalette.NormalizeColor(animationColor,AnimationColor) };
         if (!_appPreferencesStore.Save(next)) { Notice="配色未能保存。"; return; }
-        _appPreferences=next; SetThemePreview(Theme); UpdateSelectedPreset(); Notify(nameof(Theme));
+        _appPreferences=next; SetThemePreview(Theme,AnimationColor); UpdateSelectedPreset(); Notify(nameof(Theme)); Notify(nameof(AnimationColor));
     }
     private bool SaveAppPreferences()
     {

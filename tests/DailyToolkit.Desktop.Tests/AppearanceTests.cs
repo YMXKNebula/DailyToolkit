@@ -53,14 +53,22 @@ internal static partial class Program
                 }
             }
             var presetButtons=Descendants(presetList).OfType<Button>().ToArray();
-            Require(!details.IsExpanded && model.ThemePresets.Count == 8 && presetButtons.Length == 8 && !save.IsEnabled,
+            Require(!details.IsExpanded && model.ThemePresets.Count == 12 && presetButtons.Length == 12 && !save.IsEnabled &&
+                presetButtons.All(button => button.Content is TextBlock text && text.Text == ((ThemePreset)button.DataContext).Name),
                 "Theme presets were missing or detailed colors were shown without opening their section");
             var blue=model.ThemePresets.Single(p => p.Name == "海蓝");
             await ClickCommandAsync(presetButtons.Single(button => button.DataContext == blue));
             window.UpdateLayout();
             Require(model.Theme == blue.Palette && preview.Palette == blue.Palette && store.Load().Theme == blue.Palette &&
+                model.AnimationColor == blue.Palette.Accent && preview.AnimationColor == blue.Palette.Accent &&
+                store.Load().AnimationColor == blue.Palette.Accent &&
+                model.ThemeColors.All(option => option.Value == (string)typeof(ThemePalette).GetProperty(option.Key)!.GetValue(blue.Palette)!) &&
                 model.ThemePresets.Single(p => p.IsSelected) == blue && !model.HasThemeChanges,
                 "Selecting a real preset button did not apply and persist the whole palette");
+            var star=(System.Windows.Shapes.Path)window.FindName("FavoritesIcon");
+            var gear=(System.Windows.Shapes.Path)window.FindName("SettingsIcon");
+            Require(star.Fill == gear.Fill && ((SolidColorBrush)star.Fill).Color.ToString() == "#FF"+blue.Palette.Accent[1..],
+                "Selecting a theme did not synchronize both footer button colors");
             var originalFile=File.ReadAllText(Path.Combine(directory.FullName,"settings.json"));
             details.IsExpanded=true; window.UpdateLayout();
             var picker=Descendants(details).OfType<ColorPicker>().Single(control => control.DataContext is ThemeColorOption { Key:"Window" });
@@ -70,22 +78,36 @@ internal static partial class Program
             Require(model.PreviewTheme.Window == "#202020" && preview.Palette == model.PreviewTheme && model.Theme == blue.Palette &&
                 model.HasThemeChanges && save.IsEnabled && File.ReadAllText(Path.Combine(directory.FullName,"settings.json")) == originalFile,
                 "A detailed color changed the live theme or saved settings before Save");
+            var animationPicker=(ColorPicker)window.FindName("AnimationColorPicker");
+            Descendants(animationPicker).OfType<Button>().Single(button => button.Tag as string == "#4285F4")
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.UpdateLayout();
+            Require(model.PreviewAnimationColor == "#4285F4" && preview.AnimationColor == "#4285F4" &&
+                model.AnimationColor == blue.Palette.Accent && ((SolidColorBrush)star.Fill).Color.ToString() == "#FF"+blue.Palette.Accent[1..] &&
+                File.ReadAllText(Path.Combine(directory.FullName,"settings.json")) == originalFile,
+                "Editing button/animation colors changed the live buttons or settings before Save");
             model.AnimationColor="#123456"; window.UpdateLayout();
             Require(((SolidColorBrush)window.FindResource("WindowBrush")).Color.ToString() == "#FF"+blue.Palette.Window[1..] &&
                 store.Load().Theme == blue.Palette && model.HasThemeChanges,
                 "An unrelated appearance update applied or persisted the unsaved palette");
-            using (var reopened=Create(store)) Require(reopened.Theme == blue.Palette && reopened.PreviewTheme == blue.Palette,
+            using (var reopened=Create(store)) Require(reopened.Theme == blue.Palette && reopened.PreviewTheme == blue.Palette &&
+                reopened.AnimationColor == "#123456" && reopened.PreviewAnimationColor == "#123456",
                 "An unsaved preview survived as the applied palette in a new instance");
             model.Page="home"; model.Page="settings-theme"; window.UpdateLayout();
             Require(model.Theme == blue.Palette && model.PreviewTheme.Window == "#202020",
                 "Navigating away from the editor applied or lost its draft");
             await ClickCommandAsync(save); window.UpdateLayout();
-            Require(model.Theme.Window == "#202020" && store.Load().Theme == model.Theme && !model.HasThemeChanges &&
+            Require(model.Theme.Window == "#202020" && store.Load().Theme == model.Theme &&
+                model.AnimationColor == "#4285F4" && store.Load().AnimationColor == "#4285F4" &&
+                ((SolidColorBrush)star.Fill).Color.ToString() == "#FF4285F4" && star.Fill == gear.Fill && !model.HasThemeChanges &&
                 ((SolidColorBrush)window.FindResource("WindowBrush")).Color.ToString() == "#FF202020" && !save.IsEnabled &&
                 !model.ThemePresets.Any(preset => preset.IsSelected),"Save did not apply the draft or retained the old preset selection");
             model.ThemeColors.Single(option => option.Key == "Text").Value="#654321";
             model.DiscardThemeCommand.Execute(null);
-            Require(model.PreviewTheme == model.Theme && !model.HasThemeChanges,"Discard did not restore the applied colors");
+            model.PreviewAnimationColor="#654321";
+            model.DiscardThemeCommand.Execute(null);
+            Require(model.PreviewTheme == model.Theme && model.PreviewAnimationColor == model.AnimationColor && !model.HasThemeChanges,
+                "Discard did not restore the applied palette and button colors");
             model.ResetThemePreviewCommand.Execute(null);
             Require(model.PreviewTheme == new ThemePalette() && model.Theme.Window == "#202020" && model.HasThemeChanges,
                 "Restoring preview defaults changed the applied theme before Save");
@@ -96,9 +118,15 @@ internal static partial class Program
             using (var failed=Create(new AppPreferencesStore(Path.Combine(blocked,"settings.json"))))
             {
                 failed.ThemeColors.Single(option => option.Key == "Window").Value="#123456";
+                failed.PreviewAnimationColor="#4285F4";
                 failed.SaveThemeCommand.Execute(null);
                 Require(failed.Theme == new ThemePalette() && failed.PreviewTheme.Window == "#123456" &&
+                    failed.AnimationColor == "#267A5D" && failed.PreviewAnimationColor == "#4285F4" &&
                     failed.HasThemeChanges && failed.HasNotice,"A failed Save applied the draft or discarded it");
+                failed.SelectThemePresetCommand.Execute(failed.ThemePresets.Single(preset => preset.Name == "深海"));
+                Require(failed.Theme == new ThemePalette() && failed.AnimationColor == "#267A5D" &&
+                    failed.PreviewTheme.Window == "#123456" && failed.PreviewAnimationColor == "#4285F4",
+                    "A failed preset save partially changed the applied palette, buttons or draft");
             }
             double Luminance(string hex)
             {
@@ -112,8 +140,17 @@ internal static partial class Program
             {
                 var p=preset.Palette;
                 Require(p == p.Normalize() && Contrast(p.Text,p.Window)>=4.5 && Contrast(p.Muted,p.Surface)>=4.5 &&
-                    Contrast(p.AccentForeground,p.Accent)>=4.5 && Contrast(p.Accent,p.AccentSoft)>=4.5,
+                    Contrast(p.AccentForeground,p.Accent)>=4.5 && Contrast(p.Accent,p.AccentSoft)>=4.5 &&
+                    Contrast(p.Text,p.Sidebar)>=4.5 && Contrast(p.Muted,p.Sidebar)>=4.5 && Contrast(p.Accent,p.Sidebar)>=4.5,
                     $"Preset colors were invalid or had low text contrast: {preset.Name}");
+                model.SelectThemePresetCommand.Execute(preset); window.UpdateLayout();
+                model.OpenFavoritesCommand.Execute(null); window.UpdateLayout();
+                Require(model.AnimationColor == p.Accent && ((SolidColorBrush)star.Fill).Color.ToString() == "#FF"+p.Accent[1..] &&
+                    star.Fill == gear.Fill,"A preset did not color both buttons in favorites");
+                model.OpenSettingsCommand.Execute(null); window.UpdateLayout();
+                Require(star.Fill == gear.Fill && ((SolidColorBrush)star.Fill).Color.ToString() == "#FF"+p.Accent[1..] &&
+                    model.ThemeColors.All(option => option.Value == (string)typeof(ThemePalette).GetProperty(option.Key)!.GetValue(p)!),
+                    "Switching panels lost preset button colors or detailed configuration");
             }
         }
         finally
@@ -123,6 +160,6 @@ internal static partial class Program
             if (Path.GetFullPath(directory.FullName).StartsWith(tempRoot,StringComparison.OrdinalIgnoreCase) &&
                 directory.Name.StartsWith("DailyToolkit-theme-tests-",StringComparison.Ordinal)) directory.Delete(recursive:true);
         }
-        Console.WriteLine("PASS Eight theme presets apply directly; detailed colors affect only preview until Save, with discard, restart isolation and failed-save recovery");
+        Console.WriteLine("PASS Twelve named presets sync footer colors and detailed configuration; palette/button drafts stay in preview until atomic Save");
     }
 }

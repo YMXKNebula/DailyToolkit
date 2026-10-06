@@ -265,7 +265,7 @@ internal static partial class Program
             }
             settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             Require(model.IsSettings && !model.IsFavorites && model.PageTitle == "主题配色" &&
-                ((UIElement)window.FindName("SettingsScroll")).IsVisible && settingsButton.ToolTip as string == "返回工具" &&
+                ((UIElement)window.FindName("SettingsScroll")).IsVisible && settingsButton.ToolTip as string == "关闭软件设置" &&
                 settingsButton.TranslatePoint(new Point(),root).X > favoriteButton.TranslatePoint(new Point(),root).X,
                 "The gear did not sit beside the star or open software settings");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
@@ -316,8 +316,8 @@ internal static partial class Program
             Require(Math.Abs(starCenter.X+gearCenter.X-2*footerOrigin.X-footer.ActualWidth)<=1 && Math.Abs(starCenter.Y-gearCenter.Y)<=1 &&
                 gearCenter.X-starCenter.X-favoriteButton.ActualWidth >= 30 && sidebar.ActualHeight-starCenter.Y is > 40 and < 46,
                 $"Footer buttons were not spaced symmetrically: star={starCenter}, gear={gearCenter}, sidebar={sidebar.ActualWidth}x{sidebar.ActualHeight}");
-            model.AnimationColor="#4285F4";
-            model.DarkThemeCommand.Execute(null); window.UpdateLayout();
+            model.DarkThemeCommand.Execute(null);
+            model.AnimationColor="#4285F4"; window.UpdateLayout();
             Require(starIcon.Fill == gearIcon.Fill && starIcon.Fill == tint.Fill &&
                 ((System.Windows.Media.SolidColorBrush)starIcon.Fill).Color.ToString() == "#FF4285F4",
                 "Changing the animation color did not update both buttons and the moving shape together");
@@ -326,7 +326,7 @@ internal static partial class Program
                 ((System.Windows.Media.SolidColorBrush)window.FindResource("WindowBrush")).Color.ToString() == "#FF171D1B",
                 "The live theme and preview did not receive the selected palette");
             model.LightThemeCommand.Execute(null);
-            var settingsCards=new[] { "ThemeSettingsCard","AnimationSettingsCard","BackgroundSettingsCard","StartupSettingsCard","AboutSettingsCard" };
+            var settingsCards=new[] { "ThemeSettingsCard","BackgroundSettingsCard","StartupSettingsCard","AboutSettingsCard" };
             foreach (var (item,index) in model.NavigationItems.ToArray().Select((item,index) => (item,index)))
             {
                 model.NavigateCommand.Execute(item); window.UpdateLayout();
@@ -335,13 +335,16 @@ internal static partial class Program
                     ((UIElement)window.FindName(settingsCards[index])).IsVisible,
                     "Settings navigation did not select exactly one category page");
             }
-            Require(((System.Windows.Controls.TextBlock)window.FindName("ProductVersion")).Text == "版本 0.5.4" &&
+            Require(((System.Windows.Controls.TextBlock)window.FindName("ProductVersion")).Text == "版本 0.5.5" &&
                 ((FrameworkElement)window.FindName("AboutSettingsCard")).IsVisible &&
                 !Descendants(sidebar).OfType<System.Windows.Controls.TextBlock>().Any(text => text.Text.Contains("DailyToolkit")),
                 "Product information remained in the sidebar instead of About");
             Require(!Buttons(window).Any(button => button.Content as string == "应用启动设置"),
                 "The removed startup apply button was still present");
             model.Page="settings-animation"; window.UpdateLayout();
+            Require(model.ShowThemeSettings && ((FrameworkElement)window.FindName("AnimationSettingsSection")).IsVisible,
+                "Animation controls were not included in theme settings");
+            ((System.Windows.Controls.Expander)window.FindName("ThemeDetails")).IsExpanded=true; window.UpdateLayout();
             var animationPicker=(DailyToolkit.Desktop.Controls.ColorPicker)window.FindName("AnimationColorPicker");
             var customButton=(System.Windows.Controls.Button)animationPicker.FindName("CustomColorButton");
             Require(customButton.Content is DailyToolkit.Desktop.Controls.ColorWheelIcon,"Custom colors still used a monochrome glyph");
@@ -377,6 +380,16 @@ internal static partial class Program
                 "The actual animation checkbox did not persist the choice");
             settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             Require(!model.IsSettings && !transition.IsVisible && transition.Source is null,"Disabling animation still allocated a transition snapshot");
+            model.Page="computer";
+            foreach (var first in new[] { favoriteButton,settingsButton })
+            {
+                var second=first == favoriteButton ? settingsButton : favoriteButton;
+                first.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                second.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                second.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                Require(model.IsHome && model.ShowAllTools && !model.IsFavorites && !model.IsSettings &&
+                    transition.Source is null,"Crossing footer buttons then closing restored the previous panel instead of the main interface");
+            }
             window.Width=680;
             window.UpdateLayout();
             Require(System.Windows.Controls.Grid.GetRow(preview) == 1 && System.Windows.Controls.Grid.GetColumn(preview) == 0,
