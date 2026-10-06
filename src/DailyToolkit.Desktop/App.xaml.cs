@@ -124,11 +124,14 @@ public partial class App : Application
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
             await window.WaitForLensPreviewAsync().WaitAsync(TimeSpan.FromSeconds(15));
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
-            if (ReadArgument(e.Args,"--transition") == "favorites")
+            if (ReadArgument(e.Args,"--transition") is "favorites" or "settings")
             {
-                ((System.Windows.Controls.Button)window.FindName("FavoritesButton")).RaiseEvent(
+                ((System.Windows.Controls.Button)window.FindName(ReadArgument(e.Args,"--transition") == "settings" ? "SettingsButton" : "FavoritesButton")).RaiseEvent(
                     new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-                await Task.Delay(120);
+                if (double.TryParse(ReadArgument(e.Args,"--transition-at"),out var transitionMilliseconds) &&
+                    double.IsFinite(transitionMilliseconds) && transitionMilliseconds is >= 0 and <= 460)
+                    window.SeekPageTransition(TimeSpan.FromMilliseconds(transitionMilliseconds));
+                else await Task.Delay(180);
                 window.UpdateLayout();
             }
             var content = window.PreviewContent;

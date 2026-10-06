@@ -2,15 +2,34 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:DailyToolkit.Desktop.Controls"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="DailyToolkit" Width="1040" Height="800" MinWidth="680" MinHeight="540"
         FontFamily="Microsoft YaHei UI" FontSize="14"
         Foreground="{DynamicResource TextBrush}" Background="{DynamicResource WindowBrush}"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="Auto"
-        TextOptions.TextHintingMode="Fixed" WindowStartupLocation="CenterScreen">
+        TextOptions.TextHintingMode="Fixed" WindowStartupLocation="CenterScreen" WindowStyle="None">
+  <shell:WindowChrome.WindowChrome>
+    <shell:WindowChrome CaptionHeight="36" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+  </shell:WindowChrome.WindowChrome>
   <Grid x:Name="RootContent" Background="{DynamicResource WindowBrush}" RenderOptions.ClearTypeHint="Enabled" ClipToBounds="True">
+    <Grid.RowDefinitions><RowDefinition Height="36" /><RowDefinition Height="*" /></Grid.RowDefinitions>
     <Grid.ColumnDefinitions><ColumnDefinition Width="188" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-    <Grid x:Name="SidebarSurface" ClipToBounds="True">
+    <Grid x:Name="CaptionPanel" Grid.ColumnSpan="2" Background="{DynamicResource SurfaceBrush}">
+      <TextBlock Text="DailyToolkit" FontSize="12" Margin="16,0,0,0" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+        <Button Click="MinimizeWindow" Width="44" Height="36" Padding="0" BorderThickness="0" Background="Transparent" ToolTip="最小化" AutomationProperties.Name="最小化">
+          <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+        </Button>
+        <Button x:Name="MaximizeButton" Click="ToggleMaximizeWindow" Width="44" Height="36" Padding="0" BorderThickness="0" Background="Transparent" ToolTip="最大化" AutomationProperties.Name="最大化">
+          <TextBlock x:Name="MaximizeGlyph" Text="&#xE922;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+        </Button>
+        <Button Click="CloseWindow" Width="44" Height="36" Padding="0" BorderThickness="0" Background="Transparent" ToolTip="关闭" AutomationProperties.Name="关闭">
+          <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="11" />
+        </Button>
+      </StackPanel>
+    </Grid>
+    <Grid x:Name="SidebarSurface" Grid.Row="1" ClipToBounds="True">
     <Border x:Name="SidebarBase" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
       <Border.Style>
         <Style TargetType="Border">
@@ -29,18 +48,27 @@
           <TextBlock Text="日常小工具" Style="{StaticResource MutedText}" Margin="0,13,0,0" />
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,0">
-          <Button x:Name="FavoritesButton" Click="ToggleFavorites" HorizontalAlignment="Left" Padding="11,7"
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+          <Button x:Name="FavoritesButton" Click="ToggleFavorites" Width="46" Height="46" Padding="0"
                   FontSize="25" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AccentBrush}"
-                  ToolTip="{Binding FavoritesToggleHint}" AutomationProperties.Name="{Binding FavoritesToggleHint}" Margin="0,0,0,16">
+                  ToolTip="{Binding FavoritesToggleHint}" AutomationProperties.Name="{Binding FavoritesToggleHint}">
             <TextBlock Text="★" FontFamily="Segoe UI Symbol" FontSize="25" />
           </Button>
+          <Button x:Name="SettingsButton" Click="ToggleSettings" Width="46" Height="46" Padding="0" Margin="8,0,0,0"
+                  BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AccentBrush}"
+                  ToolTip="{Binding SettingsToggleHint}" AutomationProperties.Name="{Binding SettingsToggleHint}">
+            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="25" />
+          </Button>
+          </StackPanel>
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.4.2</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.4.3</Hyperlink>
           </TextBlock>
         </StackPanel>
         <DockPanel x:Name="NavigationPanel">
           <TextBlock DockPanel.Dock="Top" Text="收藏夹" FontWeight="SemiBold" Margin="10,10,0,12"
                      Visibility="{Binding IsFavorites, Converter={StaticResource VisibleWhen}}" />
+          <TextBlock DockPanel.Dock="Top" Text="设置" FontWeight="SemiBold" Margin="10,10,0,12"
+                     Visibility="{Binding IsSettings, Converter={StaticResource VisibleWhen}}" />
           <TextBlock DockPanel.Dock="Top" Text="拖动排序 · 右键也可调整" FontSize="11" Foreground="{DynamicResource MutedBrush}"
                      Margin="8,0,0,10" Visibility="{Binding ShowAllTools, Converter={StaticResource VisibleWhen}}" />
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -74,7 +102,7 @@
       </DockPanel>
     </Border>
     </Grid>
-    <Grid x:Name="MainContent" Grid.Column="1" Margin="{Binding ContentPadding}">
+    <Grid x:Name="MainContent" Grid.Row="1" Grid.Column="1" Margin="{Binding ContentPadding}">
       <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
       <Grid Margin="0,0,0,20">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -82,7 +110,8 @@
           <TextBlock Text="{Binding PageTitle}" FontSize="26" FontWeight="SemiBold" />
           <TextBlock Text="{Binding PageDescription}" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
         </StackPanel>
-        <Button Grid.Column="1" Content="{Binding RefreshText}" Command="{Binding RefreshCommand}" VerticalAlignment="Top" Margin="0,5,0,0" />
+        <Button x:Name="RefreshButton" Grid.Column="1" Content="{Binding RefreshText}" Command="{Binding RefreshCommand}" VerticalAlignment="Top" Margin="0,5,0,0"
+                Visibility="{Binding ShowRefresh, Converter={StaticResource VisibleWhen}}" />
       </Grid>
 
       <ScrollViewer x:Name="HomeScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
@@ -286,6 +315,29 @@
         </StackPanel>
       </ScrollViewer>
 
+      <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                    Visibility="{Binding IsSettings, Converter={StaticResource VisibleWhen}}">
+        <StackPanel Margin="0,0,8,0">
+          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <StackPanel>
+              <TextBlock Text="界面" Style="{StaticResource SectionTitle}" />
+              <CheckBox x:Name="PageAnimationSwitch" Content="播放页面切换动画" IsChecked="{Binding PageAnimationsEnabled, Mode=TwoWay}"
+                        FontFamily="Microsoft YaHei UI" FontSize="14" Foreground="{DynamicResource TextBrush}" />
+              <TextBlock Text="收藏夹用星形，软件设置用齿轮。关闭后直接切换页面。" Style="{StaticResource MutedText}" Margin="0,10,0,0" />
+              <TextBlock Text="动画也遵循 Windows 的动画和高对比度设置。" Style="{StaticResource MutedText}" Margin="0,6,0,0" />
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}">
+            <StackPanel>
+              <TextBlock Text="关于" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="DailyToolkit 0.4.3" FontWeight="SemiBold" />
+              <TextBlock Text="把自己常用的小工具放在一起。设置保存在这台电脑上。" Style="{StaticResource MutedText}" Margin="0,10,0,14" />
+              <TextBlock><Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">项目主页</Hyperlink></TextBlock>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
       <Border Grid.Row="1" Style="{StaticResource Card}" VerticalAlignment="Top"
               Visibility="{Binding ShowFavoritesEmpty, Converter={StaticResource VisibleWhen}}">
         <StackPanel>
@@ -305,9 +357,11 @@
         </Grid>
       </StackPanel>
     </Grid>
-    <Image x:Name="FavoritesTransition" Grid.ColumnSpan="2" Panel.ZIndex="100" Visibility="Collapsed"
+    <Image x:Name="PageTransition" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="100" Visibility="Collapsed"
            IsHitTestVisible="False" Stretch="Fill" />
-    <Path x:Name="FavoritesTransitionTint" Grid.ColumnSpan="2" Panel.ZIndex="101" Visibility="Collapsed"
-          IsHitTestVisible="False" Fill="{DynamicResource AccentSoftBrush}" Opacity="0" />
+    <Grid x:Name="PageTransitionCover" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="101" Visibility="Collapsed" IsHitTestVisible="False">
+      <Path x:Name="PageTransitionShape" Fill="{DynamicResource AccentBrush}" />
+      <Path x:Name="PageTransitionHub" Fill="{DynamicResource AccentSoftBrush}" />
+    </Grid>
   </Grid>
 </Window>

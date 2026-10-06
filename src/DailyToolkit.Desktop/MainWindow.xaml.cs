@@ -28,7 +28,9 @@ public partial class MainWindow : Window
     private const string HotkeyConflictNotice="快捷键可能被其他软件占用，请换一个按键，或用放大工具中的按钮。";
     private Point _navigationDragStart;
     private NavigationItem? _navigationDragItem;
-    private int _favoritesTransitionGeneration;
+    private int _pageTransitionGeneration;
+    private Storyboard? _pageTransitionStoryboard;
+    private bool _pageTransitionNamesRegistered;
 
     public MainWindow(MainViewModel viewModel, bool enableShortcuts = true)
     {
@@ -47,6 +49,7 @@ public partial class MainWindow : Window
             RegisterLensHotkey();
         };
         _viewModel.Gaming.PropertyChanged += OnGamingStateChanged;
+        _viewModel.PropertyChanged += OnAppSettingsChanged;
         _clockTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
         _clockTimer.Tick += (_, _) =>
         {
@@ -54,13 +57,21 @@ public partial class MainWindow : Window
             if (++_ticks % 3 == 0) _viewModel.QueueLocalRefresh();
         };
         Loaded += (_, _) => { _ = _viewModel.InitializeAsync(); _clockTimer.Start(); };
-        SizeChanged += (_, _) => _viewModel.SetViewportWidth(ActualWidth);
+        SizeChanged += (_, _) => { FinishPageTransition(); _viewModel.SetViewportWidth(ActualWidth); };
+        StateChanged += (_,_) =>
+        {
+            MaximizeGlyph.Text=WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+            MaximizeButton.ToolTip=WindowState == WindowState.Maximized ? "还原" : "最大化";
+            System.Windows.Automation.AutomationProperties.SetName(MaximizeButton,(string)MaximizeButton.ToolTip);
+        };
         Closing += OnClosing;
         Closed += (_, _) =>
         {
             _clockTimer.Stop();
+            FinishPageTransition();
             _shortcuts?.Dispose();
             _viewModel.Gaming.PropertyChanged -= OnGamingStateChanged;
+            _viewModel.PropertyChanged -= OnAppSettingsChanged;
             _viewModel.Dispose();
         };
     }
@@ -70,88 +81,129 @@ public partial class MainWindow : Window
 
     private void ToggleFavorites(object sender,RoutedEventArgs e) => SwitchFavorites(!_viewModel.IsFavorites);
     private void ExitFavorites(object sender,RoutedEventArgs e) => SwitchFavorites(false);
+    private void ToggleSettings(object sender,RoutedEventArgs e)
+    {
+        var opening=!_viewModel.IsSettings;
+        SwitchPage(opening,true,SettingsButton,() =>
+        {
+            if (opening) _viewModel.OpenSettingsCommand.Execute(null); else _viewModel.ExitSettingsCommand.Execute(null);
+        });
+    }
     private void SwitchFavorites(bool opening)
     {
         if (_viewModel.IsFavorites == opening) return;
-        var generation=++_favoritesTransitionGeneration;
-        var animate=SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast && RootContent.ActualWidth > 0;
+        SwitchPage(opening,false,FavoritesButton,() =>
+        {
+            if (opening) _viewModel.OpenFavoritesCommand.Execute(null); else _viewModel.ExitFavoritesCommand.Execute(null);
+        });
+    }
+
+    private void SwitchPage(bool opening,bool gear,FrameworkElement button,Action switchPage)
+    {
+        var animate=_viewModel.PageAnimationsEnabled && SystemParameters.ClientAreaAnimation &&
+            !SystemParameters.HighContrast && RootContent.ActualWidth > 0;
+        RenderTargetBitmap? snapshot=null;
         if (animate)
         {
             var dpi=VisualTreeHelper.GetDpi(RootContent);
-            var snapshot=new RenderTargetBitmap((int)Math.Ceiling(RootContent.ActualWidth*dpi.DpiScaleX),
+            snapshot=new RenderTargetBitmap((int)Math.Ceiling(RootContent.ActualWidth*dpi.DpiScaleX),
                 (int)Math.Ceiling(RootContent.ActualHeight*dpi.DpiScaleY),dpi.PixelsPerInchX,dpi.PixelsPerInchY,PixelFormats.Pbgra32);
             snapshot.Render(RootContent); snapshot.Freeze();
-            FavoritesTransition.Source=snapshot;
         }
-        if (opening) _viewModel.OpenFavoritesCommand.Execute(null); else _viewModel.ExitFavoritesCommand.Execute(null);
-        if (!animate)
-        {
-            FinishFavoritesTransition();
-            return;
-        }
-        var center=FavoritesButton.TranslatePoint(new(FavoritesButton.ActualWidth/2,FavoritesButton.ActualHeight/2),RootContent);
+        FinishPageTransition();
+        switchPage();
+        if (!animate) return;
+        var generation=_pageTransitionGeneration;
+        PageTransition.Source=snapshot;
+        var center=button.TranslatePoint(new(button.ActualWidth/2,button.ActualHeight/2),RootContent);
         var width=RootContent.ActualWidth; var height=RootContent.ActualHeight;
-        var radius=Math.Sqrt(Math.Pow(Math.Max(center.X,width-center.X),2)+Math.Pow(Math.Max(center.Y,height-center.Y),2))+1;
-        // The star's inner radius is 45%; scale past its incircle so every corner is covered.
-        var fullScale=radius/40;
+        var fullScale=Controls.PageTransitionGeometry.CoverScale(new(width,height),center,gear);
         var scale=new ScaleTransform(opening ? 0 : fullScale,opening ? 0 : fullScale);
         var rotation=new RotateTransform(opening ? 0 : 120);
         var transforms=new TransformGroup();
         transforms.Children.Add(scale); transforms.Children.Add(rotation);
         transforms.Children.Add(new TranslateTransform(center.X,center.Y));
-        var star=new StreamGeometry { Transform=transforms };
-        using (var shape=star.Open())
-        {
-            for (var i=0;i<10;i++)
-            {
-                var angle=-Math.PI/2+i*Math.PI/5;
-                var point=new Point(Math.Cos(angle)*(i%2 == 0 ? 100 : 45),Math.Sin(angle)*(i%2 == 0 ? 100 : 45));
-                if (i == 0) shape.BeginFigure(point,isFilled:true,isClosed:true); else shape.LineTo(point,isStroked:true,isSmoothJoin:false);
-            }
-        }
-        Geometry clip=star;
+        var silhouette=Controls.PageTransitionGeometry.Create(gear,transforms);
+        Geometry clip=silhouette;
         if (opening)
         {
             var outside=new GeometryGroup { FillRule=FillRule.EvenOdd };
             outside.Children.Add(new RectangleGeometry(new Rect(0,0,width,height)));
-            outside.Children.Add(star); clip=outside;
+            outside.Children.Add(silhouette); clip=outside;
         }
-        FavoritesTransition.Clip=clip;
-        FavoritesTransition.Visibility=Visibility.Visible;
-        FavoritesTransitionTint.Data=star;
-        FavoritesTransitionTint.Visibility=Visibility.Visible;
+        PageTransition.Clip=clip;
+        PageTransition.Visibility=Visibility.Visible;
+        PageTransitionShape.Data=silhouette;
+        // Fill the hub rather than cutting a hole; the enlarged gear must cover its center too.
+        PageTransitionHub.Data=gear ? new EllipseGeometry(new Point(),26,26) { Transform=transforms } : null;
+        PageTransitionCover.Visibility=Visibility.Visible;
+        PageTransitionCover.Opacity=opening ? 1 : 0;
         NavigationPanel.IsHitTestVisible=MainContent.IsHitTestVisible=false;
-        var animation=new DoubleAnimation(opening ? 0 : fullScale,opening ? fullScale : 0,TimeSpan.FromMilliseconds(280))
-        { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } };
-        animation.Completed += (_,_) =>
+        RegisterName("PageTransitionScale",scale); RegisterName("PageTransitionRotation",rotation);
+        _pageTransitionNamesRegistered=true;
+        var storyboard=_pageTransitionStoryboard=new Storyboard();
+        void Animate(DependencyObject target,DependencyProperty property,double from,double to,int duration,int delay=0)
         {
-            if (generation != _favoritesTransitionGeneration) return;
-            FinishFavoritesTransition();
+            var animation=new DoubleAnimation(from,to,TimeSpan.FromMilliseconds(duration))
+            { BeginTime=TimeSpan.FromMilliseconds(delay),EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } };
+            // Resolve transforms by name: a Freezable used as a timeline target can be cloned
+            // when the storyboard creates its clocks, leaving the displayed shape unchanged.
+            if (target == scale) Storyboard.SetTargetName(animation,"PageTransitionScale");
+            else if (target == rotation) Storyboard.SetTargetName(animation,"PageTransitionRotation");
+            else Storyboard.SetTarget(animation,target);
+            Storyboard.SetTargetProperty(animation,new PropertyPath(property));
+            storyboard.Children.Add(animation);
+        }
+        // Opening covers the old page before fading to the destination. Closing reverses this.
+        Animate(scale,ScaleTransform.ScaleXProperty,opening ? 0 : fullScale,opening ? fullScale : 0,320,opening ? 0 : 140);
+        Animate(scale,ScaleTransform.ScaleYProperty,opening ? 0 : fullScale,opening ? fullScale : 0,320,opening ? 0 : 140);
+        Animate(rotation,RotateTransform.AngleProperty,opening ? 0 : 120,opening ? 120 : 0,320,opening ? 0 : 140);
+        Animate(PageTransitionCover,OpacityProperty,opening ? 1 : 0,opening ? 0 : 1,140,opening ? 320 : 0);
+        storyboard.Completed += (_,_) =>
+        {
+            if (generation == _pageTransitionGeneration) FinishPageTransition();
         };
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty,animation);
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty,animation);
-        rotation.BeginAnimation(RotateTransform.AngleProperty,new DoubleAnimation(opening ? 0 : 120,opening ? 120 : 0,
-            TimeSpan.FromMilliseconds(280)) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } });
-        FavoritesTransitionTint.BeginAnimation(OpacityProperty,new DoubleAnimation(0.35,0,TimeSpan.FromMilliseconds(280))
-            { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseIn } });
+        storyboard.Begin(this,isControllable:true);
     }
 
-    private void FinishFavoritesTransition()
+    internal void SeekPageTransition(TimeSpan offset) => _pageTransitionStoryboard?.SeekAlignedToLastTick(this,offset,TimeSeekOrigin.BeginTime);
+
+    private void FinishPageTransition()
     {
-        FavoritesTransition.Visibility=FavoritesTransitionTint.Visibility=Visibility.Collapsed;
-        FavoritesTransition.Source=null; FavoritesTransition.Clip=null; FavoritesTransitionTint.Data=null;
-        FavoritesTransitionTint.BeginAnimation(OpacityProperty,null);
+        ++_pageTransitionGeneration;
+        _pageTransitionStoryboard?.Remove(this); _pageTransitionStoryboard=null;
+        if (_pageTransitionNamesRegistered)
+        {
+            UnregisterName("PageTransitionScale"); UnregisterName("PageTransitionRotation");
+            _pageTransitionNamesRegistered=false;
+        }
+        PageTransition.Visibility=PageTransitionCover.Visibility=Visibility.Collapsed;
+        PageTransition.Source=null; PageTransition.Clip=null; PageTransitionShape.Data=PageTransitionHub.Data=null;
         NavigationPanel.IsHitTestVisible=MainContent.IsHitTestVisible=true;
     }
 
+    private void OnAppSettingsChanged(object? sender,PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.PageAnimationsEnabled) && !_viewModel.PageAnimationsEnabled) FinishPageTransition();
+    }
+
+    private void MinimizeWindow(object sender,RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+    private void ToggleMaximizeWindow(object sender,RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this); else SystemCommands.MaximizeWindow(this);
+    }
+    private void CloseWindow(object sender,RoutedEventArgs e) => Close();
+
     private void NavigationDragStart(object sender,MouseButtonEventArgs e)
     {
+        _navigationDragItem=null;
+        if (_viewModel.IsSettings) return;
         _navigationDragStart=e.GetPosition(this);
         _navigationDragItem=((FrameworkElement)sender).DataContext as NavigationItem;
     }
     private void NavigationDragMove(object sender,MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _navigationDragItem is not { } item) return;
+        if (_viewModel.IsSettings || e.LeftButton != MouseButtonState.Pressed || _navigationDragItem is not { } item) return;
         var point=e.GetPosition(this);
         if (Math.Abs(point.X-_navigationDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
             Math.Abs(point.Y-_navigationDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
@@ -160,7 +212,7 @@ public partial class MainWindow : Window
     }
     private void NavigationDragOver(object sender,DragEventArgs e)
     {
-        e.Effects=e.Data.GetData(typeof(NavigationItem)) is NavigationItem item &&
+        e.Effects=!_viewModel.IsSettings && e.Data.GetData(typeof(NavigationItem)) is NavigationItem item &&
             ((FrameworkElement)sender).DataContext is NavigationItem target && item != target ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled=true;
     }
