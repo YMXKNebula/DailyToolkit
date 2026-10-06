@@ -390,8 +390,10 @@ internal static partial class Program
                 Require(model.IsHome && model.ShowAllTools && !model.IsFavorites && !model.IsSettings &&
                     transition.Source is null,"Crossing footer buttons then closing restored the previous panel instead of the main interface");
             }
+            model.Page="screen-lens";
             window.Width=680;
             window.UpdateLayout();
+            await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout,System.Windows.Threading.DispatcherPriority.ContextIdle);
             Require(System.Windows.Controls.Grid.GetRow(preview) == 1 && System.Windows.Controls.Grid.GetColumn(preview) == 0,
                 "Narrow layout did not place the preview below the settings");
         }
