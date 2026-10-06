@@ -128,28 +128,38 @@ public partial class MainWindow : Window
         var center=button.TranslatePoint(new(button.ActualWidth/2,button.ActualHeight/2),BodyContent);
         var width=BodyContent.ActualWidth; var height=BodyContent.ActualHeight;
         var fullScale=Controls.PageTransitionGeometry.CoverScale(new(width,height),center,gear);
-        var scale=new ScaleTransform(0,0);
-        var rotation=new RotateTransform(0);
+        var scale=new ScaleTransform(opening ? 0 : fullScale,opening ? 0 : fullScale);
+        var rotation=new RotateTransform(opening ? 0 : 120);
         var transforms=new TransformGroup();
         transforms.Children.Add(scale); transforms.Children.Add(rotation);
-        transforms.Children.Add(new TranslateTransform(center.X,center.Y));
+        var translation=new TranslateTransform(center.X,center.Y); translation.Freeze();
+        transforms.Children.Add(translation);
         var silhouette=Controls.PageTransitionGeometry.Create(gear,transforms);
-        var outside=new GeometryGroup { FillRule=FillRule.EvenOdd };
-        outside.Children.Add(new RectangleGeometry(new Rect(0,0,width,height)));
-        outside.Children.Add(silhouette);
-        PageTransition.Clip=outside;
+        if (opening)
+        {
+            var outside=new GeometryGroup { FillRule=FillRule.EvenOdd };
+            var bounds=new RectangleGeometry(new Rect(0,0,width,height)); bounds.Freeze();
+            outside.Children.Add(bounds); outside.Children.Add(silhouette);
+            PageTransition.Clip=outside;
+        }
+        else PageTransition.Clip=silhouette;
         PageTransition.Visibility=Visibility.Visible;
-        PageTransitionShape.Data=silhouette;
+        // Keep the filled outline immutable and animate its render transform, so its
+        // expanding bounds do not make the layout system measure the path every frame.
+        var outline=Controls.PageTransitionGeometry.Create(gear,Transform.Identity); outline.Freeze();
+        PageTransitionShape.Data=outline;
+        PageTransitionShape.RenderTransform=transforms;
         PageTransitionCover.Visibility=Visibility.Visible;
-        PageTransitionCover.Opacity=1;
+        PageTransitionCover.Opacity=opening ? 1 : 0;
         NavigationPanel.IsHitTestVisible=MainContent.IsHitTestVisible=false;
         RegisterName("PageTransitionScale",scale); RegisterName("PageTransitionRotation",rotation);
         _pageTransitionNamesRegistered=true;
         var storyboard=_pageTransitionStoryboard=new Storyboard();
+        var easing=new SineEase { EasingMode=EasingMode.EaseInOut }; easing.Freeze();
         void Animate(DependencyObject target,DependencyProperty property,double from,double to,int duration,int delay=0)
         {
             var animation=new DoubleAnimation(from,to,TimeSpan.FromMilliseconds(duration))
-            { BeginTime=TimeSpan.FromMilliseconds(delay),EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } };
+            { BeginTime=TimeSpan.FromMilliseconds(delay),EasingFunction=easing };
             // Resolve transforms by name: a Freezable used as a timeline target can be cloned
             // when the storyboard creates its clocks, leaving the displayed shape unchanged.
             if (target == scale) Storyboard.SetTargetName(animation,"PageTransitionScale");
@@ -158,11 +168,13 @@ public partial class MainWindow : Window
             Storyboard.SetTargetProperty(animation,new PropertyPath(property));
             storyboard.Children.Add(animation);
         }
-        // Both directions cover the old page with the same shape, then reveal the destination.
-        Animate(scale,ScaleTransform.ScaleXProperty,0,fullScale,320);
-        Animate(scale,ScaleTransform.ScaleYProperty,0,fullScale,320);
-        Animate(rotation,RotateTransform.AngleProperty,0,120,320);
-        Animate(PageTransitionCover,OpacityProperty,1,0,140,320);
+        // Opening expands the color over the old page before revealing the new one.
+        // Closing tints the old page first, then retracts it into the same button.
+        var motionDelay=opening ? 0 : 140;
+        Animate(scale,ScaleTransform.ScaleXProperty,opening ? 0 : fullScale,opening ? fullScale : 0,320,motionDelay);
+        Animate(scale,ScaleTransform.ScaleYProperty,opening ? 0 : fullScale,opening ? fullScale : 0,320,motionDelay);
+        Animate(rotation,RotateTransform.AngleProperty,opening ? 0 : 120,opening ? 120 : 0,320,motionDelay);
+        Animate(PageTransitionCover,OpacityProperty,opening ? 1 : 0,opening ? 0 : 1,140,opening ? 320 : 0);
         storyboard.Completed += (_,_) =>
         {
             if (generation == _pageTransitionGeneration) FinishPageTransition();
@@ -183,6 +195,7 @@ public partial class MainWindow : Window
         }
         PageTransition.Visibility=PageTransitionCover.Visibility=Visibility.Collapsed;
         PageTransition.Source=null; PageTransition.Clip=null; PageTransitionShape.Data=null;
+        PageTransitionShape.RenderTransform=Transform.Identity;
         NavigationPanel.IsHitTestVisible=MainContent.IsHitTestVisible=true;
     }
 

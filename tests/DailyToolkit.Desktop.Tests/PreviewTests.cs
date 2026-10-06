@@ -137,7 +137,9 @@ internal static partial class Program
             {
                 window.UpdateLayout();
                 var corners=new[] { new Point(2,2),new Point(body.ActualWidth-2,2),new Point(2,body.ActualHeight-2),new Point(body.ActualWidth-2,body.ActualHeight-2) };
-                Require(cover.Opacity > 0.999 && tint.Data is { } shape && corners.All(point => shape.FillContains(point)),
+                var inverse=tint.RenderTransform.Inverse;
+                Require(cover.Opacity > 0.999 && tint.Data is { } shape && inverse is not null &&
+                    corners.All(point => shape.FillContains(inverse.Transform(point))),
                     "The star or gear faded before fully covering every content corner");
                 Require(caption.ActualHeight == 36 && System.Windows.Shell.WindowChrome.GetWindowChrome(window) is not null &&
                     System.Windows.Media.VisualTreeHelper.GetParent(cover) == body && System.Windows.Controls.Grid.GetRow(body) == 1,
@@ -161,6 +163,30 @@ internal static partial class Program
                 Require(titlePixel[0] == captionColor.B && titlePixel[1] == captionColor.G && titlePixel[2] == captionColor.R,
                     "An animation painted over the title bar");
             }
+            void RequireDirection(bool opening)
+            {
+                var silhouette=transition.Clip is System.Windows.Media.GeometryGroup outside
+                    ? outside.Children[1] : transition.Clip;
+                Require(silhouette is System.Windows.Media.StreamGeometry &&
+                    silhouette.Transform == tint.RenderTransform && tint.Data is { IsFrozen:true },
+                    "The snapshot mask and immutable filled outline did not share their render transform");
+                var transforms=(System.Windows.Media.TransformGroup)silhouette!.Transform;
+                var scale=(System.Windows.Media.ScaleTransform)transforms.Children[0];
+                var rotation=(System.Windows.Media.RotateTransform)transforms.Children[1];
+                var delay=opening ? 0 : 140;
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(delay+64));
+                var firstScale=scale.ScaleX; var firstAngle=rotation.Angle;
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(delay+256));
+                Require(opening ? scale.ScaleX > firstScale && rotation.Angle > firstAngle
+                    : scale.ScaleX < firstScale && rotation.Angle < firstAngle,
+                    opening ? "The opening shape did not expand and rotate outwards" : "The closing shape did not retract and reverse its rotation");
+                // The outgoing page stays outside an expanding mask, but inside a retracting one.
+                if (!opening)
+                    Require(transition.Clip is System.Windows.Media.StreamGeometry &&
+                        !transition.Clip.FillContains(new Point(body.ActualWidth-2,2)),
+                        "The closing snapshot covered the already revealed destination outside the shape");
+                Require(cover.Opacity > .999,"The motion faded its fill before it finished");
+            }
             Require(model.FavoritesToggleHint == "关闭收藏夹" && favoriteButton.ToolTip as string == "关闭收藏夹",
                 "The same star did not advertise its close action");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
@@ -176,9 +202,10 @@ internal static partial class Program
                 Require(System.Windows.Controls.Grid.GetColumnSpan(transition) == 2 && System.Windows.Controls.Grid.GetColumnSpan(cover) == 2 &&
                     transition.Source is System.Windows.Media.Imaging.BitmapSource snapshot &&
                     snapshot.PixelWidth == (int)Math.Ceiling(body.ActualWidth*dpi.DpiScaleX) &&
-                    snapshot.PixelHeight == (int)Math.Ceiling(body.ActualHeight*dpi.DpiScaleY) && tint.Data == geometry && tint.IsVisible &&
+                    snapshot.PixelHeight == (int)Math.Ceiling(body.ActualHeight*dpi.DpiScaleY) && tint.RenderTransform == geometry.Transform && tint.IsVisible &&
                     favoriteButton.IsHitTestVisible && !((UIElement)window.FindName("MainContent")).IsHitTestVisible,
                     "The star transition did not cover both sidebar and main content, or blocked the toggle itself");
+                RequireDirection(true);
                 window.SeekPageTransition(TimeSpan.FromMilliseconds(320));
                 RequireCovered(false);
                 await Task.Delay(260);
@@ -193,7 +220,12 @@ internal static partial class Program
                 "Clicking the same star did not close favorites and restore the previous tool");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
-                Require(transition.IsVisible && transition.Clip is System.Windows.Media.GeometryGroup,"Exiting favorites used a different reveal");
+                window.SeekPageTransition(TimeSpan.Zero);
+                Require(transition.IsVisible && transition.Clip is System.Windows.Media.StreamGeometry && cover.Opacity < .001,
+                    "Closing favorites did not preserve the outgoing page before retracting it");
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(140)); RequireCovered(false);
+                RequireDirection(false);
+                window.SeekPageTransition(TimeSpan.Zero);
                 // A quick second entry must not be cleared by the previous animation's completion.
                 await Task.Delay(180);
                 favoriteButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
@@ -213,16 +245,19 @@ internal static partial class Program
                 Require(transition.IsVisible && tint.Data is System.Windows.Media.StreamGeometry,
                     "Settings reused the star instead of a filled gear");
                 window.SeekPageTransition(TimeSpan.FromMilliseconds(320));
-                Require(tint.Data!.FillContains(settingsButton.TranslatePoint(new Point(settingsButton.ActualWidth/2,settingsButton.ActualHeight/2),body)),
+                Require(tint.Data!.FillContains(tint.RenderTransform.Inverse!.Transform(
+                    settingsButton.TranslatePoint(new Point(settingsButton.ActualWidth/2,settingsButton.ActualHeight/2),body))),
                     "The gear had an unfilled center");
                 RequireCovered(true);
+                RequireDirection(true);
                 await Task.Delay(260);
             }
             settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             Require(!model.IsSettings && model.ShowScreenLens,"Clicking the same gear did not return to the selected tool");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
-                window.SeekPageTransition(TimeSpan.FromMilliseconds(320));
+                RequireDirection(false);
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(140));
                 RequireCovered(true);
                 await Task.Delay(400);
                 settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
@@ -255,9 +290,9 @@ internal static partial class Program
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
                 settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-                window.SeekPageTransition(TimeSpan.FromMilliseconds(320)); RequireCovered(true); await Task.Delay(260);
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(140)); RequireCovered(true); RequireDirection(false); await Task.Delay(260);
                 settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-                window.SeekPageTransition(TimeSpan.FromMilliseconds(320)); RequireCovered(true); await Task.Delay(260);
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(320)); RequireCovered(true); RequireDirection(true); await Task.Delay(260);
             }
             animationSwitch.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty,false);
             Require(!model.PageAnimationsEnabled && new AppPreferencesStore(Path.Combine(directory.FullName,"settings.json")).Load().PageAnimationsEnabled == false,
@@ -276,6 +311,6 @@ internal static partial class Program
             if (Path.GetFullPath(directory.FullName).StartsWith(tempRoot,StringComparison.OrdinalIgnoreCase) &&
                 directory.Name.StartsWith("DailyToolkit-lens-layout-tests-",StringComparison.Ordinal)) directory.Delete(recursive:true);
         }
-        Console.WriteLine("PASS Matching opaque star/gear transitions cover content while leaving caption clear; rapid changes, resize and cleanup stay correct");
+        Console.WriteLine("PASS Star/gear transitions expand on opening, retract on closing and share an immutable render outline; caption, rapid changes and cleanup stay correct");
     }
 }

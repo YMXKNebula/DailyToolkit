@@ -60,7 +60,7 @@
           </Button>
           </StackPanel>
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.5.0</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.5.1</Hyperlink>
           </TextBlock>
         </StackPanel>
         <DockPanel x:Name="NavigationPanel">
@@ -322,7 +322,7 @@
               <TextBlock Text="切换动画" Style="{StaticResource SectionTitle}" />
               <CheckBox x:Name="PageAnimationSwitch" Content="播放页面切换动画" IsChecked="{Binding PageAnimationsEnabled, Mode=TwoWay}"
                         FontFamily="Microsoft YaHei UI" FontSize="14" Foreground="{DynamicResource TextBrush}" />
-              <TextBlock Text="进入和退出使用相同的形状与颜色，标题栏保持可用。" Style="{StaticResource MutedText}" Margin="0,10,0,12" />
+              <TextBlock Text="打开时展开，关闭时收回，颜色保持一致。标题栏不受影响。" Style="{StaticResource MutedText}" Margin="0,10,0,12" />
               <controls:ColorPicker x:Name="AnimationColorPicker" Color="{Binding AnimationColor, Mode=TwoWay}" />
               <WrapPanel Margin="0,10,0,0">
                 <Button Content="预览星形" Click="PreviewStar" Margin="0,0,8,0" />
@@ -382,7 +382,7 @@
           <Border Style="{StaticResource Card}">
             <StackPanel>
               <TextBlock Text="关于" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="DailyToolkit 0.5.0" FontWeight="SemiBold" />
+              <TextBlock Text="DailyToolkit 0.5.1" FontWeight="SemiBold" />
               <TextBlock Text="把自己常用的小工具放在一起。设置保存在这台电脑上。" Style="{StaticResource MutedText}" Margin="0,10,0,14" />
               <TextBlock><Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">项目主页</Hyperlink></TextBlock>
             </StackPanel>

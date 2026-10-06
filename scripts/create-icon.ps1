@@ -1,17 +1,28 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationCore, WindowsBase
 $assetDirectory = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../src/DailyToolkit.Desktop/Assets'))
-$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="52" fill="#267A5D"/><path d="M42 62H77C119 62 137 84 137 128S119 194 77 194H42ZM67 87V169H78C101 169 111 157 111 128S101 87 78 87Z" fill="white" fill-rule="evenodd"/><path d="M139 62H222V87H193V194H168V87H139Z" fill="white"/></svg>'
+$dPath = 'M38 76 L52 62 H83 C130 62 155 86 155 128 C155 170 130 194 83 194 H38 Z M66 88 V168 H82 C110 168 128 153 128 128 C128 103 110 88 82 88 Z'
+$tPath = 'M111 62 H222 V88 H194 V179 L167 194 V88 H111 Z'
+$svg = @"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs><linearGradient id="jade" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2D8B68"/><stop offset="1" stop-color="#174A3B"/></linearGradient></defs>
+  <rect width="256" height="256" rx="56" fill="url(#jade)"/>
+  <path d="$dPath" fill="white" fill-rule="evenodd"/>
+  <path d="$tPath" fill="white"/>
+</svg>
+"@
 [IO.File]::WriteAllText((Join-Path $assetDirectory 'dt.svg'), $svg)
 $frames = @()
 foreach ($size in @(16,20,24,32,40,48,64,128,256)) {
     $visual = [Windows.Media.DrawingVisual]::new()
     $drawing = $visual.RenderOpen()
     $drawing.PushTransform([Windows.Media.ScaleTransform]::new($size/256.0,$size/256.0))
-    $green = [Windows.Media.BrushConverter]::new().ConvertFromString('#267A5D')
-    $drawing.DrawRoundedRectangle($green,$null,[Windows.Rect]::new(0,0,256,256),52,52)
-    $drawing.DrawGeometry([Windows.Media.Brushes]::White,$null,[Windows.Media.Geometry]::Parse('F0 M42,62 L77,62 C119,62 137,84 137,128 C137,172 119,194 77,194 L42,194 Z M67,87 L67,169 L78,169 C101,169 111,157 111,128 C111,99 101,87 78,87 Z'))
-    $drawing.DrawGeometry([Windows.Media.Brushes]::White,$null,[Windows.Media.Geometry]::Parse('M139,62 L222,62 L222,87 L193,87 L193,194 L168,194 L168,87 L139,87 Z'))
+    $green = [Windows.Media.LinearGradientBrush]::new(
+        [Windows.Media.ColorConverter]::ConvertFromString('#2D8B68'),
+        [Windows.Media.ColorConverter]::ConvertFromString('#174A3B'),45)
+    $drawing.DrawRoundedRectangle($green,$null,[Windows.Rect]::new(0,0,256,256),56,56)
+    $drawing.DrawGeometry([Windows.Media.Brushes]::White,$null,[Windows.Media.Geometry]::Parse('F0 ' + $dPath))
+    $drawing.DrawGeometry([Windows.Media.Brushes]::White,$null,[Windows.Media.Geometry]::Parse($tPath))
     $drawing.Pop(); $drawing.Close()
     $bitmap = [Windows.Media.Imaging.RenderTargetBitmap]::new($size,$size,96,96,[Windows.Media.PixelFormats]::Pbgra32)
     $bitmap.Render($visual)
