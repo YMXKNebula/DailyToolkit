@@ -37,11 +37,15 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
+        _viewModel.ApplyTheme(Resources);
+        FavoritesIcon.Data=Controls.PageTransitionGeometry.CreateIcon(false);
+        SettingsIcon.Data=Controls.PageTransitionGeometry.CreateIcon(true);
         SourceInitialized += (_, _) =>
         {
             if (!enableShortcuts) return;
             var source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             if (source is null) return;
+            InitializeRuntime(source);
             _shortcuts = new(source);
             _shortcuts.ToggleRequested += _viewModel.Gaming.Toggle;
             _shortcuts.StartRequested += _viewModel.Gaming.Start;
@@ -56,28 +60,34 @@ public partial class MainWindow : Window
             _viewModel.UpdateClock();
             if (++_ticks % 3 == 0) _viewModel.QueueLocalRefresh();
         };
-        Loaded += (_, _) => { _ = _viewModel.InitializeAsync(); _clockTimer.Start(); };
+        Loaded += (_, _) => StartLocalRuntime();
         SizeChanged += (_, _) => { FinishPageTransition(); _viewModel.SetViewportWidth(ActualWidth); };
         StateChanged += (_,_) =>
         {
             MaximizeGlyph.Text=WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
             MaximizeButton.ToolTip=WindowState == WindowState.Maximized ? "还原" : "最大化";
             System.Windows.Automation.AutomationProperties.SetName(MaximizeButton,(string)MaximizeButton.ToolTip);
+            if (WindowState == WindowState.Minimized && _viewModel.MinimizeToTray && !_exitRequested) HideToTray();
+            else if (WindowState != WindowState.Minimized) _lastVisibleState=WindowState;
         };
         Closing += OnClosing;
         Closed += (_, _) =>
         {
             _clockTimer.Stop();
+            DisposeRuntime();
             FinishPageTransition();
             _shortcuts?.Dispose();
             _viewModel.Gaming.PropertyChanged -= OnGamingStateChanged;
             _viewModel.PropertyChanged -= OnAppSettingsChanged;
             _viewModel.Dispose();
+            if (enableShortcuts) Application.Current?.Shutdown();
         };
     }
 
     internal FrameworkElement PreviewContent => RootContent;
     internal Task WaitForLensPreviewAsync() => LensPhotoPreview.IsVisible ? LensPhotoPreview.Ready : Task.CompletedTask;
+    private void PreviewStar(object sender,RoutedEventArgs e) => SwitchPage(true,false,FavoritesButton,() => { });
+    private void PreviewGear(object sender,RoutedEventArgs e) => SwitchPage(true,true,SettingsButton,() => { });
 
     private void ToggleFavorites(object sender,RoutedEventArgs e) => SwitchFavorites(!_viewModel.IsFavorites);
     private void ExitFavorites(object sender,RoutedEventArgs e) => SwitchFavorites(false);
@@ -101,43 +111,37 @@ public partial class MainWindow : Window
     private void SwitchPage(bool opening,bool gear,FrameworkElement button,Action switchPage)
     {
         var animate=_viewModel.PageAnimationsEnabled && SystemParameters.ClientAreaAnimation &&
-            !SystemParameters.HighContrast && RootContent.ActualWidth > 0;
+            !SystemParameters.HighContrast && BodyContent.ActualWidth > 0;
         RenderTargetBitmap? snapshot=null;
         if (animate)
         {
-            var dpi=VisualTreeHelper.GetDpi(RootContent);
-            snapshot=new RenderTargetBitmap((int)Math.Ceiling(RootContent.ActualWidth*dpi.DpiScaleX),
-                (int)Math.Ceiling(RootContent.ActualHeight*dpi.DpiScaleY),dpi.PixelsPerInchX,dpi.PixelsPerInchY,PixelFormats.Pbgra32);
-            snapshot.Render(RootContent); snapshot.Freeze();
+            var dpi=VisualTreeHelper.GetDpi(BodyContent);
+            snapshot=new RenderTargetBitmap((int)Math.Ceiling(BodyContent.ActualWidth*dpi.DpiScaleX),
+                (int)Math.Ceiling(BodyContent.ActualHeight*dpi.DpiScaleY),dpi.PixelsPerInchX,dpi.PixelsPerInchY,PixelFormats.Pbgra32);
+            snapshot.Render(BodyContent); snapshot.Freeze();
         }
         FinishPageTransition();
         switchPage();
         if (!animate) return;
         var generation=_pageTransitionGeneration;
         PageTransition.Source=snapshot;
-        var center=button.TranslatePoint(new(button.ActualWidth/2,button.ActualHeight/2),RootContent);
-        var width=RootContent.ActualWidth; var height=RootContent.ActualHeight;
+        var center=button.TranslatePoint(new(button.ActualWidth/2,button.ActualHeight/2),BodyContent);
+        var width=BodyContent.ActualWidth; var height=BodyContent.ActualHeight;
         var fullScale=Controls.PageTransitionGeometry.CoverScale(new(width,height),center,gear);
-        var scale=new ScaleTransform(opening ? 0 : fullScale,opening ? 0 : fullScale);
-        var rotation=new RotateTransform(opening ? 0 : 120);
+        var scale=new ScaleTransform(0,0);
+        var rotation=new RotateTransform(0);
         var transforms=new TransformGroup();
         transforms.Children.Add(scale); transforms.Children.Add(rotation);
         transforms.Children.Add(new TranslateTransform(center.X,center.Y));
         var silhouette=Controls.PageTransitionGeometry.Create(gear,transforms);
-        Geometry clip=silhouette;
-        if (opening)
-        {
-            var outside=new GeometryGroup { FillRule=FillRule.EvenOdd };
-            outside.Children.Add(new RectangleGeometry(new Rect(0,0,width,height)));
-            outside.Children.Add(silhouette); clip=outside;
-        }
-        PageTransition.Clip=clip;
+        var outside=new GeometryGroup { FillRule=FillRule.EvenOdd };
+        outside.Children.Add(new RectangleGeometry(new Rect(0,0,width,height)));
+        outside.Children.Add(silhouette);
+        PageTransition.Clip=outside;
         PageTransition.Visibility=Visibility.Visible;
         PageTransitionShape.Data=silhouette;
-        // Fill the hub rather than cutting a hole; the enlarged gear must cover its center too.
-        PageTransitionHub.Data=gear ? new EllipseGeometry(new Point(),26,26) { Transform=transforms } : null;
         PageTransitionCover.Visibility=Visibility.Visible;
-        PageTransitionCover.Opacity=opening ? 1 : 0;
+        PageTransitionCover.Opacity=1;
         NavigationPanel.IsHitTestVisible=MainContent.IsHitTestVisible=false;
         RegisterName("PageTransitionScale",scale); RegisterName("PageTransitionRotation",rotation);
         _pageTransitionNamesRegistered=true;
@@ -154,11 +158,11 @@ public partial class MainWindow : Window
             Storyboard.SetTargetProperty(animation,new PropertyPath(property));
             storyboard.Children.Add(animation);
         }
-        // Opening covers the old page before fading to the destination. Closing reverses this.
-        Animate(scale,ScaleTransform.ScaleXProperty,opening ? 0 : fullScale,opening ? fullScale : 0,320,opening ? 0 : 140);
-        Animate(scale,ScaleTransform.ScaleYProperty,opening ? 0 : fullScale,opening ? fullScale : 0,320,opening ? 0 : 140);
-        Animate(rotation,RotateTransform.AngleProperty,opening ? 0 : 120,opening ? 120 : 0,320,opening ? 0 : 140);
-        Animate(PageTransitionCover,OpacityProperty,opening ? 1 : 0,opening ? 0 : 1,140,opening ? 320 : 0);
+        // Both directions cover the old page with the same shape, then reveal the destination.
+        Animate(scale,ScaleTransform.ScaleXProperty,0,fullScale,320);
+        Animate(scale,ScaleTransform.ScaleYProperty,0,fullScale,320);
+        Animate(rotation,RotateTransform.AngleProperty,0,120,320);
+        Animate(PageTransitionCover,OpacityProperty,1,0,140,320);
         storyboard.Completed += (_,_) =>
         {
             if (generation == _pageTransitionGeneration) FinishPageTransition();
@@ -178,13 +182,14 @@ public partial class MainWindow : Window
             _pageTransitionNamesRegistered=false;
         }
         PageTransition.Visibility=PageTransitionCover.Visibility=Visibility.Collapsed;
-        PageTransition.Source=null; PageTransition.Clip=null; PageTransitionShape.Data=PageTransitionHub.Data=null;
+        PageTransition.Source=null; PageTransition.Clip=null; PageTransitionShape.Data=null;
         NavigationPanel.IsHitTestVisible=MainContent.IsHitTestVisible=true;
     }
 
     private void OnAppSettingsChanged(object? sender,PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainViewModel.PageAnimationsEnabled) && !_viewModel.PageAnimationsEnabled) FinishPageTransition();
+        if (e.PropertyName is nameof(MainViewModel.Theme) or nameof(MainViewModel.AnimationColor)) _viewModel.ApplyTheme(Resources);
     }
 
     private void MinimizeWindow(object sender,RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
@@ -249,6 +254,7 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
+        if (!_exitRequested && _viewModel.CloseToTray && HideToTray()) { e.Cancel=true; return; }
         _shortcuts?.Suspend(true);
         _viewModel.Gaming.Stop();
         if (_closing) { e.Cancel = true; return; }

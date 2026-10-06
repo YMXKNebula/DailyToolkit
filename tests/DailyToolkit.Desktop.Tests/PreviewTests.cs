@@ -129,32 +129,37 @@ internal static partial class Program
             var transition=(System.Windows.Controls.Image)window.FindName("PageTransition");
             var tint=(System.Windows.Shapes.Path)window.FindName("PageTransitionShape");
             var cover=(FrameworkElement)window.FindName("PageTransitionCover");
-            var hub=(System.Windows.Shapes.Path)window.FindName("PageTransitionHub");
             var root=(FrameworkElement)window.PreviewContent;
+            var body=(FrameworkElement)window.FindName("BodyContent");
             var settingsButton=(System.Windows.Controls.Button)window.FindName("SettingsButton");
             var caption=(FrameworkElement)window.FindName("CaptionPanel");
             void RequireCovered(bool gear)
             {
                 window.UpdateLayout();
-                var corners=new[] { new Point(2,2),new Point(root.ActualWidth-2,2),new Point(2,root.ActualHeight-2),new Point(root.ActualWidth-2,root.ActualHeight-2) };
+                var corners=new[] { new Point(2,2),new Point(body.ActualWidth-2,2),new Point(2,body.ActualHeight-2),new Point(body.ActualWidth-2,body.ActualHeight-2) };
                 Require(cover.Opacity > 0.999 && tint.Data is { } shape && corners.All(point => shape.FillContains(point)),
-                    "The star or gear faded before fully covering every window corner");
+                    "The star or gear faded before fully covering every content corner");
                 Require(caption.ActualHeight == 36 && System.Windows.Shell.WindowChrome.GetWindowChrome(window) is not null &&
-                    System.Windows.Controls.Grid.GetRowSpan(transition) == 2 && System.Windows.Controls.Grid.GetRowSpan(cover) == 2,
-                    "The transition omitted the title bar");
+                    System.Windows.Media.VisualTreeHelper.GetParent(cover) == body && System.Windows.Controls.Grid.GetRow(body) == 1,
+                    "The transition covered the title bar");
                 var dpi=System.Windows.Media.VisualTreeHelper.GetDpi(root);
                 var pixels=new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Ceiling(root.ActualWidth*dpi.DpiScaleX),
                     (int)Math.Ceiling(root.ActualHeight*dpi.DpiScaleY),dpi.PixelsPerInchX,dpi.PixelsPerInchY,System.Windows.Media.PixelFormats.Pbgra32);
                 pixels.Render(root);
-                foreach (var point in corners.Append(new Point(root.ActualWidth/2,18)).Append(new Point(root.ActualWidth/2,root.ActualHeight/2)))
+                foreach (var bodyPoint in corners.Append(new Point(body.ActualWidth/2,body.ActualHeight/2)))
                 {
-                    var expected=((System.Windows.Media.SolidColorBrush)window.FindResource(
-                        gear && hub.Data!.FillContains(point) ? "AccentSoftBrush" : "AccentBrush")).Color;
+                    var point=body.TranslatePoint(bodyPoint,root);
+                    var expected=((System.Windows.Media.SolidColorBrush)window.FindResource("AnimationBrush")).Color;
                     var rgba=new byte[4];
                     pixels.CopyPixels(new Int32Rect((int)(point.X*dpi.DpiScaleX),(int)(point.Y*dpi.DpiScaleY),1,1),rgba,4,0);
                     Require(rgba[3] == 255 && Math.Abs(rgba[0]-expected.B)<=3 && Math.Abs(rgba[1]-expected.G)<=3 && Math.Abs(rgba[2]-expected.R)<=3,
-                        "The displayed transition did not opaquely cover the caption, main content and sidebar");
+                        "The displayed transition did not uniformly cover the main content and sidebar");
                 }
+                var captionColor=((System.Windows.Media.SolidColorBrush)window.FindResource("SurfaceBrush")).Color;
+                var titlePixel=new byte[4];
+                pixels.CopyPixels(new Int32Rect((int)(root.ActualWidth/2*dpi.DpiScaleX),(int)(18*dpi.DpiScaleY),1,1),titlePixel,4,0);
+                Require(titlePixel[0] == captionColor.B && titlePixel[1] == captionColor.G && titlePixel[2] == captionColor.R,
+                    "An animation painted over the title bar");
             }
             Require(model.FavoritesToggleHint == "关闭收藏夹" && favoriteButton.ToolTip as string == "关闭收藏夹",
                 "The same star did not advertise its close action");
@@ -170,8 +175,8 @@ internal static partial class Program
                 var dpi=System.Windows.Media.VisualTreeHelper.GetDpi(root);
                 Require(System.Windows.Controls.Grid.GetColumnSpan(transition) == 2 && System.Windows.Controls.Grid.GetColumnSpan(cover) == 2 &&
                     transition.Source is System.Windows.Media.Imaging.BitmapSource snapshot &&
-                    snapshot.PixelWidth == (int)Math.Ceiling(root.ActualWidth*dpi.DpiScaleX) &&
-                    snapshot.PixelHeight == (int)Math.Ceiling(root.ActualHeight*dpi.DpiScaleY) && tint.Data == geometry && tint.IsVisible &&
+                    snapshot.PixelWidth == (int)Math.Ceiling(body.ActualWidth*dpi.DpiScaleX) &&
+                    snapshot.PixelHeight == (int)Math.Ceiling(body.ActualHeight*dpi.DpiScaleY) && tint.Data == geometry && tint.IsVisible &&
                     favoriteButton.IsHitTestVisible && !((UIElement)window.FindName("MainContent")).IsHitTestVisible,
                     "The star transition did not cover both sidebar and main content, or blocked the toggle itself");
                 window.SeekPageTransition(TimeSpan.FromMilliseconds(320));
@@ -188,7 +193,7 @@ internal static partial class Program
                 "Clicking the same star did not close favorites and restore the previous tool");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
-                Require(transition.IsVisible && transition.Clip is System.Windows.Media.StreamGeometry,"Exiting favorites did not reverse the star reveal");
+                Require(transition.IsVisible && transition.Clip is System.Windows.Media.GeometryGroup,"Exiting favorites used a different reveal");
                 // A quick second entry must not be cleared by the previous animation's completion.
                 await Task.Delay(180);
                 favoriteButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
@@ -205,9 +210,11 @@ internal static partial class Program
                 "The gear did not sit beside the star or open software settings");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
-                Require(transition.IsVisible && tint.Data is System.Windows.Media.StreamGeometry && hub.Data is System.Windows.Media.EllipseGeometry,
+                Require(transition.IsVisible && tint.Data is System.Windows.Media.StreamGeometry,
                     "Settings reused the star instead of a filled gear");
                 window.SeekPageTransition(TimeSpan.FromMilliseconds(320));
+                Require(tint.Data!.FillContains(settingsButton.TranslatePoint(new Point(settingsButton.ActualWidth/2,settingsButton.ActualHeight/2),body)),
+                    "The gear had an unfilled center");
                 RequireCovered(true);
                 await Task.Delay(260);
             }
@@ -215,7 +222,7 @@ internal static partial class Program
             Require(!model.IsSettings && model.ShowScreenLens,"Clicking the same gear did not return to the selected tool");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
-                window.SeekPageTransition(TimeSpan.FromMilliseconds(140));
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(320));
                 RequireCovered(true);
                 await Task.Delay(400);
                 settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
@@ -224,7 +231,7 @@ internal static partial class Program
                 await Task.Delay(360);
                 Require(model.IsFavorites && transition.IsVisible,"An older gear animation cleared a newer star animation");
                 await Task.Delay(220);
-                Require(transition.Source is null && !cover.IsVisible && tint.Data is null && hub.Data is null,"Rapid star and gear transitions retained resources");
+                Require(transition.Source is null && !cover.IsVisible && tint.Data is null,"Rapid star and gear transitions retained resources");
                 model.ExitFavoritesCommand.Execute(null);
                 settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 window.Width=720; window.UpdateLayout();
@@ -233,6 +240,25 @@ internal static partial class Program
             }
             if (!model.IsSettings) settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             var animationSwitch=(System.Windows.Controls.CheckBox)window.FindName("PageAnimationSwitch");
+            var starIcon=(System.Windows.Shapes.Path)window.FindName("FavoritesIcon");
+            var gearIcon=(System.Windows.Shapes.Path)window.FindName("SettingsIcon");
+            Require(Math.Abs(starIcon.ActualWidth-gearIcon.ActualWidth) < .01 && Math.Abs(starIcon.ActualHeight-gearIcon.ActualHeight) < .01 &&
+                starIcon.ActualWidth is > 25 and < 27 && !gearIcon.Data.FillContains(new Point()),
+                $"The footer icons had unequal sizes or the small gear was filled: star={starIcon.ActualWidth}x{starIcon.ActualHeight}, gear={gearIcon.ActualWidth}x{gearIcon.ActualHeight}");
+            model.AnimationColor="#4285F4";
+            model.DarkThemeCommand.Execute(null); window.UpdateLayout();
+            var themePreview=(DailyToolkit.Desktop.Controls.ThemePreview)window.FindName("PalettePreview");
+            Require(themePreview.Palette == ThemePalette.Dark && themePreview.AnimationColor == "#4285F4" &&
+                ((System.Windows.Media.SolidColorBrush)window.FindResource("WindowBrush")).Color.ToString() == "#FF171D1B",
+                "The live theme and preview did not receive the selected palette");
+            model.LightThemeCommand.Execute(null);
+            if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
+            {
+                settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(320)); RequireCovered(true); await Task.Delay(260);
+                settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(320)); RequireCovered(true); await Task.Delay(260);
+            }
             animationSwitch.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty,false);
             Require(!model.PageAnimationsEnabled && new AppPreferencesStore(Path.Combine(directory.FullName,"settings.json")).Load().PageAnimationsEnabled == false,
                 "The actual animation checkbox did not persist the choice");
@@ -250,6 +276,6 @@ internal static partial class Program
             if (Path.GetFullPath(directory.FullName).StartsWith(tempRoot,StringComparison.OrdinalIgnoreCase) &&
                 directory.Name.StartsWith("DailyToolkit-lens-layout-tests-",StringComparison.Ordinal)) directory.Delete(recursive:true);
         }
-        Console.WriteLine("PASS Opaque rotating stars and gears cover caption and whole window; settings toggle, rapid changes, resize, motion preference and cleanup stay correct");
+        Console.WriteLine("PASS Matching opaque star/gear transitions cover content while leaving caption clear; rapid changes, resize and cleanup stay correct");
     }
 }

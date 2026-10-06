@@ -5,6 +5,14 @@ namespace DailyToolkit.Desktop.Controls;
 
 internal static class PageTransitionGeometry
 {
+    internal static Geometry CreateIcon(bool gear)
+    {
+        var outline=Create(gear,Transform.Identity);
+        if (!gear) return outline;
+        var icon=new GeometryGroup { FillRule=FillRule.EvenOdd };
+        icon.Children.Add(outline); icon.Children.Add(new EllipseGeometry(new Point(),30,30));
+        return icon;
+    }
     internal static StreamGeometry Create(bool gear,Transform transform)
     {
         var geometry=new StreamGeometry { Transform=transform };

@@ -13,7 +13,7 @@ namespace DailyToolkit.Desktop.Presentation;
 public sealed record InformationRow(string Label, string Value);
 public sealed record RuntimeRow(string Name, string Version, string Status);
 
-public sealed class MainViewModel : ObservableObject, IDisposable
+public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly IEnvironmentProbe _probe;
     private readonly DisplayInfo _display;
@@ -49,7 +49,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public MainViewModel(IEnvironmentProbe probe, DisplayInfo display, ILocalStatusProbe? localStatus = null,
         TimeProvider? clock = null, FavoritesStore? favoritesStore = null, GamingPreferencesStore? gamingPreferencesStore = null,
-        NavigationOrderStore? navigationStore = null, AppPreferencesStore? appPreferencesStore = null)
+        NavigationOrderStore? navigationStore = null, AppPreferencesStore? appPreferencesStore = null,
+        Runtime.IStartupRegistration? startupRegistration = null)
     {
         _probe = probe;
         _display = display;
@@ -61,6 +62,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _navigationOrder=_navigationStore.Load().ToList();
         _appPreferencesStore=appPreferencesStore ?? new();
         _appPreferences=_appPreferencesStore.Load();
+        InitializeAppearance();
+        InitializeStartup(startupRegistration);
         foreach (var item in _navigation) if (!_navigationOrder.Contains(item.Id)) _navigationOrder.Add(item.Id);
         Gaming = new(gamingPreferencesStore);
         Gaming.IsFavorite = _favoriteIds.Contains("screen-lens");
@@ -142,7 +145,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string FavoritesToggleHint => IsFavorites ? "关闭收藏夹" : "打开收藏夹";
     public string SettingsToggleHint => IsSettings ? (_favoritesOpen ? "返回收藏夹" : "返回工具") : "打开软件设置";
     public string PageTitle => IsSettings ? "软件设置" : ShowFavoritesEmpty ? "收藏夹" : _navigation.First(item => item.Id == Page).Name;
-    public string PageDescription => IsSettings ? "界面与软件信息" : ShowScreenLens ? "局部放大桌面或游戏画面" : ShowFavoritesEmpty ? "把常用工具放在这里" : "日期、天气和电脑状态";
+    public string PageDescription => IsSettings ? "配色、后台与启动方式" : ShowScreenLens ? "局部放大桌面或游戏画面" : ShowFavoritesEmpty ? "把常用工具放在这里" : "日期、天气和电脑状态";
     public string RefreshText => ShowScreenLens ? "刷新屏幕" : "刷新";
     public string FooterStatusText => IsSettings ? "设置保存在本机" : ShowScreenLens ? (Gaming.IsActive ? "放大运行中" : "快捷键在后台也可用") : ShowFavoritesEmpty ? "收藏保存在本机" : StatusText;
     public string FooterSourceText => IsSettings || ShowFavoritesEmpty ? "" : ShowScreenLens ? "本机显示" : LocalSourceText;
@@ -423,7 +426,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyToolkit", Version = "0.4.3", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyToolkit", Version = "0.5.0", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);

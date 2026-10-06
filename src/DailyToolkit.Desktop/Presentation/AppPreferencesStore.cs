@@ -6,6 +6,19 @@ namespace DailyToolkit.Desktop.Presentation;
 public sealed record AppPreferences
 {
     public bool PageAnimationsEnabled { get; init; } = true;
+    public string AnimationColor { get; init; } = "#267A5D";
+    public ThemePalette Theme { get; init; } = new();
+    public bool CloseToTray { get; init; }
+    public bool MinimizeToTray { get; init; }
+    public bool StartAtLogin { get; init; }
+    public bool AdminStartup { get; init; }
+    public bool SilentStartup { get; init; }
+
+    public AppPreferences Normalize() => this with
+    {
+        AnimationColor=ThemePalette.NormalizeColor(AnimationColor,"#267A5D"),
+        Theme=(Theme ?? new()).Normalize(), AdminStartup=StartAtLogin && AdminStartup
+    };
 }
 
 public sealed class AppPreferencesStore(string? filePath=null)
@@ -18,7 +31,7 @@ public sealed class AppPreferencesStore(string? filePath=null)
         try
         {
             if (!File.Exists(_path) || new FileInfo(_path).Length > 16384) return new();
-            return JsonSerializer.Deserialize<AppPreferences>(File.ReadAllText(_path)) ?? new();
+            return (JsonSerializer.Deserialize<AppPreferences>(File.ReadAllText(_path)) ?? new()).Normalize();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         { System.Diagnostics.Trace.WriteLine(exception); return new(); }

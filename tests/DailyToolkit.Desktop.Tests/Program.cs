@@ -48,6 +48,8 @@ internal static partial class Program
         CheckFavorites();
         CheckNavigation();
         CheckAppSettings();
+        await CheckStartupSettingsAsync();
+        await CheckTrayLifecycleAsync();
         await CheckSingleInstanceAsync();
         await CheckBackgroundShortcutAsync();
         LensDiagnostics.CheckShader();
@@ -57,6 +59,6 @@ internal static partial class Program
         await CheckPreviewLayoutAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("21/21 desktop checks passed");
+        Console.WriteLine("23/23 desktop checks passed");
     }
 }

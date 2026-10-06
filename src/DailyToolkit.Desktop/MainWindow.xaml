@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:DailyToolkit.Desktop.Controls"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="DailyToolkit" Width="1040" Height="800" MinWidth="680" MinHeight="540"
+        Title="DailyToolkit" Icon="Assets/dt.ico" Width="1040" Height="800" MinWidth="680" MinHeight="540"
         FontFamily="Microsoft YaHei UI" FontSize="14"
         Foreground="{DynamicResource TextBrush}" Background="{DynamicResource WindowBrush}"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
@@ -14,8 +14,7 @@
   </shell:WindowChrome.WindowChrome>
   <Grid x:Name="RootContent" Background="{DynamicResource WindowBrush}" RenderOptions.ClearTypeHint="Enabled" ClipToBounds="True">
     <Grid.RowDefinitions><RowDefinition Height="36" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-    <Grid.ColumnDefinitions><ColumnDefinition Width="188" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-    <Grid x:Name="CaptionPanel" Grid.ColumnSpan="2" Background="{DynamicResource SurfaceBrush}">
+    <Grid x:Name="CaptionPanel" Background="{DynamicResource SurfaceBrush}">
       <TextBlock Text="DailyToolkit" FontSize="12" Margin="16,0,0,0" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" />
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" shell:WindowChrome.IsHitTestVisibleInChrome="True">
         <Button Click="MinimizeWindow" Width="44" Height="36" Padding="0" BorderThickness="0" Background="Transparent" ToolTip="最小化" AutomationProperties.Name="最小化">
@@ -29,20 +28,20 @@
         </Button>
       </StackPanel>
     </Grid>
-    <Grid x:Name="SidebarSurface" Grid.Row="1" ClipToBounds="True">
+    <Grid x:Name="BodyContent" Grid.Row="1" ClipToBounds="True">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="188" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+    <Grid x:Name="SidebarSurface" ClipToBounds="True">
     <Border x:Name="SidebarBase" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
       <Border.Style>
         <Style TargetType="Border">
-          <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+          <Setter Property="Background" Value="{DynamicResource SidebarBrush}" />
           <Style.Triggers><DataTrigger Binding="{Binding IsFavorites}" Value="True"><Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" /></DataTrigger></Style.Triggers>
         </Style>
       </Border.Style>
       <DockPanel Margin="16,26,16,20">
         <StackPanel DockPanel.Dock="Top" Margin="10,0,0,30">
           <StackPanel Orientation="Horizontal">
-            <Border Width="28" Height="28" CornerRadius="7" Background="{DynamicResource AccentBrush}">
-              <TextBlock Text="D" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource AccentForegroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Border>
+            <Image Source="Assets/dt.png" Width="28" Height="28" />
             <TextBlock Text="DailyToolkit" Margin="9,0,0,0" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
           </StackPanel>
           <TextBlock Text="日常小工具" Style="{StaticResource MutedText}" Margin="0,13,0,0" />
@@ -52,16 +51,16 @@
           <Button x:Name="FavoritesButton" Click="ToggleFavorites" Width="46" Height="46" Padding="0"
                   FontSize="25" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AccentBrush}"
                   ToolTip="{Binding FavoritesToggleHint}" AutomationProperties.Name="{Binding FavoritesToggleHint}">
-            <TextBlock Text="★" FontFamily="Segoe UI Symbol" FontSize="25" />
+            <Path x:Name="FavoritesIcon" Width="26" Height="26" Stretch="Fill" Fill="{DynamicResource AccentBrush}" />
           </Button>
           <Button x:Name="SettingsButton" Click="ToggleSettings" Width="46" Height="46" Padding="0" Margin="8,0,0,0"
                   BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AccentBrush}"
                   ToolTip="{Binding SettingsToggleHint}" AutomationProperties.Name="{Binding SettingsToggleHint}">
-            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="25" />
+            <Path x:Name="SettingsIcon" Width="26" Height="26" Stretch="Fill" Fill="{DynamicResource AccentBrush}" />
           </Button>
           </StackPanel>
           <TextBlock Margin="0,8,0,0" FontSize="12">
-            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.4.3</Hyperlink>
+            <Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource MutedBrush}">DailyToolkit 0.5.0</Hyperlink>
           </TextBlock>
         </StackPanel>
         <DockPanel x:Name="NavigationPanel">
@@ -102,7 +101,7 @@
       </DockPanel>
     </Border>
     </Grid>
-    <Grid x:Name="MainContent" Grid.Row="1" Grid.Column="1" Margin="{Binding ContentPadding}">
+    <Grid x:Name="MainContent" Grid.Column="1" Margin="{Binding ContentPadding}">
       <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
       <Grid Margin="0,0,0,20">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -320,17 +319,70 @@
         <StackPanel Margin="0,0,8,0">
           <Border Style="{StaticResource Card}" Margin="0,0,0,14">
             <StackPanel>
-              <TextBlock Text="界面" Style="{StaticResource SectionTitle}" />
+              <TextBlock Text="切换动画" Style="{StaticResource SectionTitle}" />
               <CheckBox x:Name="PageAnimationSwitch" Content="播放页面切换动画" IsChecked="{Binding PageAnimationsEnabled, Mode=TwoWay}"
                         FontFamily="Microsoft YaHei UI" FontSize="14" Foreground="{DynamicResource TextBrush}" />
-              <TextBlock Text="收藏夹用星形，软件设置用齿轮。关闭后直接切换页面。" Style="{StaticResource MutedText}" Margin="0,10,0,0" />
-              <TextBlock Text="动画也遵循 Windows 的动画和高对比度设置。" Style="{StaticResource MutedText}" Margin="0,6,0,0" />
+              <TextBlock Text="进入和退出使用相同的形状与颜色，标题栏保持可用。" Style="{StaticResource MutedText}" Margin="0,10,0,12" />
+              <controls:ColorPicker x:Name="AnimationColorPicker" Color="{Binding AnimationColor, Mode=TwoWay}" />
+              <WrapPanel Margin="0,10,0,0">
+                <Button Content="预览星形" Click="PreviewStar" Margin="0,0,8,0" />
+                <Button Content="预览齿轮" Click="PreviewGear" />
+              </WrapPanel>
+              <TextBlock Text="遵循 Windows 的动画和高对比度设置。" Style="{StaticResource MutedText}" Margin="0,10,0,0" />
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <StackPanel>
+              <TextBlock Text="主题配色" Style="{StaticResource SectionTitle}" />
+              <WrapPanel Margin="0,0,0,14">
+                <Button Content="浅色" Command="{Binding LightThemeCommand}" Margin="0,0,8,0" />
+                <Button Content="深色" Command="{Binding DarkThemeCommand}" Margin="0,0,8,0" />
+                <Button Content="恢复界面默认" Command="{Binding ResetAppearanceCommand}" />
+              </WrapPanel>
+              <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="1" Margin="0,0,0,8" MaxWidth="480" HorizontalAlignment="Left">
+                <Viewbox Stretch="Uniform" MaxHeight="240"><controls:ThemePreview x:Name="PalettePreview" Width="480" Height="240" Palette="{Binding Theme}" AnimationColor="{Binding AnimationColor}" /></Viewbox>
+              </Border>
+              <TextBlock Text="预览随颜色变化。可选色块、输入色号，也可打开颜色选择器。" Style="{StaticResource MutedText}" Margin="0,0,0,14" />
+              <ItemsControl ItemsSource="{Binding ThemeColors}">
+                <ItemsControl.ItemTemplate><DataTemplate>
+                  <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Name}" FontSize="13" VerticalAlignment="Top" Margin="0,3,8,0" />
+                    <controls:ColorPicker Grid.Column="1" Color="{Binding Value, Mode=TwoWay}" />
+                  </Grid>
+                </DataTemplate></ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <StackPanel>
+              <TextBlock Text="后台运行" Style="{StaticResource SectionTitle}" />
+              <CheckBox Content="关闭窗口后留在托盘" IsChecked="{Binding CloseToTray}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12" />
+              <CheckBox Content="最小化时留在托盘" IsChecked="{Binding MinimizeToTray}" Foreground="{DynamicResource TextBrush}" />
+              <TextBlock Text="留在托盘时快捷键仍可用。点击托盘图标打开窗口，右键选择退出可关闭软件。" Style="{StaticResource MutedText}" Margin="0,12,0,0" />
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+            <StackPanel>
+              <TextBlock Text="启动" Style="{StaticResource SectionTitle}" />
+              <StackPanel IsEnabled="{Binding CanEditStartup}">
+                <CheckBox x:Name="LoginStartupSwitch" Content="开机自启动" IsChecked="{Binding StartAtLogin}" Foreground="{DynamicResource TextBrush}" />
+                <StackPanel Margin="24,12,0,0">
+                  <CheckBox x:Name="AdminStartupSwitch" Content="以管理员权限启动全部功能" IsChecked="{Binding AdminStartup}" IsEnabled="{Binding StartAtLogin}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12" />
+                  <CheckBox x:Name="SilentStartupSwitch" Content="静默启动，只显示托盘图标" IsChecked="{Binding SilentStartup}" Foreground="{DynamicResource TextBrush}" />
+                </StackPanel>
+              </StackPanel>
+              <TextBlock Text="管理员自启在启用时请求一次授权。关闭后重新启用会再次授权；已启用的自启不再弹出 UAC。静默启动可同时开启。" Style="{StaticResource MutedText}" Margin="0,14,0,12" />
+              <Button Content="应用启动设置" Command="{Binding ApplyStartupCommand}" HorizontalAlignment="Left" />
+              <TextBlock Text="{Binding StartupStatus}" Style="{StaticResource MutedText}" Margin="0,12,0,0" />
+              <TextBlock Text="{Binding PrivilegeText}" FontSize="13" Margin="0,14,0,10" />
+              <Button Content="立即以管理员权限重启" Command="{Binding RunAdministratorCommand}" HorizontalAlignment="Left" />
             </StackPanel>
           </Border>
           <Border Style="{StaticResource Card}">
             <StackPanel>
               <TextBlock Text="关于" Style="{StaticResource SectionTitle}" />
-              <TextBlock Text="DailyToolkit 0.4.3" FontWeight="SemiBold" />
+              <TextBlock Text="DailyToolkit 0.5.0" FontWeight="SemiBold" />
               <TextBlock Text="把自己常用的小工具放在一起。设置保存在这台电脑上。" Style="{StaticResource MutedText}" Margin="0,10,0,14" />
               <TextBlock><Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">项目主页</Hyperlink></TextBlock>
             </StackPanel>
@@ -348,7 +400,7 @@
       </Border>
 
       <StackPanel Grid.Row="2" Margin="0,16,0,0">
-        <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource AccentBrush}" FontSize="13" Margin="0,0,0,8"
+        <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource AccentBrush}" FontSize="13" TextWrapping="Wrap" Margin="0,0,0,8"
                    Visibility="{Binding HasNotice, Converter={StaticResource VisibleWhen}}" />
         <Grid>
           <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -357,11 +409,11 @@
         </Grid>
       </StackPanel>
     </Grid>
-    <Image x:Name="PageTransition" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="100" Visibility="Collapsed"
+    <Image x:Name="PageTransition" Grid.ColumnSpan="2" Panel.ZIndex="100" Visibility="Collapsed"
            IsHitTestVisible="False" Stretch="Fill" />
-    <Grid x:Name="PageTransitionCover" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="101" Visibility="Collapsed" IsHitTestVisible="False">
-      <Path x:Name="PageTransitionShape" Fill="{DynamicResource AccentBrush}" />
-      <Path x:Name="PageTransitionHub" Fill="{DynamicResource AccentSoftBrush}" />
+    <Grid x:Name="PageTransitionCover" Grid.ColumnSpan="2" Panel.ZIndex="101" Visibility="Collapsed" IsHitTestVisible="False">
+      <Path x:Name="PageTransitionShape" Fill="{DynamicResource AnimationBrush}" />
+    </Grid>
     </Grid>
   </Grid>
 </Window>

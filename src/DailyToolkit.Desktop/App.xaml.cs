@@ -10,6 +10,7 @@ using DailyToolkit.Desktop.Environment;
 using DailyToolkit.Desktop.Presentation;
 using DailyToolkit.Desktop.Gaming;
 using DailyToolkit.Core.Environment;
+using DailyToolkit.Desktop.Runtime;
 
 namespace DailyToolkit.Desktop;
 
@@ -21,6 +22,15 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (e.Args is ["--configure-admin-startup",var userSid])
+        {
+            ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            Shutdown(StartupRegistration.ConfigureElevated(userSid)); return;
+        }
+        if (e.Args is ["--exit"])
+        {
+            using var instance=new SingleInstance(); instance.ActivateExistingWindow(exit:true); Shutdown(); return;
+        }
         if (e.Args is ["--benchmark-lens",var benchmarkOutput,var referenceShader])
         {
             ShutdownMode=ShutdownMode.OnExplicitShutdown;
@@ -68,13 +78,52 @@ public partial class App : Application
             return;
         }
         var preview=e.Args.Length >= 2 && e.Args[0] == "--preview";
+        string? startupRecoveryNotice=null;
         if (!preview && !(e.Args.Length == 2 && e.Args[0] == "--diagnose"))
         {
             _instance=new();
+            if (e.Args.Contains("--admin-task"))
+            {
+                var registration=new StartupRegistration();
+                if (!registration.IsAdministrator) { _instance.Dispose(); _instance=null; Shutdown(2); return; }
+                var deadline=DateTime.UtcNow.AddSeconds(15);
+                while (!_instance.IsPrimary && DateTime.UtcNow < deadline)
+                {
+                    _instance.Dispose(); await Task.Delay(150); _instance=new();
+                }
+            }
             if (!_instance.IsPrimary) { _instance.ActivateExistingWindow(); Shutdown(); return; }
+            var preferences=new AppPreferencesStore().Load();
+            var startupRegistration=new StartupRegistration();
+            if (preferences.AdminStartup && !startupRegistration.IsAdministrator)
+            {
+                try
+                {
+                    if (!startupRegistration.Read().Administrator) throw new InvalidOperationException("管理员启动任务已被移除，请重新启用管理员自启。");
+                    startupRegistration.LaunchAdministrator(requireRegisteredTask:true); Shutdown(); return;
+                }
+                catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException or InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                    // An externally removed/disabled task must leave settings reachable.
+                    // No automatic UAC fallback is used when a registered task fails.
+                    startupRecoveryNotice=exception.Message+" 本次以普通权限打开设置，请关闭或重新启用管理员自启。";
+                    new AppPreferencesStore().Save(preferences with { StartAtLogin=false,AdminStartup=false });
+                }
+            }
+            ShutdownMode=ShutdownMode.OnExplicitShutdown;
         }
         ApplyAccessibilityColors();
-        var viewModel = new MainViewModel(new WindowsEnvironmentProbe(), NativeWindowsInfo.ReadDisplay());
+        DirectoryInfo? previewDirectory=null;
+        var preferencesStore=new AppPreferencesStore();
+        if (preview)
+        {
+            previewDirectory=Directory.CreateTempSubdirectory("DailyToolkit-page-preview-");
+            var localPreferences=preferencesStore.Load();
+            preferencesStore=new(Path.Combine(previewDirectory.FullName,"settings.json"));
+            preferencesStore.Save(localPreferences);
+        }
+        var viewModel = new MainViewModel(new WindowsEnvironmentProbe(), NativeWindowsInfo.ReadDisplay(),appPreferencesStore:preferencesStore);
+        if (startupRecoveryNotice is not null) viewModel.Page="settings";
         try
         {
             // These switches produce local artifacts for development; the normal app opens immediately.
@@ -90,6 +139,7 @@ public partial class App : Application
 
             var window = new MainWindow(viewModel, enableShortcuts: !preview);
             MainWindow = window;
+            if (startupRecoveryNotice is not null) window.Loaded += (_,_) => viewModel.ShowStartupRecovery(startupRecoveryNotice);
             var firstFrame = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             window.ContentRendered += (_, _) =>
             {
@@ -109,7 +159,11 @@ public partial class App : Application
                 window.Width = ReadDimension(e.Args, "--width", 1040, 680);
                 window.Height = ReadDimension(e.Args, "--height", 800, 540);
             }
-            window.Show();
+            if (!preview && startupRecoveryNotice is null && new AppPreferencesStore().Load().SilentStartup && !e.Args.Contains("--show"))
+            {
+                window.StartHidden(); _=LensGpuRenderer.WarmShaderAsync();
+            }
+            else window.Show();
             if (!preview) return;
 
             await firstFrame.Task;
@@ -119,9 +173,16 @@ public partial class App : Application
             viewModel.QueueLocalRefresh();
             await viewModel.CurrentLocalStatusTask;
             viewModel.Page = ReadArgument(e.Args, "--page") ?? "home";
+            if (ReadArgument(e.Args,"--theme") == "dark") viewModel.DarkThemeCommand.Execute(null);
+            if (ReadArgument(e.Args,"--animation-color") is { } animationColor) viewModel.AnimationColor=animationColor;
             if (e.Args.Contains("--details") || e.Args.Contains("--software"))
                 window.ShowPreviewDetails(e.Args.Contains("--software"));
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+            if (viewModel.IsSettings && ReadArgument(e.Args,"--settings-section") == "startup")
+            {
+                ((System.Windows.Controls.ScrollViewer)window.FindName("SettingsScroll")).ScrollToEnd();
+                await Dispatcher.InvokeAsync(window.UpdateLayout,DispatcherPriority.ContextIdle);
+            }
             await window.WaitForLensPreviewAsync().WaitAsync(TimeSpan.FromSeconds(15));
             await Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
             if (ReadArgument(e.Args,"--transition") is "favorites" or "settings")
@@ -148,7 +209,7 @@ public partial class App : Application
             await File.WriteAllTextAsync(Path.ChangeExtension(imagePath, ".json"), viewModel.ExportJson(), new UTF8Encoding(false));
             window.Close();
         }
-        catch (Exception exception) when (e.Args.Length > 0)
+        catch (Exception exception) when (preview || e.Args is ["--diagnose",_])
         {
             // No dialogs in development modes: automation receives a nonzero exit code.
             if (e.Args.Length >= 2)
@@ -156,12 +217,27 @@ public partial class App : Application
             viewModel.Dispose();
             Shutdown(1);
         }
+        finally
+        {
+            if (previewDirectory is not null && previewDirectory.Name.StartsWith("DailyToolkit-page-preview-",StringComparison.Ordinal) &&
+                Path.GetFullPath(previewDirectory.FullName).StartsWith(Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))
+            {
+                try { previewDirectory.Delete(recursive:true); }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { Trace.WriteLine(exception); }
+            }
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         _instance?.Dispose(); _instance=null;
         base.OnExit(e);
+    }
+
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        if (MainWindow is MainWindow window) window.RequestExit();
+        base.OnSessionEnding(e);
     }
 
     private static string? ReadArgument(string[] args, string name)

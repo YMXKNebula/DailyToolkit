@@ -1,0 +1,18 @@
+<UserControl x:Class="DailyToolkit.Desktop.Controls.ColorPicker" x:Name="Picker"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <WrapPanel>
+  <ItemsControl x:Name="Palette">
+   <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+   <ItemsControl.ItemTemplate><DataTemplate>
+    <Button Width="24" Height="24" Padding="0" Margin="0,0,5,5" Tag="{Binding}" Background="{Binding}"
+     BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" ToolTip="{Binding}" Click="SelectColor" AutomationProperties.Name="{Binding}" />
+   </DataTemplate></ItemsControl.ItemTemplate>
+  </ItemsControl>
+  <Button Width="26" Height="24" Padding="0" Margin="0,0,6,5" Background="{Binding Color, ElementName=Picker}" ToolTip="选择其他颜色" Click="ChooseCustomColor" AutomationProperties.Name="选择其他颜色">
+   <TextBlock Text="…" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" />
+  </Button>
+  <TextBox x:Name="HexInput" Width="82" Height="24" Padding="5,2" FontSize="12" Margin="0,0,0,5" MaxLength="7"
+   Text="{Binding Color, ElementName=Picker, Mode=OneWay}" LostKeyboardFocus="CommitColor" KeyDown="ColorKeyDown"
+   Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}" ToolTip="#RRGGBB" AutomationProperties.Name="十六进制颜色" />
+ </WrapPanel>
+</UserControl>
