@@ -28,7 +28,7 @@ public partial class MainWindow : Window
     private const string HotkeyConflictNotice="快捷键可能被其他软件占用，请换一个按键，或用放大工具中的按钮。";
     private Point _navigationDragStart;
     private NavigationItem? _navigationDragItem;
-    private int _sidebarTransitionGeneration;
+    private int _favoritesTransitionGeneration;
 
     public MainWindow(MainViewModel viewModel, bool enableShortcuts = true)
     {
@@ -68,30 +68,29 @@ public partial class MainWindow : Window
     internal FrameworkElement PreviewContent => RootContent;
     internal Task WaitForLensPreviewAsync() => LensPhotoPreview.IsVisible ? LensPhotoPreview.Ready : Task.CompletedTask;
 
-    private void OpenFavorites(object sender,RoutedEventArgs e) => SwitchFavorites(true);
+    private void ToggleFavorites(object sender,RoutedEventArgs e) => SwitchFavorites(!_viewModel.IsFavorites);
     private void ExitFavorites(object sender,RoutedEventArgs e) => SwitchFavorites(false);
     private void SwitchFavorites(bool opening)
     {
         if (_viewModel.IsFavorites == opening) return;
-        var generation=++_sidebarTransitionGeneration;
-        var animate=SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast && SidebarSurface.ActualWidth > 0;
+        var generation=++_favoritesTransitionGeneration;
+        var animate=SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast && RootContent.ActualWidth > 0;
         if (animate)
         {
-            var dpi=VisualTreeHelper.GetDpi(SidebarSurface);
-            var snapshot=new RenderTargetBitmap((int)Math.Ceiling(SidebarSurface.ActualWidth*dpi.DpiScaleX),
-                (int)Math.Ceiling(SidebarSurface.ActualHeight*dpi.DpiScaleY),dpi.PixelsPerInchX,dpi.PixelsPerInchY,PixelFormats.Pbgra32);
-            snapshot.Render(SidebarSurface); snapshot.Freeze();
-            SidebarTransition.Source=snapshot;
+            var dpi=VisualTreeHelper.GetDpi(RootContent);
+            var snapshot=new RenderTargetBitmap((int)Math.Ceiling(RootContent.ActualWidth*dpi.DpiScaleX),
+                (int)Math.Ceiling(RootContent.ActualHeight*dpi.DpiScaleY),dpi.PixelsPerInchX,dpi.PixelsPerInchY,PixelFormats.Pbgra32);
+            snapshot.Render(RootContent); snapshot.Freeze();
+            FavoritesTransition.Source=snapshot;
         }
         if (opening) _viewModel.OpenFavoritesCommand.Execute(null); else _viewModel.ExitFavoritesCommand.Execute(null);
         if (!animate)
         {
-            SidebarTransition.Visibility=Visibility.Collapsed; SidebarTransition.Source=null;
-            SidebarTransition.Clip=null; SidebarBase.IsHitTestVisible=true;
+            FinishFavoritesTransition();
             return;
         }
-        var center=FavoritesButton.TranslatePoint(new(FavoritesButton.ActualWidth/2,FavoritesButton.ActualHeight/2),SidebarSurface);
-        var width=SidebarSurface.ActualWidth; var height=SidebarSurface.ActualHeight;
+        var center=FavoritesButton.TranslatePoint(new(FavoritesButton.ActualWidth/2,FavoritesButton.ActualHeight/2),RootContent);
+        var width=RootContent.ActualWidth; var height=RootContent.ActualHeight;
         var radius=Math.Sqrt(Math.Pow(Math.Max(center.X,width-center.X),2)+Math.Pow(Math.Max(center.Y,height-center.Y),2))+1;
         // The star's inner radius is 45%; scale past its incircle so every corner is covered.
         var fullScale=radius/40;
@@ -117,23 +116,32 @@ public partial class MainWindow : Window
             outside.Children.Add(new RectangleGeometry(new Rect(0,0,width,height)));
             outside.Children.Add(star); clip=outside;
         }
-        SidebarTransition.Clip=clip;
-        SidebarTransition.Visibility=Visibility.Visible;
-        SidebarBase.IsHitTestVisible=false;
+        FavoritesTransition.Clip=clip;
+        FavoritesTransition.Visibility=Visibility.Visible;
+        FavoritesTransitionTint.Data=star;
+        FavoritesTransitionTint.Visibility=Visibility.Visible;
+        NavigationPanel.IsHitTestVisible=MainContent.IsHitTestVisible=false;
         var animation=new DoubleAnimation(opening ? 0 : fullScale,opening ? fullScale : 0,TimeSpan.FromMilliseconds(280))
         { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } };
         animation.Completed += (_,_) =>
         {
-            if (generation != _sidebarTransitionGeneration) return;
-            SidebarTransition.Visibility=Visibility.Collapsed;
-            SidebarTransition.Source=null;
-            SidebarTransition.Clip=null;
-            SidebarBase.IsHitTestVisible=true;
+            if (generation != _favoritesTransitionGeneration) return;
+            FinishFavoritesTransition();
         };
         scale.BeginAnimation(ScaleTransform.ScaleXProperty,animation);
         scale.BeginAnimation(ScaleTransform.ScaleYProperty,animation);
         rotation.BeginAnimation(RotateTransform.AngleProperty,new DoubleAnimation(opening ? 0 : 120,opening ? 120 : 0,
             TimeSpan.FromMilliseconds(280)) { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseInOut } });
+        FavoritesTransitionTint.BeginAnimation(OpacityProperty,new DoubleAnimation(0.35,0,TimeSpan.FromMilliseconds(280))
+            { EasingFunction=new CubicEase { EasingMode=EasingMode.EaseIn } });
+    }
+
+    private void FinishFavoritesTransition()
+    {
+        FavoritesTransition.Visibility=FavoritesTransitionTint.Visibility=Visibility.Collapsed;
+        FavoritesTransition.Source=null; FavoritesTransition.Clip=null; FavoritesTransitionTint.Data=null;
+        FavoritesTransitionTint.BeginAnimation(OpacityProperty,null);
+        NavigationPanel.IsHitTestVisible=MainContent.IsHitTestVisible=true;
     }
 
     private void NavigationDragStart(object sender,MouseButtonEventArgs e)
@@ -248,15 +256,6 @@ public partial class MainWindow : Window
     private void ClearShortcut(object sender,RoutedEventArgs e) =>
         _viewModel.Gaming.SetShortcut(null);
 
-    private void ToggleLensDetails(object sender,RoutedEventArgs e) =>
-        SetLensDetails(LensDetailsPanel.Visibility != Visibility.Visible);
-
-    private void SetLensDetails(bool expanded)
-    {
-        LensDetailsPanel.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
-        LensDetailsToggle.Content = expanded ? "▴" : "▾";
-    }
-
     private async void SaveReport(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog
@@ -279,7 +278,7 @@ public partial class MainWindow : Window
 
     internal void ShowPreviewDetails(bool software)
     {
-        if (_viewModel.ShowScreenLens) { SetLensDetails(true); UpdateLayout(); return; }
+        if (_viewModel.ShowScreenLens) { UpdateLayout(); return; }
         HardwareExpander.IsExpanded = true;
         SoftwareExpander.IsExpanded = software;
         UpdateLayout();

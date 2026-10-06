@@ -88,10 +88,11 @@ internal static partial class Program
         {
             window.Show();
             var preview=(DailyToolkit.Desktop.Controls.LensPreview)window.FindName("LensPhotoPreview");
-            Require(preview.CurrentFrame is null && !model.Gaming.IsActive,"Collapsed tool decoded the photo or started capture");
-            window.ShowPreviewDetails(false);
             await window.WaitForLensPreviewAsync().WaitAsync(TimeSpan.FromSeconds(15));
             window.UpdateLayout();
+            Require(((UIElement)window.FindName("LensDetailsPanel")).IsVisible && preview.IsVisible &&
+                window.FindName("LensDetailsToggle") is null && !model.Gaming.IsActive,
+                "Tool navigation did not show every setting and photo without a dropdown, or started capture");
             var fixedRadio=(System.Windows.Controls.RadioButton)window.FindName("LensFixedMode");
             var movableRadio=(System.Windows.Controls.RadioButton)window.FindName("LensMovableMode");
             Require(fixedRadio.IsChecked == true && movableRadio.IsChecked == false,"Position radio buttons did not default to fixed");
@@ -124,20 +125,37 @@ internal static partial class Program
             model.Gaming.IsFavorite=true;
             var favoriteButton=(System.Windows.Controls.Button)window.FindName("FavoritesButton");
             favoriteButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            var transition=(System.Windows.Controls.Image)window.FindName("SidebarTransition");
+            var transition=(System.Windows.Controls.Image)window.FindName("FavoritesTransition");
+            var tint=(System.Windows.Shapes.Path)window.FindName("FavoritesTransitionTint");
+            var root=(FrameworkElement)window.PreviewContent;
+            Require(model.FavoritesToggleHint == "关闭收藏夹" && favoriteButton.ToolTip as string == "关闭收藏夹",
+                "The same star did not advertise its close action");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
                 Require(transition.IsVisible && transition.Clip is System.Windows.Media.GeometryGroup group &&
                     group.Children[1] is System.Windows.Media.StreamGeometry star && star.Transform is System.Windows.Media.TransformGroup transforms &&
                     transforms.Children[0].HasAnimatedProperties && transforms.Children[1].HasAnimatedProperties,
-                    "Favorites did not animate a growing and rotating star from the sidebar");
+                    "Favorites did not animate a growing and rotating star");
+                var geometry=(System.Windows.Media.StreamGeometry)((System.Windows.Media.GeometryGroup)transition.Clip).Children[1];
+                var dpi=System.Windows.Media.VisualTreeHelper.GetDpi(root);
+                Require(System.Windows.Controls.Grid.GetColumnSpan(transition) == 2 && System.Windows.Controls.Grid.GetColumnSpan(tint) == 2 &&
+                    transition.Source is System.Windows.Media.Imaging.BitmapSource snapshot &&
+                    snapshot.PixelWidth == (int)Math.Ceiling(root.ActualWidth*dpi.DpiScaleX) &&
+                    snapshot.PixelHeight == (int)Math.Ceiling(root.ActualHeight*dpi.DpiScaleY) && tint.Data == geometry && tint.IsVisible &&
+                    favoriteButton.IsHitTestVisible && !((UIElement)window.FindName("MainContent")).IsHitTestVisible,
+                    "The star transition did not cover both sidebar and main content, or blocked the toggle itself");
                 await Task.Delay(600);
-                Require(!transition.IsVisible && transition.Source is null && ((UIElement)window.FindName("SidebarBase")).IsHitTestVisible,
-                    "The transition retained its snapshot or blocked sidebar input");
+                Require(new[] { new Point(0,0),new Point(root.ActualWidth,0),new Point(0,root.ActualHeight),new Point(root.ActualWidth,root.ActualHeight) }
+                    .All(point => geometry.FillContains(point)),"The expanded star left a window corner uncovered");
+                Require(!transition.IsVisible && transition.Source is null && !tint.IsVisible && tint.Data is null &&
+                    ((UIElement)window.FindName("MainContent")).IsHitTestVisible && ((UIElement)window.FindName("NavigationPanel")).IsHitTestVisible,
+                    "The transition retained its snapshot or blocked window input");
             }
             Require(model.IsFavorites && model.NavigationItems.Single().Id == "screen-lens" && !model.Gaming.IsActive,
                 "The animated favorites button did not replace the sidebar");
-            Buttons(window).Single(button => button.Content as string == "← 退出收藏夹").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            favoriteButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Require(!model.IsFavorites && model.ShowScreenLens && model.FavoritesToggleHint == "打开收藏夹",
+                "Clicking the same star did not close favorites and restore the previous tool");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
                 Require(transition.IsVisible && transition.Clip is System.Windows.Media.StreamGeometry,"Exiting favorites did not reverse the star reveal");
@@ -162,6 +180,6 @@ internal static partial class Program
             if (Path.GetFullPath(directory.FullName).StartsWith(tempRoot,StringComparison.OrdinalIgnoreCase) &&
                 directory.Name.StartsWith("DailyToolkit-lens-layout-tests-",StringComparison.Ordinal)) directory.Delete(recursive:true);
         }
-        Console.WriteLine("PASS Preview loads only when expanded, stays offline, leaves capture off and adapts to narrow windows");
+        Console.WriteLine("PASS Settings show directly; preview stays offline; a full-window rotating star toggles favorites and cleans up");
     }
 }

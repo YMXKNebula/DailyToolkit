@@ -123,6 +123,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool ShowScreenLens => Page == "screen-lens";
     public bool ShowFavoritesEmpty => IsFavorites && !HasFavorites;
     public bool ShowAllTools => !IsFavorites;
+    public string FavoritesToggleHint => IsFavorites ? "关闭收藏夹" : "打开收藏夹";
     public string PageTitle => ShowFavoritesEmpty ? "收藏夹" : _navigation.First(item => item.Id == Page).Name;
     public string PageDescription => ShowScreenLens ? "局部放大桌面或游戏画面" : ShowFavoritesEmpty ? "把常用工具放在这里" : "日期、天气和电脑状态";
     public string RefreshText => ShowScreenLens ? "刷新屏幕" : "刷新";
@@ -365,7 +366,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyToolkit", Version = "0.4.0", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyToolkit", Version = "0.4.1", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);
