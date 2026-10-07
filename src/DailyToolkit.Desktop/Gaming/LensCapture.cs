@@ -17,6 +17,7 @@ internal sealed class LensCapture : IDisposable
     private readonly GraphicsCaptureSession _session = null!;
     private readonly GraphicsCaptureItem _item;
     private RenderSettings _settings;
+    private RenderSettings? _lastRenderedSettings;
     private readonly LensFramePacer _pacer;
     private readonly int _sourceWidth, _sourceHeight;
     private int _refreshRequested,_refreshWorker;
@@ -99,6 +100,7 @@ internal sealed class LensCapture : IDisposable
                     using var texture = CaptureInterop.Texture(frame.Surface);
                     var settings=Volatile.Read(ref _settings);
                     _renderer.Render(texture,settings.Source,settings.Sharpening,borderColor:settings.BorderColor);
+                    _lastRenderedSettings=settings;
                     if (!_firstFrameDelivered) { _firstFrameDelivered=true; FirstFrame?.Invoke(); }
                 }
                 finally { frame.Dispose(); }
@@ -114,7 +116,10 @@ internal sealed class LensCapture : IDisposable
 
     public void UpdateSource(SourceArea source,double sharpening,uint? borderColor=null)
     {
-        Volatile.Write(ref _settings,new(source,sharpening,borderColor ?? Volatile.Read(ref _settings).BorderColor));
+        var previous=Volatile.Read(ref _settings);
+        var settings=new RenderSettings(source,sharpening,borderColor ?? previous.BorderColor);
+        if (settings == previous) return;
+        Volatile.Write(ref _settings,settings);
         RequestRefresh();
     }
 
@@ -132,7 +137,10 @@ internal sealed class LensCapture : IDisposable
                     {
                         if (_stopped || _failed || Paused) return;
                         var settings=Volatile.Read(ref _settings);
+                        // A new capture frame may already have presented this update.
+                        if (ReferenceEquals(settings,_lastRenderedSettings)) continue;
                         _renderer.RenderLast(settings.Source,settings.Sharpening,borderColor:settings.BorderColor);
+                        _lastRenderedSettings=settings;
                     }
                 }
             }

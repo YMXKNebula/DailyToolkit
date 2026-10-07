@@ -1,4 +1,4 @@
-DailyToolkit 0.5.6
+DailyToolkit 0.5.7
 
 解压后打开 DailyToolkit.exe，已包含 .NET 运行环境。
 重复打开会切回正在运行的窗口，不会另外启动一份。

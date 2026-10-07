@@ -390,7 +390,7 @@
                 <Image Source="Assets/dt.png" Width="56" Height="56" Margin="0,0,16,0" />
                 <StackPanel VerticalAlignment="Center">
                   <TextBlock Text="DailyToolkit" FontSize="22" FontWeight="SemiBold" />
-                  <TextBlock x:Name="ProductVersion" Text="版本 0.5.6" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+                  <TextBlock x:Name="ProductVersion" Text="版本 0.5.7" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
                 </StackPanel>
               </StackPanel>
               <TextBlock Text="Windows 本地工具集合" Margin="0,0,0,14" />

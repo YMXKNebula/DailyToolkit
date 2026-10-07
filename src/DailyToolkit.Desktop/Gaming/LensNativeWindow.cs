@@ -16,12 +16,14 @@ internal sealed class LensNativeWindow : IDisposable
     private static bool _registered;
     private static readonly Dictionary<IntPtr,LensNativeWindow> Windows = new();
     private bool _movable;
+    private PixelBounds _bounds;
     public IntPtr Handle { get; private set; }
     public event Func<int,int,int,int,bool>? PointerMessage;
     public event Action? PointerCanceled;
 
     public LensNativeWindow(PixelBounds bounds)
     {
+        _bounds=bounds;
         if (!_registered)
         {
             var type = new WindowClass { Size = (uint)Marshal.SizeOf<WindowClass>(), Procedure = Procedure,
@@ -44,8 +46,14 @@ internal sealed class LensNativeWindow : IDisposable
 
     public void Show() => ShowWindow(Handle, 4);
     public void Hide() => ShowWindow(Handle, 0);
-    public bool Move(PixelBounds bounds) => SetWindowPos(Handle, new IntPtr(-1), bounds.Left, bounds.Top,
-        bounds.Width, bounds.Height, 0x0010 | 0x0200);
+    public bool Move(PixelBounds bounds)
+    {
+        if (bounds == _bounds) return true;
+        var flags=0x0010u | 0x0200u | 0x0004u; // retain activation and z-order
+        if (bounds.Width == _bounds.Width && bounds.Height == _bounds.Height) flags|=0x0001;
+        if (!SetWindowPos(Handle,IntPtr.Zero,bounds.Left,bounds.Top,bounds.Width,bounds.Height,flags)) return false;
+        _bounds=bounds; return true;
+    }
     public void SetMovable(bool movable)
     {
         _movable=movable;

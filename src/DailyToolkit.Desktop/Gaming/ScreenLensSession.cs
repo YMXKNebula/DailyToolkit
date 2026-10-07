@@ -83,6 +83,7 @@ internal sealed class ScreenLensSession : IDisposable
         _movement.UpdateZoom(zoom);
         if (_moveQueued) _pendingMove=_movement.State;
         else ApplyMovement(_movement.State);
+        if (IsVisible) UpdateActiveStatus();
     }
 
     public void SetBorderColor(uint color)
@@ -176,28 +177,21 @@ internal sealed class ScreenLensSession : IDisposable
     private void MoveFrame(int dx,int dy,int cursorX,int cursorY)
     {
         if (_movement is null || _activeMonitor is null || !IsMovableMode) return;
-        var state=_movement.Move(dx,dy,cursorX,cursorY);
-        var monitor=_monitors[state.MonitorIndex];
-        if (monitor.Handle != _activeMonitor.Handle || _moveQueued)
+        // Consume every delta immediately, but keep native window/GDI work out of
+        // the low-level hook: Windows has not delivered the cursor movement yet.
+        _pendingMove=_movement.Move(dx,dy,cursorX,cursorY);
+        if (_moveQueued) return;
+        _moveQueued=true;
+        var generation=_movementGeneration;
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Input,new Action(() =>
         {
-            // Every delta has already been consumed. Coalesce snapshots, never deltas.
-            _pendingMove=state;
-            if (_moveQueued) return;
-            _moveQueued=true;
-            var generation=_movementGeneration;
-            // Switch capture outside the low-level mouse hook; keep only the newest drag position.
-            Application.Current.Dispatcher.BeginInvoke(() =>
-            {
-                if (generation != _movementGeneration) return;
-                _moveQueued=false;
-                var move=_pendingMove; _pendingMove=null;
-                if (!IsActive || !IsMovableMode || move is null) return;
-                try { ApplyMovement(move); }
-                catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); Stop(); Status="跨屏移动失败，请重新开启放大框。"; }
-            });
-            return;
-        }
-        ApplyMovement(state);
+            if (generation != _movementGeneration) return;
+            _moveQueued=false;
+            var move=_pendingMove; _pendingMove=null;
+            if (!IsActive || !IsMovableMode || move is null) return;
+            try { ApplyMovement(move); }
+            catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); Stop(); Status="放大框移动失败，请重新开启。"; }
+        }));
     }
 
     private void ApplyMovement(LensMovementState state)
@@ -234,9 +228,9 @@ internal sealed class ScreenLensSession : IDisposable
         _positionY=(state.Y.OutputCenter-bounds.Top)/bounds.Height;
         if (_guides is { Visible:true }) _guides.Update(layout.Output,_verticalGuide,_horizontalGuide);
         if (!changed) _capture?.UpdateSource(layout.Source,_sharpening,_borderColor);
-        UpdateActiveStatus();
         if (changed)
         {
+            UpdateActiveStatus();
             BeginCapture(monitor,_layout!);
             MonitorChanged?.Invoke(monitor);
         }

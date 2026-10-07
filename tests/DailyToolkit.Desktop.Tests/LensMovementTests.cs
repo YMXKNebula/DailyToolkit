@@ -35,14 +35,26 @@ internal static partial class Program
             var initial=session.ActiveBounds!; var pointer=session.PointerForDiagnostics!;
             var gripX=initial.Left+initial.Width/2; var gripY=initial.Top+initial.Height/2;
             Require(pointer.Process(0x201,gripX,gripY),"Test drag did not begin");
+            var sourceBefore=session.CaptureForDiagnostics!.SourceForDiagnostics.Source;
+            for (var i=1;i<=80;i++) pointer.Process(0x200,gripX+i,gripY);
+            Require(session.ActiveBounds == initial && session.CaptureForDiagnostics.SourceForDiagnostics.Source == sourceBefore,
+                "Mouse input synchronously ran native window or render work before returning");
+            await WaitFor(() => session.MovementForDiagnostics?.X.OutputCenter == gripX+80,
+                "Coalescing a burst dropped mouse deltas or kept an older position");
+            pointer.Process(0x200,gripX,gripY);
+            await WaitFor(() => session.ActiveBounds == initial,"The coalesced drag could not return to its original position");
             var mouseX=bounds.Left+initial.Width/2-6;
             Require(pointer.Process(0x200,mouseX,gripY),"Test edge drag was ignored");
+            await WaitFor(() => session.MovementForDiagnostics?.X.SourceCenter == bounds.Left+initial.Width/2d-6,
+                "The queued edge sample did not reach its latest location");
             var detached=session.MovementForDiagnostics!;
             Require(detached.X.Coupling == LensAxisCoupling.MinDetached && detached.X.SourceCenter == detached.X.OutputCenter-6,
                 "The real session recentered the detached sampling area");
             var capture=session.CaptureForDiagnostics!; var handle=session.LensHandle;
             var source=capture.SourceForDiagnostics.Source;
+            pointer.Process(0x200,mouseX-10,gripY);
             session.SetMovement(false);
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             var frozen=session.MovementForDiagnostics!;
             Require(frozen == detached && source == capture.SourceForDiagnostics.Source,"Fixed changed actual output or source");
             pointer.Process(0x200,bounds.Left-500,gripY);
@@ -66,12 +78,17 @@ internal static partial class Program
             var actual=session.ActiveBounds!;
             gripX=actual.Left+actual.Width/2; gripY=actual.Top+actual.Height/2;
             pointer.Process(0x201,gripX,gripY); pointer.Process(0x200,gripX+20,gripY);
+            await WaitFor(() => session.MovementForDiagnostics!.X.OutputCenter == frozen.X.OutputCenter+14,
+                "The resumed drag position was not applied");
             Require(session.MovementForDiagnostics!.X == new LensAxisMotion(frozen.X.OutputCenter+14,frozen.X.OutputCenter+14,LensAxisCoupling.Coupled),
                 "The real pointer/session lost the remaining fourteen pixels after rejoining");
             pointer.Process(0x202,gripX+20,gripY);
+            pointer.Process(0x201,gripX+20,gripY); pointer.Process(0x200,gripX+30,gripY);
             session.Stop();
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             Require(!session.HasCaptureResources,"The live session retained native capture resources");
             Console.WriteLine("PASS Live Windows capture updates frozen detached sampling; resume consumes the remaining delta and releases runtime resources");
+            Console.WriteLine("PASS Mouse bursts return before native/render work, preserve every delta, and apply only the latest queued position");
         }
         finally { session.Stop(); scene.Close(); }
 
@@ -127,6 +144,7 @@ internal static partial class Program
             if (horizontal) x=sign < 0 ? a.Left+100 : a.Left+a.Width-100;
             else y=sign < 0 ? a.Top+80 : a.Top+a.Height-80;
             pointer.Process(0x200,x,y);
+            await WaitFor(() => session.MovementForDiagnostics?.Relay is { TargetMonitor:1 },"The queued edge did not form its virtual relay");
             state=session.MovementForDiagnostics!;
             Require(state.MonitorIndex == 0 && state.Relay is { TargetMonitor:1 } && switches == 0,
                 "Edge contact did not create a geometry-only relay");
@@ -134,6 +152,7 @@ internal static partial class Program
             if (horizontal) x=sign < 0 ? b.Left+b.Width-1 : b.Left+1;
             else y=sign < 0 ? b.Top+b.Height-1 : b.Top+1;
             pointer.Process(0x200,x,y);
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             Require(session.MovementForDiagnostics!.MonitorIndex == 0 && switches == 0 &&
                 session.CaptureForDiagnostics == capture && session.RendererForDiagnostics == renderer && session.LensHandle == handle,
                 "Mouse entry or virtual geometry started another capture/renderer");

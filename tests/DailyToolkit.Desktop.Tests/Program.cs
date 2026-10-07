@@ -29,6 +29,10 @@ internal static partial class Program
         {
             try
             {
+                if (args is ["--drag-benchmark",var output])
+                {
+                    await RunDragBenchmarkAsync(output); exitCode=0; return;
+                }
                 if (!args.Contains("--live-lens-only")) await CheckAsync();
                 if (args.Contains("--live-lens") || args.Contains("--live-lens-only")) await CheckLiveLensMovementAsync();
                 exitCode = 0;

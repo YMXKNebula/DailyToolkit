@@ -52,13 +52,29 @@ internal sealed class LensDesktopGuides : IDisposable
 
     public void Update(PixelBounds frame,bool verticalAligned,bool horizontalAligned)
     {
+        var first=!Visible;
+        var vertical=first || _verticalAligned != verticalAligned || Gap(_frame,true) != Gap(frame,true);
+        var horizontal=first || _horizontalAligned != horizontalAligned || Gap(_frame,false) != Gap(frame,false);
         _frame=frame; _verticalAligned=verticalAligned; _horizontalAligned=horizontalAligned;
         Visible=true;
-        foreach (var handle in new[] { VerticalHandle,HorizontalHandle })
+        if (vertical) InvalidateRect(VerticalHandle,IntPtr.Zero,false);
+        if (horizontal) InvalidateRect(HorizontalHandle,IntPtr.Zero,false);
+        // Position and z-order of these two thin windows stay constant during a drag.
+        if (first)
         {
-            InvalidateRect(handle,IntPtr.Zero,false);
-            SetWindowPos(handle,new IntPtr(-1),0,0,0,0,0x0010 | 0x0040 | 0x0001 | 0x0002);
+            SetWindowPos(VerticalHandle,new IntPtr(-1),0,0,0,0,0x0010 | 0x0040 | 0x0001 | 0x0002);
+            SetWindowPos(HorizontalHandle,new IntPtr(-1),0,0,0,0,0x0010 | 0x0040 | 0x0001 | 0x0002);
         }
+    }
+
+    private (int Start,int End) Gap(PixelBounds frame,bool vertical)
+    {
+        var center=vertical ? _monitor.Left+_monitor.Width/2 : _monitor.Top+_monitor.Height/2;
+        var crossing=vertical ? center >= frame.Left && center < frame.Left+frame.Width :
+            center >= frame.Top && center < frame.Top+frame.Height;
+        if (!crossing) return (0,0);
+        var start=vertical ? frame.Top-_monitor.Top : frame.Left-_monitor.Left;
+        return (start,start+(vertical ? frame.Height : frame.Width));
     }
 
     public void Hide()

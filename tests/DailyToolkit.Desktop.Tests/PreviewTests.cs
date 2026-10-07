@@ -335,7 +335,7 @@ internal static partial class Program
                     ((UIElement)window.FindName(settingsCards[index])).IsVisible,
                     "Settings navigation did not select exactly one category page");
             }
-            Require(((System.Windows.Controls.TextBlock)window.FindName("ProductVersion")).Text == "版本 0.5.6" &&
+            Require(((System.Windows.Controls.TextBlock)window.FindName("ProductVersion")).Text == "版本 0.5.7" &&
                 ((FrameworkElement)window.FindName("AboutSettingsCard")).IsVisible &&
                 !Descendants(sidebar).OfType<System.Windows.Controls.TextBlock>().Any(text => text.Text.Contains("DailyToolkit")),
                 "Product information remained in the sidebar instead of About");
