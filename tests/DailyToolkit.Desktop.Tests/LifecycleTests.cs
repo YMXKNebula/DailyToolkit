@@ -45,6 +45,7 @@ internal static partial class Program
         var clock = new ManualClock();
         var status = new LocalProbe();
         using var model = new MainViewModel(probe, display, status, clock);
+        model.Page="settings-computer";
         var refresh = model.InitializeAsync();
         await probe.DetailsStarted.Task;
         Require(model.IsRefreshing && !model.RefreshCommand.CanExecute(null), "Refresh was not disabled during detection");
@@ -57,7 +58,7 @@ internal static partial class Program
         Console.WriteLine("PASS UI stays responsive while detailed detection is pending");
 
         model.NavigateCommand.Execute("tools");
-        Require(model.IsHome && model.PageTitle == "电脑", "Legacy category navigation did not resolve to computer");
+        Require(model.IsHome && model.IsSettings && model.PageTitle == "电脑详情", "Legacy category navigation did not resolve to computer details");
         model.NavigateCommand.Execute("gaming");
         Require(model.ShowScreenLens && model.PageTitle == "屏幕局部放大" && !model.Gaming.IsActive, "Direct tool navigation was not ready");
         Console.WriteLine("PASS Game navigation keeps screen capture off until explicitly enabled");
@@ -109,6 +110,7 @@ internal static partial class Program
         var closingProbe = new ControlledProbe(display);
         var closingStatus = new LocalProbe { WaitForCancel = true };
         var closingModel = new MainViewModel(closingProbe, display, closingStatus);
+        closingModel.Page="settings-computer";
         var window = new MainWindow(closingModel, enableShortcuts: false)
         {
             ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000

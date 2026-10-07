@@ -175,7 +175,8 @@ public partial class App : Application
             await Task.Delay(250);
             viewModel.QueueLocalRefresh();
             await viewModel.CurrentLocalStatusTask;
-            viewModel.Page = ReadArgument(e.Args, "--page") ?? "home";
+            viewModel.Page = ReadArgument(e.Args, "--page") ?? "screen-lens";
+            await viewModel.PendingWork;
             if (ReadArgument(e.Args,"--theme") == "dark") viewModel.DarkThemeCommand.Execute(null);
             else if (ReadArgument(e.Args,"--theme") == "light") viewModel.LightThemeCommand.Execute(null);
             else if (viewModel.ThemePresets.FirstOrDefault(preset => preset.Name == ReadArgument(e.Args,"--theme")) is { } preset)

@@ -13,6 +13,8 @@ public sealed class LensMovement
 {
     private readonly PixelBounds[] _monitors;
     private readonly int _requestedWidth,_requestedHeight;
+    private readonly LensFrameSizePreset _sizePreset;
+    private readonly LensAspectRatio _aspect;
     private readonly bool _centerSnap;
     private int _monitorIndex;
     private double _zoom;
@@ -21,12 +23,16 @@ public sealed class LensMovement
     public LensMovementState State { get; private set; }
 
     public LensMovement(IReadOnlyList<PixelBounds> monitors,int monitorIndex,int width,int height,double zoom,
-        double centerX,double centerY,bool movable,bool centerSnap=false)
+        double centerX,double centerY,bool movable,bool centerSnap=false,LensFrameSizePreset sizePreset=LensFrameSizePreset.Custom,
+        LensAspectRatio aspect=LensAspectRatio.Screen)
     {
         if (monitors.Count == 0 || monitorIndex < 0 || monitorIndex >= monitors.Count ||
             monitors.Any(m => m.Width <= 0 || m.Height <= 0) || width <= 0 || height <= 0)
             throw new ArgumentOutOfRangeException(nameof(monitorIndex));
         ValidateZoom(zoom);
+        if (!Enum.IsDefined(sizePreset)) throw new ArgumentOutOfRangeException(nameof(sizePreset));
+        if (!Enum.IsDefined(aspect)) throw new ArgumentOutOfRangeException(nameof(aspect));
+        _sizePreset=sizePreset; _aspect=aspect;
         _monitors=monitors.ToArray(); _monitorIndex=monitorIndex;
         _requestedWidth=width; _requestedHeight=height; _zoom=zoom; IsMovable=movable; _centerSnap=centerSnap;
         var (x,y)=Limits();
@@ -94,7 +100,7 @@ public sealed class LensMovement
     private (AxisLimits X,AxisLimits Y) Limits()
     {
         var monitor=_monitors[_monitorIndex];
-        var width=Math.Min(_requestedWidth,monitor.Width); var height=Math.Min(_requestedHeight,monitor.Height);
+        var (width,height)=LensFrameSize.Resolve(monitor,_requestedWidth,_requestedHeight,_sizePreset,_aspect);
         return (new(monitor.Left+width/2d,monitor.Left+monitor.Width-width/2d,
                     monitor.Left+width/_zoom/2,monitor.Left+monitor.Width-width/_zoom/2),
                 new(monitor.Top+height/2d,monitor.Top+monitor.Height-height/2d,
@@ -140,7 +146,7 @@ public sealed class LensMovement
 
     private PixelBounds OutputAt(PixelBounds monitor,double x,double y)
     {
-        var width=Math.Min(_requestedWidth,monitor.Width); var height=Math.Min(_requestedHeight,monitor.Height);
+        var (width,height)=LensFrameSize.Resolve(monitor,_requestedWidth,_requestedHeight,_sizePreset,_aspect);
         var left=Math.Clamp((int)Math.Round(x-width/2d),monitor.Left,monitor.Left+monitor.Width-width);
         var top=Math.Clamp((int)Math.Round(y-height/2d),monitor.Top,monitor.Top+monitor.Height-height);
         return new(left,top,width,height);

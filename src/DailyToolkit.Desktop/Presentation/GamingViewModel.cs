@@ -19,6 +19,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     {
         _preferencesStore = preferencesStore ?? new();
         _preferences = _preferencesStore.Load();
+        _width=_preferences.FrameWidth; _height=_preferences.FrameHeight;
         _session.SetMovement(IsMovableMode);
         _session.SetWheelZoom(WheelZoomEnabled);
         _session.SetBorderColor(BorderColorRgb);
@@ -29,9 +30,9 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         _session.MonitorChanged += monitor => SelectedMonitor=monitor;
         Monitors = LensNativeWindow.Monitors();
         _monitor = MonitorUnderCursor();
-        StartCommand = new(_ => Start(), () => !IsActive && SelectedMonitor is not null);
+        StartCommand = new(_ => Start(), () => IsEnabled && !IsActive && SelectedMonitor is not null);
         StopCommand = new(_ => Stop(), () => IsActive);
-        ToggleCommand = new(_ => Toggle(), () => IsActive || SelectedMonitor is not null);
+        ToggleCommand = new(_ => Toggle(), () => IsEnabled && (IsActive || SelectedMonitor is not null));
         ToggleFavoriteCommand = new(_ => IsFavorite = !IsFavorite);
         ResetDefaultsCommand = new(_ => ResetDefaults());
     }
@@ -51,11 +52,54 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         return Monitors[LensPlacement.MonitorAt(Monitors.Select(m => m.Bounds).ToArray(),cursor.X,cursor.Y)];
     }
     public IReadOnlyList<LensFrameRate> FrameRates { get; } = new LensFrameRate[] { new(0,"跟随画面"),new(30,"30 帧/秒"),new(60,"60 帧/秒"),new(120,"120 帧/秒"),new(144,"144 帧/秒"),new(240,"240 帧/秒") };
-    public CaptureMonitor? SelectedMonitor { get => _monitor; private set { if (Set(ref _monitor,value)) { StartCommand.Refresh(); ToggleCommand.Refresh(); } } }
+    public CaptureMonitor? SelectedMonitor { get => _monitor; private set { if (Set(ref _monitor,value)) { NotifyFrameSize(); StartCommand.Refresh(); ToggleCommand.Refresh(); } } }
+    public IReadOnlyList<LensSizeOption> FrameSizePresets { get; } = [new(LensFrameSizePreset.Custom,"自定义"),
+        new(LensFrameSizePreset.Small,"小 · 屏幕宽高的 20%"),new(LensFrameSizePreset.Medium,"中 · 屏幕宽高的 30%"),
+        new(LensFrameSizePreset.Large,"大 · 屏幕宽高的 40%")];
+    public LensFrameSizePreset FrameSizePreset
+    {
+        get => _preferences.FrameSizePreset;
+        set
+        {
+            if (IsActive || value == FrameSizePreset || !Enum.IsDefined(value)) return;
+            SavePreferences(_preferences with { FrameSizePreset=value });
+            Notify(); Notify(nameof(IsCustomFrameSize)); Notify(nameof(IsPresetFrameSize)); NotifyFrameSize();
+        }
+    }
+    public bool IsCustomFrameSize => FrameSizePreset == LensFrameSizePreset.Custom;
+    public bool IsPresetFrameSize => !IsCustomFrameSize;
+    public IReadOnlyList<LensAspectOption> AspectRatios { get; } = [new(LensAspectRatio.Screen,"跟随屏幕比例"),
+        new(LensAspectRatio.Square,"1:1"),new(LensAspectRatio.Wide,"16:9"),new(LensAspectRatio.Standard,"4:3"),new(LensAspectRatio.Ultrawide,"21:9")];
+    public LensAspectRatio AspectRatio
+    {
+        get => _preferences.AspectRatio;
+        set
+        {
+            if (IsActive || value == AspectRatio || !Enum.IsDefined(value)) return;
+            SavePreferences(_preferences with { AspectRatio=value }); Notify(); NotifyFrameSize();
+        }
+    }
+    private (int Width,int Height) EffectiveFrameSize => SelectedMonitor is { } monitor
+        ? LensFrameSize.Resolve(monitor.Bounds,(int)_width,(int)_height,FrameSizePreset,AspectRatio) : ((int)_width,(int)_height);
+    public int EffectiveFrameWidth => EffectiveFrameSize.Width;
+    public int EffectiveFrameHeight => EffectiveFrameSize.Height;
+    private void NotifyFrameSize() { Notify(nameof(EffectiveFrameWidth)); Notify(nameof(EffectiveFrameHeight)); Notify(nameof(FrameSizeText)); }
+    public bool IsEnabled
+    {
+        get => _preferences.IsEnabled;
+        set
+        {
+            if (value == IsEnabled) return;
+            if (!value) Stop();
+            SavePreferences(_preferences with { IsEnabled=value }); Notify(); Notify(nameof(IsDisabled));
+            StartCommand.Refresh(); ToggleCommand.Refresh();
+        }
+    }
+    public bool IsDisabled => !IsEnabled;
     public double MaximumZoom => LensLayout.MaximumZoom;
     public double Zoom { get => _zoom; set { if (double.IsFinite(value) && Set(ref _zoom,Math.Clamp(value,1,MaximumZoom))) { Notify(nameof(ZoomText)); _session.UpdatePicture(Zoom,Sharpening); } } }
-    public double FrameWidth { get => _width; set { if (double.IsFinite(value) && Set(ref _width,Math.Round(Math.Clamp(value,160,1600)))) Notify(nameof(FrameSizeText)); } }
-    public double FrameHeight { get => _height; set { if (double.IsFinite(value) && Set(ref _height,Math.Round(Math.Clamp(value,120,1200)))) Notify(nameof(FrameSizeText)); } }
+    public double FrameWidth { get => _width; set { if (double.IsFinite(value) && Set(ref _width,Math.Round(Math.Clamp(value,160,1600)))) { SavePreferences(_preferences with { FrameWidth=(int)_width }); NotifyFrameSize(); } } }
+    public double FrameHeight { get => _height; set { if (double.IsFinite(value) && Set(ref _height,Math.Round(Math.Clamp(value,120,1200)))) { SavePreferences(_preferences with { FrameHeight=(int)_height }); NotifyFrameSize(); } } }
     internal double Sharpening { get => _sharpening; set { if (double.IsFinite(value) && Set(ref _sharpening,Math.Clamp(value,0,1))) _session.UpdatePicture(Zoom,Sharpening); } }
     public int FrameRate { get => _fps; set => Set(ref _fps,FrameRates.Any(rate => rate.Value == value) ? value : 0); }
     public string FrameRateText => FrameRates.First(rate => rate.Value == FrameRate).Label;
@@ -98,7 +142,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public bool IsVisible => _session.IsVisible;
     public bool CanConfigure => !IsActive;
     public string ZoomText => $"{Zoom:0.##}×";
-    public string FrameSizeText => $"{FrameWidth:0} × {FrameHeight:0} 像素";
+    public string FrameSizeText => $"{EffectiveFrameWidth} × {EffectiveFrameHeight} 像素";
     public string Status { get => _status; private set => Set(ref _status,value); }
     public string ToggleText => IsActive ? "关闭放大框" : "开启放大框";
     public RelayCommand StartCommand { get; }
@@ -160,16 +204,16 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
 
     public void Start()
     {
-        if (IsActive) return;
+        if (IsActive || !IsEnabled) return;
         RefreshMonitors();
         if (SelectedMonitor is not { } monitor) { Status="未找到可用的显示器。"; return; }
-        _session.Start(Monitors,monitor,(int)Math.Round(FrameWidth),(int)Math.Round(FrameHeight),Zoom,Sharpening,FrameRate);
+        _session.Start(Monitors,monitor,(int)Math.Round(FrameWidth),(int)Math.Round(FrameHeight),Zoom,Sharpening,FrameRate,FrameSizePreset,AspectRatio);
     }
 
     public void ResetDefaults()
     {
         Stop();
-        Zoom=2; FrameWidth=640; FrameHeight=384; Sharpening=0.35; FrameRate=0;
+        Zoom=2; FrameSizePreset=LensFrameSizePreset.Custom; AspectRatio=LensAspectRatio.Screen; FrameWidth=640; FrameHeight=384; Sharpening=0.35; FrameRate=0;
         RefreshMonitors();
         MovementMode=LensMovementMode.Fixed; WheelZoomEnabled=true; BorderColor=LensBorderColor.Default;
         _session.ResetPosition(SelectedMonitor);
@@ -197,3 +241,5 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
 }
 
 public sealed record LensFrameRate(int Value,string Label);
+public sealed record LensSizeOption(LensFrameSizePreset Value,string Label);
+public sealed record LensAspectOption(LensAspectRatio Value,string Label);

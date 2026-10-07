@@ -20,10 +20,10 @@ internal static partial class Program
                 gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),navigationStore:store);
             using (var model=Create())
             {
-                Require(model.Page == "computer" && model.NavigationItems.Select(item => item.Id).SequenceEqual(["computer","screen-lens"]) &&
+                Require(model.Page == "screen-lens" && model.NavigationItems.Select(item => item.Id).SequenceEqual(["screen-lens"]) &&
                     model.NavigationItems[0].IsSelected,"Default direct navigation was wrong");
-                Require(model.MoveNavigationItem("screen-lens","computer"),"Drag reorder was rejected");
-                Require(model.NavigationItems[0].Id == "screen-lens" && model.Page == "computer","Sorting changed selection");
+                Require(!model.MoveNavigationItem("screen-lens","computer"),"Moved computer details remained in the tool list");
+                Require(model.NavigationItems[0].Id == "screen-lens" && model.Page == "screen-lens","Rejected sorting changed selection");
                 Require(!model.MoveNavigationItem("unknown","computer") && !model.MoveNavigationItem("computer","computer"),"Invalid drag changed order");
                 model.Gaming.Zoom=4;
                 model.OpenFavoritesCommand.Execute(null);
@@ -32,14 +32,17 @@ internal static partial class Program
                 Require(model.NavigationItems.Single().Id == "screen-lens" && model.ShowScreenLens && model.Gaming.Zoom == 4 &&
                     !model.Gaming.IsActive,"Favorites did not share the existing tool state");
                 model.ExitFavoritesCommand.Execute(null);
-                Require(!model.IsFavorites && model.IsHome && model.NavigationItems.Count == 2 && model.Gaming.Zoom == 4,
+                Require(!model.IsFavorites && model.ShowScreenLens && model.NavigationItems.Count == 1 && model.Gaming.Zoom == 4,
                     "Exiting favorites did not restore normal navigation and selection");
                 model.MoveDownCommand.Execute(model.NavigationItems[0]);
-                Require(model.NavigationItems[0].Id == "computer","Context-menu reorder failed");
+                Require(model.NavigationItems[0].Id == "screen-lens" && !model.MoveDownCommand.CanExecute(null),"A single tool enabled invalid reordering");
+                model.Page="computer";
+                Require(model.IsHome && model.IsSettings && model.PageTitle == "电脑详情" && model.NavigationItems.Count == 5,
+                    "Computer details were not moved into settings");
             }
             using (var reopened=Create())
             {
-                Require(reopened.NavigationItems.Select(item => item.Id).SequenceEqual(["computer","screen-lens"]),"Order did not survive reopening");
+                Require(reopened.NavigationItems.Select(item => item.Id).SequenceEqual(["screen-lens"]),"Removed computer route returned after reopening");
                 reopened.Page="screen-lens";
                 reopened.OpenFavoritesCommand.Execute(null);
                 reopened.Gaming.IsFavorite=false;

@@ -326,7 +326,7 @@ internal static partial class Program
                 ((System.Windows.Media.SolidColorBrush)window.FindResource("WindowBrush")).Color.ToString() == "#FF171D1B",
                 "The live theme and preview did not receive the selected palette");
             model.LightThemeCommand.Execute(null);
-            var settingsCards=new[] { "ThemeSettingsCard","BackgroundSettingsCard","StartupSettingsCard","AboutSettingsCard" };
+            var settingsCards=new[] { "ThemeSettingsCard","BackgroundSettingsCard","StartupSettingsCard","HomeScroll","AboutSettingsCard" };
             foreach (var (item,index) in model.NavigationItems.ToArray().Select((item,index) => (item,index)))
             {
                 model.NavigateCommand.Execute(item); window.UpdateLayout();
@@ -335,7 +335,7 @@ internal static partial class Program
                     ((UIElement)window.FindName(settingsCards[index])).IsVisible,
                     "Settings navigation did not select exactly one category page");
             }
-            Require(((System.Windows.Controls.TextBlock)window.FindName("ProductVersion")).Text == "版本 0.5.7" &&
+            Require(((System.Windows.Controls.TextBlock)window.FindName("ProductVersion")).Text == "版本 0.6.0" &&
                 ((FrameworkElement)window.FindName("AboutSettingsCard")).IsVisible &&
                 !Descendants(sidebar).OfType<System.Windows.Controls.TextBlock>().Any(text => text.Text.Contains("DailyToolkit")),
                 "Product information remained in the sidebar instead of About");
@@ -380,14 +380,14 @@ internal static partial class Program
                 "The actual animation checkbox did not persist the choice");
             settingsButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             Require(!model.IsSettings && !transition.IsVisible && transition.Source is null,"Disabling animation still allocated a transition snapshot");
-            model.Page="computer";
+            model.Page="screen-lens";
             foreach (var first in new[] { favoriteButton,settingsButton })
             {
                 var second=first == favoriteButton ? settingsButton : favoriteButton;
                 first.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 second.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
                 second.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-                Require(model.IsHome && model.ShowAllTools && !model.IsFavorites && !model.IsSettings &&
+                Require(model.ShowScreenLens && model.ShowAllTools && !model.IsFavorites && !model.IsSettings &&
                     transition.Source is null,"Crossing footer buttons then closing restored the previous panel instead of the main interface");
             }
             model.Page="screen-lens";

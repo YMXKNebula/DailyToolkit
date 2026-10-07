@@ -21,7 +21,7 @@ internal static partial class Program
             Content=canvas,Width=400,Height=300,WindowStyle=WindowStyle.None,ResizeMode=ResizeMode.NoResize,
             ShowInTaskbar=false,ShowActivated=false,Topmost=true,Left=-20000,Top=-20000
         };
-        using var session=new ScreenLensSession();
+        using var session=new ScreenLensSession(nativePointer:false);
         var status=""; session.StatusChanged+=value => status=value;
         try
         {
@@ -115,7 +115,7 @@ internal static partial class Program
         var horizontal=b.Left+b.Width <= a.Left || b.Left >= a.Left+a.Width;
         var sign=horizontal ? (b.Left < a.Left ? -1 : 1) : (b.Top < a.Top ? -1 : 1);
         var scenes=new List<Window>();
-        using var session=new ScreenLensSession(); var switches=0;
+        using var session=new ScreenLensSession(nativePointer:false); var switches=0;
         session.MonitorChanged+=_ => switches++;
         try
         {

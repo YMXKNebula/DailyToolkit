@@ -16,12 +16,18 @@ public enum LensMovementMode { Movable, Fixed }
 
 public sealed record GamingPreferences
 {
+    public bool IsEnabled { get; init; } = true;
+    public LensFrameSizePreset FrameSizePreset { get; init; } = LensFrameSizePreset.Custom;
+    public LensAspectRatio AspectRatio { get; init; } = LensAspectRatio.Screen;
+    public int FrameWidth { get; init; } = 640;
+    public int FrameHeight { get; init; } = 384;
     public KeyboardShortcut? ToggleShortcut { get; init; } = new(6,0x77,"Ctrl + Shift + F8");
     public LensActivationMode ActivationMode { get; init; } = LensActivationMode.Toggle;
     public LensMovementMode MovementMode { get; init; } = LensMovementMode.Fixed;
     public bool WheelZoomEnabled { get; init; } = true;
     public string BorderColor { get; init; } = LensBorderColor.Default;
-    [JsonIgnore] public bool IsValid => (ToggleShortcut is null || ToggleShortcut.IsValid) &&
+    [JsonIgnore] public bool IsValid => Enum.IsDefined(FrameSizePreset) && Enum.IsDefined(AspectRatio) && FrameWidth is >= 160 and <= 1600 &&
+        FrameHeight is >= 120 and <= 1200 && (ToggleShortcut is null || ToggleShortcut.IsValid) &&
         (ActivationMode is LensActivationMode.Toggle or LensActivationMode.Hold) &&
         (MovementMode is LensMovementMode.Movable or LensMovementMode.Fixed) && LensBorderColor.TryParse(BorderColor,out _);
 }

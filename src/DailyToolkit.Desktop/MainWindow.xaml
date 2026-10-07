@@ -10,7 +10,7 @@
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="Auto"
         TextOptions.TextHintingMode="Fixed" WindowStartupLocation="CenterScreen" WindowStyle="None">
   <shell:WindowChrome.WindowChrome>
-    <shell:WindowChrome CaptionHeight="36" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+    <shell:WindowChrome CaptionHeight="36" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="12" UseAeroCaptionButtons="False" />
   </shell:WindowChrome.WindowChrome>
   <Grid x:Name="RootContent" Background="{DynamicResource WindowBrush}" RenderOptions.ClearTypeHint="Enabled" ClipToBounds="True">
     <Grid.RowDefinitions><RowDefinition Height="36" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -58,12 +58,18 @@
           <TextBlock DockPanel.Dock="Top" Text="设置" FontWeight="SemiBold" Margin="10,10,0,12"
                      Visibility="{Binding IsSettings, Converter={StaticResource VisibleWhen}}" />
           <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl ItemsSource="{Binding NavigationItems}">
+            <ItemsControl x:Name="NavigationList" ItemsSource="{Binding NavigationItems}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                  <RadioButton GroupName="Navigation" Style="{StaticResource NavButton}" Padding="10,12"
+                  <Border x:Name="NavigationRow" CornerRadius="12,0,0,12" Margin="0,3" SizeChanged="NavigationRowSizeChanged">
+                    <Border.Style><Style TargetType="Border"><Style.Triggers>
+                      <DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" /></DataTrigger>
+                    </Style.Triggers></Style></Border.Style>
+                    <Grid>
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                  <RadioButton GroupName="Navigation" Style="{StaticResource SidebarNavButton}" Padding="8,12"
                                IsChecked="{Binding IsSelected, Mode=OneWay}" CommandParameter="{Binding}"
-                               Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                               Click="NavigateWithTide"
                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                PreviewMouseLeftButtonDown="NavigationDragStart" PreviewMouseMove="NavigationDragMove"
                                AllowDrop="True" DragOver="NavigationDragOver" Drop="NavigationDrop" ToolTip="{Binding Name}" AutomationProperties.Name="{Binding Name}">
@@ -76,10 +82,16 @@
                       </ContextMenu>
                     </RadioButton.ContextMenu>
                     <StackPanel Orientation="Horizontal">
-                      <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="15" VerticalAlignment="Center" Margin="0,0,9,0" />
+                      <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="15" VerticalAlignment="Center" Margin="0,0,6,0" />
                       <TextBlock Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" />
                     </StackPanel>
                   </RadioButton>
+                      <controls:FeatureSwitch Grid.Column="1" Margin="0,0,4,0" VerticalAlignment="Center"
+                        IsOn="{Binding IsEnabled}" ToolTip="{Binding EnableHint}" AutomationProperties.Name="{Binding EnableHint}"
+                        Visibility="{Binding CanToggle, Converter={StaticResource VisibleWhen}}" CommandParameter="{Binding}"
+                        Command="{Binding DataContext.ToggleToolCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                    </Grid>
+                  </Border>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -87,7 +99,10 @@
         </DockPanel>
       </DockPanel>
     </Border>
+    <controls:NavigationConnector x:Name="NavigationBridge" Fill="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Right"
+               VerticalAlignment="Top" Width="20" IsHitTestVisible="False" Visibility="Collapsed" />
     </Grid>
+    <Border Grid.Column="1" Background="{DynamicResource AccentSoftBrush}" CornerRadius="12" Margin="0,8,8,8" IsHitTestVisible="False" />
     <Grid x:Name="MainContent" Grid.Column="1" Margin="{Binding ContentPadding}">
       <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
       <Grid Margin="0,0,0,20">
@@ -229,9 +244,7 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                   <StackPanel x:Name="LensSettingsControls">
-                    <StackPanel IsEnabled="{Binding CanConfigure}">
                     <TextBlock Text="{Binding SelectedMonitor.Name}" Style="{StaticResource MutedText}" Margin="0,0,0,18" />
-                    </StackPanel>
                     <TextBlock Text="位置" FontWeight="SemiBold" Margin="0,0,0,10" />
                     <WrapPanel Margin="0,0,0,18">
                       <RadioButton x:Name="LensFixedMode" Content="固定" GroupName="LensMovement" IsChecked="{Binding IsFixedMode, Mode=TwoWay}" Margin="0,0,18,0" />
@@ -248,8 +261,14 @@
                     <TextBlock Text="框体颜色" FontWeight="SemiBold" Margin="0,0,0,10" />
                     <controls:LensColorPicker x:Name="LensFrameColor" Margin="0,0,0,18" />
                     <StackPanel IsEnabled="{Binding CanConfigure}">
-                    <TextBlock Text="放大框大小" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding FrameSizeText}" Style="{StaticResource MutedText}" Margin="0,6,0,10" />
+                    <TextBlock Text="放大框尺寸" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ComboBox ItemsSource="{Binding FrameSizePresets}" DisplayMemberPath="Label" SelectedValuePath="Value"
+                              SelectedValue="{Binding FrameSizePreset}" Padding="6" Margin="0,0,0,8" AutomationProperties.Name="放大框尺寸预设" />
+                    <ComboBox ItemsSource="{Binding AspectRatios}" DisplayMemberPath="Label" SelectedValuePath="Value"
+                              SelectedValue="{Binding AspectRatio}" Padding="6" Margin="0,0,0,8"
+                              Visibility="{Binding IsPresetFrameSize, Converter={StaticResource VisibleWhen}}" AutomationProperties.Name="放大框宽高比" />
+                    <TextBlock Text="{Binding FrameSizeText}" Style="{StaticResource MutedText}" Margin="0,0,0,12" />
+                    <StackPanel Visibility="{Binding IsCustomFrameSize, Converter={StaticResource VisibleWhen}}">
                     <Grid>
                       <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                       <TextBlock Text="宽度（像素）" VerticalAlignment="Center" />
@@ -271,6 +290,7 @@
                     </Grid>
                     <Slider Minimum="120" Maximum="1200" TickFrequency="8" IsSnapToTickEnabled="True" Value="{Binding FrameHeight}" Margin="0,10,0,18" AutomationProperties.Name="放大框高度" />
                     </StackPanel>
+                    </StackPanel>
                     <Grid Margin="0,0,0,18" IsEnabled="{Binding CanConfigure}">
                       <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                       <TextBlock Text="帧率" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -285,6 +305,8 @@
                     <Button Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" Margin="0,0,8,8" />
                   </WrapPanel>
                   <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,8,0,16" />
+                  <TextBlock Text="功能已停用。可从左侧按钮重新启用。" Style="{StaticResource MutedText}" Margin="0,0,0,8"
+                             Visibility="{Binding IsDisabled, Converter={StaticResource VisibleWhen}}" />
                   <Separator Margin="0,18,0,14" />
                   <Button Content="恢复默认" Command="{Binding ResetDefaultsCommand}" HorizontalAlignment="Left"
                           ToolTip="关闭放大框，恢复默认画面、居中位置和固定模式；保留快捷键、按住／切换模式和收藏。" />
@@ -296,7 +318,7 @@
       </ScrollViewer>
 
       <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                    Visibility="{Binding IsSettings, Converter={StaticResource VisibleWhen}}">
+                    Visibility="{Binding ShowSettingsContent, Converter={StaticResource VisibleWhen}}">
         <StackPanel Margin="0,0,8,0">
           <Border x:Name="ThemeSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowThemeSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
@@ -319,39 +341,47 @@
                   </Button>
                 </DataTemplate></ItemsControl.ItemTemplate>
               </ItemsControl>
+              <Grid x:Name="ThemeEditorGrid" SizeChanged="ThemeEditorSizeChanged" Margin="0,4,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+              <StackPanel x:Name="ThemePreviewPane" Margin="0,0,20,0">
               <Grid Margin="0,0,0,10">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <TextBlock Text="配色预览" FontWeight="SemiBold" />
                 <TextBlock Grid.Column="1" Text="未保存" Style="{StaticResource MutedText}"
                            Visibility="{Binding HasThemeChanges, Converter={StaticResource VisibleWhen}}" />
               </Grid>
-              <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="1" Margin="0,0,0,8" MaxWidth="480" HorizontalAlignment="Left">
+              <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="1" Margin="0,0,0,8">
                 <Viewbox Stretch="Uniform" MaxHeight="240"><controls:ThemePreview x:Name="PalettePreview" Width="480" Height="240" Palette="{Binding PreviewTheme}" AnimationColor="{Binding PreviewAnimationColor}" /></Viewbox>
               </Border>
-              <Expander x:Name="ThemeDetails" Header="颜色详细配置" Margin="0,18,0,0" Foreground="{DynamicResource TextBrush}" FontSize="14">
-                <StackPanel Margin="0,14,0,0">
+              <WrapPanel Margin="0,6,0,0">
+                <Button x:Name="SaveThemeButton" Content="保存配色" Command="{Binding SaveThemeCommand}" Style="{StaticResource AccentButton}" Margin="0,0,8,8" />
+                <Button Content="撤销修改" Command="{Binding DiscardThemeCommand}" Margin="0,0,8,8" />
+                <Button Content="恢复默认配色" Command="{Binding ResetThemePreviewCommand}" Margin="0,0,0,8" />
+              </WrapPanel>
+              </StackPanel>
+              <Expander x:Name="ThemeDetails" Grid.Column="1" Header="颜色详细配置" Foreground="{DynamicResource TextBrush}" FontSize="14">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="300" Margin="0,14,0,0">
+                <StackPanel Margin="0,0,8,0">
                   <TextBlock Text="修改仅更新预览，保存后应用。" Style="{StaticResource MutedText}" Margin="0,0,0,14" />
               <ItemsControl x:Name="ThemeColorDetails" ItemsSource="{Binding ThemeColors}">
                 <ItemsControl.ItemTemplate><DataTemplate>
                   <Grid Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="94" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <TextBlock Text="{Binding Name}" FontSize="13" VerticalAlignment="Top" Margin="0,3,8,0" />
                     <controls:ColorPicker Grid.Column="1" Color="{Binding Value, Mode=TwoWay}" />
                   </Grid>
                 </DataTemplate></ItemsControl.ItemTemplate>
               </ItemsControl>
                   <Grid Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="112" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="94" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                     <TextBlock Text="按钮与动画" FontSize="13" VerticalAlignment="Top" Margin="0,3,8,0" />
                     <controls:ColorPicker x:Name="AnimationColorPicker" Grid.Column="1" Color="{Binding PreviewAnimationColor, Mode=TwoWay}" />
                   </Grid>
-                  <WrapPanel Margin="0,6,0,0">
-                    <Button x:Name="SaveThemeButton" Content="保存配色" Command="{Binding SaveThemeCommand}" Style="{StaticResource AccentButton}" Margin="0,0,8,8" />
-                    <Button Content="撤销修改" Command="{Binding DiscardThemeCommand}" Margin="0,0,8,8" />
-                    <Button Content="恢复默认配色" Command="{Binding ResetThemePreviewCommand}" Margin="0,0,0,8" />
-                  </WrapPanel>
                 </StackPanel>
+                </ScrollViewer>
               </Expander>
+              </Grid>
               <StackPanel x:Name="AnimationSettingsSection" Margin="0,24,0,0">
                 <TextBlock Text="切换动画" FontWeight="SemiBold" Margin="0,0,0,12" />
                 <CheckBox x:Name="PageAnimationSwitch" Content="启用切换动画" IsChecked="{Binding PageAnimationsEnabled, Mode=TwoWay}"
@@ -390,7 +420,7 @@
                 <Image Source="Assets/dt.png" Width="56" Height="56" Margin="0,0,16,0" />
                 <StackPanel VerticalAlignment="Center">
                   <TextBlock Text="DailyToolkit" FontSize="22" FontWeight="SemiBold" />
-                  <TextBlock x:Name="ProductVersion" Text="版本 0.5.7" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+                  <TextBlock x:Name="ProductVersion" Text="版本 0.6.0" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
                 </StackPanel>
               </StackPanel>
               <TextBlock Text="Windows 本地工具集合" Margin="0,0,0,14" />
@@ -420,6 +450,7 @@
         </Grid>
       </StackPanel>
     </Grid>
+    <controls:TideTransition x:Name="NavigationTransition" Grid.ColumnSpan="2" Panel.ZIndex="90" Visibility="Collapsed" IsHitTestVisible="False" />
     <Image x:Name="PageTransition" Grid.ColumnSpan="2" Panel.ZIndex="100" Visibility="Collapsed"
            IsHitTestVisible="False" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top" />
     <Grid x:Name="PageTransitionCover" Grid.ColumnSpan="2" Panel.ZIndex="101" Visibility="Collapsed" IsHitTestVisible="False">

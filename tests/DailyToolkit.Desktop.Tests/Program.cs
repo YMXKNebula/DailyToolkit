@@ -33,8 +33,11 @@ internal static partial class Program
                 {
                     await RunDragBenchmarkAsync(output); exitCode=0; return;
                 }
+                if (args is ["--interface-checks",var images])
+                { await CheckToolkitInterfaceAsync(images); exitCode=0; return; }
                 if (!args.Contains("--live-lens-only")) await CheckAsync();
-                if (args.Contains("--live-lens") || args.Contains("--live-lens-only")) await CheckLiveLensMovementAsync();
+                if (args.Contains("--live-lens") || args.Contains("--live-lens-only"))
+                { await CheckLiveLensMovementAsync(); await CheckLivePresetRelayAsync(); }
                 exitCode = 0;
             }
             catch (Exception exception) { Console.WriteLine($"FAIL {exception}"); }
@@ -68,8 +71,9 @@ internal static partial class Program
         await CheckPreviewLayoutAsync();
         await CheckTransitionContinuityAsync();
         await CheckThemeEditingAsync();
+        await CheckToolkitInterfaceAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("25/25 desktop checks passed");
+        Console.WriteLine("30/30 desktop checks passed");
     }
 }

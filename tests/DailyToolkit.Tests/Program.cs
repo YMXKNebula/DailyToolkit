@@ -33,6 +33,7 @@ internal static partial class Program
         if (args.FirstOrDefault() == "--worker") return await RunWorkerAsync(args);
         RegisterLensTests();
         RegisterLensMovementTests();
+        RegisterFrameSizeTests();
         RegisterLocalStatusTests();
         RegisterAdaptationTests();
         RegisterCatalogTests();

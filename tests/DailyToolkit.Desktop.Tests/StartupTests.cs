@@ -182,11 +182,13 @@ internal static partial class Program
                 WindowStartupLocation=WindowStartupLocation.Manual,Left=-20000,Top=-20000 };
             var handle=new WindowInteropHelper(window).EnsureHandle();
             window.InitializeRuntime(HwndSource.FromHwnd(handle)!);
-            window.StartHidden(); await probe.DetailsStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Require(!window.IsVisible && !probe.WasCanceled,"Silent startup showed the window or skipped local services");
+            window.StartHidden();
+            Require(!window.IsVisible && !probe.WasCanceled && !probe.DetailsStarted.Task.IsCompleted && !window.IsLocalPolling,
+                "Silent startup showed the window or eagerly started computer polling");
             Require(PostTrayTestMessage(handle,SingleInstance.ShowMessage,IntPtr.Zero,IntPtr.Zero),"Could not post the restore message");
             await Application.Current.Dispatcher.InvokeAsync(() => { },DispatcherPriority.ApplicationIdle);
             Require(window.IsVisible,"Reopening could not restore a hidden window");
+            model.Page="settings-computer"; await probe.DetailsStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             if (window.TrayAvailable)
             {
                 model.CloseToTray=true; window.Close();

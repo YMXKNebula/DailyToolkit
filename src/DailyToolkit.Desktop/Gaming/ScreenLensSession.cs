@@ -6,7 +6,7 @@ using Windows.Graphics.Capture;
 namespace DailyToolkit.Desktop.Gaming;
 
 // Owns one lens runtime. Frames stay directly between LensCapture and LensGpuRenderer.
-internal sealed class ScreenLensSession : IDisposable
+internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
 {
     private LensNativeWindow? _window;
     private LensGpuRenderer? _renderer;
@@ -26,6 +26,8 @@ internal sealed class ScreenLensSession : IDisposable
     private IReadOnlyList<CaptureMonitor> _monitors=[];
     private PixelBounds[] _monitorBounds=[];
     private int _width,_height,_frameRate;
+    private LensFrameSizePreset _sizePreset;
+    private LensAspectRatio _aspect;
     private LensMovementState? _pendingMove;
     private bool _moveQueued;
     private int _generation;
@@ -92,19 +94,20 @@ internal sealed class ScreenLensSession : IDisposable
         if (_layout is not null) _capture?.UpdateSource(_layout.Source,_sharpening,color);
     }
 
-    public void Start(IReadOnlyList<CaptureMonitor> monitors,CaptureMonitor monitor,int width,int height,double zoom,double sharpening,int frameRate)
+    public void Start(IReadOnlyList<CaptureMonitor> monitors,CaptureMonitor monitor,int width,int height,double zoom,double sharpening,int frameRate,
+        LensFrameSizePreset sizePreset=LensFrameSizePreset.Custom,LensAspectRatio aspect=LensAspectRatio.Screen)
     {
         if (IsActive) return;
         _zoom=zoom; _sharpening=sharpening;
         _monitors=monitors; _monitorBounds=monitors.Select(m => m.Bounds).ToArray();
-        _width=width; _height=height; _frameRate=frameRate;
+        _width=width; _height=height; _frameRate=frameRate; _sizePreset=sizePreset; _aspect=aspect;
         try
         {
             if (!GraphicsCaptureSession.IsSupported()) { Status = "当前 Windows 图形环境不支持屏幕捕获。"; return; }
             var centerX=monitor.Bounds.Left+(int)Math.Round(monitor.Bounds.Width*(_positionMonitor == monitor.Handle ? _positionX : 0.5));
             var centerY=monitor.Bounds.Top+(int)Math.Round(monitor.Bounds.Height*(_positionMonitor == monitor.Handle ? _positionY : 0.5));
             var index=Array.FindIndex(_monitorBounds,b => b == monitor.Bounds);
-            _movement=new(_monitorBounds,index,width,height,_zoom,centerX,centerY,IsMovableMode,centerSnap:true);
+            _movement=new(_monitorBounds,index,width,height,_zoom,centerX,centerY,IsMovableMode,centerSnap:true,sizePreset:_sizePreset,aspect:_aspect);
             var layout=_movement.State.Layout;
             _activeMonitor=monitor;
             _appliedMovement=_movement.State;
@@ -114,9 +117,10 @@ internal sealed class ScreenLensSession : IDisposable
             _guides = new(monitor.Bounds);
             _renderer = new(_window.Handle,layout.Output.Width,layout.Output.Height);
             _pointer = new(() => IsVisible ? _layout?.Output : null,MoveFrame,delta => ZoomRequested?.Invoke(delta),
+                install:nativePointer,
                 canMove:() => IsMovableMode,dragEnded:ClearGuides,dragStarted:ShowGuides,nativeInput:true,
                 canZoom:() => WheelZoomEnabled);
-            _window.PointerMessage += _pointer.Process;
+            if (nativePointer) _window.PointerMessage += _pointer.Process;
             _window.PointerCanceled += _pointer.CancelDrag;
             _active = true;
             StateChanged?.Invoke();
@@ -251,7 +255,7 @@ internal sealed class ScreenLensSession : IDisposable
                 var index=Array.FindIndex(_monitorBounds,b => b == monitor.Bounds);
                 _movement=new(_monitorBounds,index,_width,_height,_zoom,
                     monitor.Bounds.Left+monitor.Bounds.Width/2d,monitor.Bounds.Top+monitor.Bounds.Height/2d,
-                    IsMovableMode,centerSnap:true);
+                    IsMovableMode,centerSnap:true,sizePreset:_sizePreset,aspect:_aspect);
                 ApplyMovement(_movement.State);
             }
         }

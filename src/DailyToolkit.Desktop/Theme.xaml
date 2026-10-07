@@ -12,6 +12,10 @@
     <SolidColorBrush x:Key="HoverBrush" Color="#F0F4F1" />
     <SolidColorBrush x:Key="WarningBrush" Color="#FFF5DE" />
     <SolidColorBrush x:Key="WarningTextBrush" Color="#876823" />
+    <SolidColorBrush x:Key="ScrollThumbBrush" Color="#267A5D" />
+    <SolidColorBrush x:Key="ScrollTrackBrush" Color="#E8F2EC" />
+    <SolidColorBrush x:Key="SliderThumbBrush" Color="#267A5D" />
+    <SolidColorBrush x:Key="SliderTrackBrush" Color="#E8F2EC" />
     <BooleanToVisibilityConverter x:Key="VisibleWhen" />
     <Style TargetType="TextBlock">
       <Setter Property="FontSize" Value="14" />
@@ -48,7 +52,7 @@
           <ControlTemplate TargetType="Button">
             <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="7" Padding="{TemplateBinding Padding}">
+                    CornerRadius="10" Padding="{TemplateBinding Padding}">
               <ContentPresenter RecognizesAccessKey="True" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
             <ControlTemplate.Triggers>
@@ -73,7 +77,7 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="NavBorder" CornerRadius="8" Background="Transparent" Padding="{TemplateBinding Padding}">
+            <Border x:Name="NavBorder" CornerRadius="12" Background="Transparent" Padding="{TemplateBinding Padding}">
               <ContentPresenter RecognizesAccessKey="True" VerticalAlignment="Center" />
             </Border>
             <ControlTemplate.Triggers>
@@ -87,6 +91,145 @@
           </ControlTemplate>
         </Setter.Value>
       </Setter>
+    </Style>
+    <Style x:Key="SidebarNavButton" TargetType="RadioButton" BasedOn="{StaticResource NavButton}">
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="RadioButton">
+          <Border x:Name="NavBorder" CornerRadius="12" Background="Transparent" Padding="{TemplateBinding Padding}">
+            <ContentPresenter RecognizesAccessKey="True" VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="NavBorder" Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger>
+            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+              <Setter TargetName="NavBorder" Property="CornerRadius" Value="12,0,0,12" />
+              <Setter TargetName="NavBorder" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+              <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" /><Setter Property="FontWeight" Value="SemiBold" />
+            </DataTrigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value></Setter>
+    </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="TextBox">
+          <Border x:Name="InputBorder" CornerRadius="8" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" Focusable="False" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="InputBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value></Setter>
+    </Style>
+    <Style TargetType="ComboBox">
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" /><Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" /><Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="ComboBox">
+          <Grid>
+            <ToggleButton x:Name="DropToggle" Focusable="False" ClickMode="Press" Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+              <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+                <Border x:Name="DropBorder" CornerRadius="10" Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                  <Path Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.4" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" />
+                </Border>
+                <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="DropBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /></Trigger></ControlTemplate.Triggers>
+              </ControlTemplate></ToggleButton.Template>
+            </ToggleButton>
+            <ContentPresenter IsHitTestVisible="False" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                              Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" />
+            <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False"
+                   IsOpen="{TemplateBinding IsDropDownOpen}">
+              <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="4"
+                      MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                  <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                </ScrollViewer>
+              </Border>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger></ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value></Setter>
+    </Style>
+    <Style TargetType="ComboBoxItem">
+      <Setter Property="Padding" Value="8,7" /><Setter Property="Margin" Value="1" /><Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+        <Border x:Name="OptionBorder" CornerRadius="7" Background="Transparent" Padding="{TemplateBinding Padding}">
+          <ContentPresenter />
+        </Border>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="OptionBorder" Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger>
+          <Trigger Property="IsSelected" Value="True"><Setter TargetName="OptionBorder" Property="Background" Value="{DynamicResource AccentSoftBrush}" /><Setter Property="Foreground" Value="{DynamicResource AccentBrush}" /></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="ScrollPageButton" TargetType="RepeatButton">
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent" /></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="ScrollBar">
+      <Setter Property="Width" Value="12" /><Setter Property="MinWidth" Value="0" />
+      <Setter Property="Background" Value="{DynamicResource ScrollTrackBrush}" />
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="ScrollBar">
+          <Border Background="{TemplateBinding Background}" CornerRadius="6" Margin="1">
+            <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="True"
+                   Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" ViewportSize="{TemplateBinding ViewportSize}"
+                   Value="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+              <Track.DecreaseRepeatButton><RepeatButton x:Name="Decrease" Command="ScrollBar.PageUpCommand" Style="{StaticResource ScrollPageButton}" /></Track.DecreaseRepeatButton>
+              <Track.Thumb><Thumb x:Name="ScrollThumb" MinHeight="24" Background="{DynamicResource ScrollThumbBrush}">
+                <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="{TemplateBinding Background}" CornerRadius="5" Margin="2" /></ControlTemplate></Thumb.Template>
+              </Thumb></Track.Thumb>
+              <Track.IncreaseRepeatButton><RepeatButton x:Name="Increase" Command="ScrollBar.PageDownCommand" Style="{StaticResource ScrollPageButton}" /></Track.IncreaseRepeatButton>
+            </Track>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+              <Setter Property="Width" Value="Auto" /><Setter Property="Height" Value="12" />
+              <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+              <Setter TargetName="ScrollThumb" Property="MinHeight" Value="0" /><Setter TargetName="ScrollThumb" Property="MinWidth" Value="24" />
+              <Setter TargetName="Decrease" Property="Command" Value="ScrollBar.PageLeftCommand" /><Setter TargetName="Increase" Property="Command" Value="ScrollBar.PageRightCommand" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value></Setter>
+    </Style>
+    <Style x:Key="SliderTrackButton" TargetType="RepeatButton">
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton">
+        <Border Background="{TemplateBinding Background}" CornerRadius="2" Height="4" VerticalAlignment="Center" />
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="Slider">
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="Slider">
+          <Grid Background="Transparent">
+            <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
+                   Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}"
+                   Value="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+              <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Background="{DynamicResource SliderThumbBrush}" Style="{StaticResource SliderTrackButton}" /></Track.DecreaseRepeatButton>
+              <Track.Thumb><Thumb Width="12" Height="20" Background="{DynamicResource SliderThumbBrush}">
+                <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="{TemplateBinding Background}" CornerRadius="6" /></ControlTemplate></Thumb.Template>
+              </Thumb></Track.Thumb>
+              <Track.IncreaseRepeatButton><RepeatButton Command="Slider.IncreaseLarge" Background="{DynamicResource SliderTrackBrush}" Style="{StaticResource SliderTrackButton}" /></Track.IncreaseRepeatButton>
+            </Track>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="Opacity" Value="0.8" /></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value></Setter>
     </Style>
     <Style TargetType="DataGrid">
       <Setter Property="AutoGenerateColumns" Value="False" />

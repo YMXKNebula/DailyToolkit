@@ -19,15 +19,19 @@ public sealed class ThemePreview : FrameworkElement
         void Text(string text,double x,double y,string color,double size=12) => draw.DrawText(new FormattedText(text,
             CultureInfo.CurrentUICulture,FlowDirection.LeftToRight,new Typeface("Microsoft YaHei UI"),size,B(color),VisualTreeHelper.GetDpi(this).PixelsPerDip),new(x,y));
         draw.PushTransform(new ScaleTransform(ActualWidth/480,ActualHeight/240));
+        draw.PushClip(new RectangleGeometry(new Rect(0,0,480,240),10,10));
         Box(0,0,480,240,p.Window); Box(0,0,480,25,p.Surface); Box(0,25,112,215,p.Sidebar);
+        Box(112,25,368,215,p.AccentSoft);
         draw.DrawLine(new Pen(B(p.Border),1),new(112,25),new(112,240));
         Text("DailyToolkit",12,5,p.Muted,10); Text("—   □   ×",419,5,p.Muted,10);
-        Box(12,41,88,28,p.Hover,5); Text("电脑",24,50,p.Muted);
-        Box(12,75,88,31,p.AccentSoft,5); Text("屏幕局部放大",19,83,p.Accent,10);
+        Box(12,41,100,31,p.AccentSoft,5); Box(102,41,10,31,p.AccentSoft); Text("屏幕局部放大",19,51,p.Accent,10);
+        Box(12,81,88,28,p.Hover,5); Text("工具",24,90,p.Muted);
         Text("屏幕局部放大",130,43,p.Text,18);
         Box(130,95,330,110,p.Border,8); Box(131,96,328,108,p.Surface,8);
         Text("快捷键   Ctrl + Shift + F8",145,111,p.Text); Box(360,107,84,27,p.Accent,5); Text("开启放大框",373,114,p.AccentForeground,10);
-        Text("放大倍率",145,151,p.Muted,10); Box(214,157,194,3,p.AccentSoft); Box(214,157,72,3,p.Accent);
+        Text("放大倍率",145,151,p.Muted,10); Box(214,157,194,4,p.SliderTrack,2); Box(214,157,72,4,p.SliderThumb,2);
+        Box(281,151,10,16,p.SliderThumb,5);
+        Box(468,43,6,160,p.ScrollTrack,3); Box(468,72,6,55,p.ScrollThumb,3);
         Box(130,212,330,19,p.Warning,3); Text("提示信息",140,214,p.WarningText,10);
         foreach (var (gear,x) in new[] { (false,34d),(true,78d) })
         {
@@ -35,6 +39,6 @@ public sealed class ThemePreview : FrameworkElement
             var icon=PageTransitionGeometry.CreateIcon(gear); icon.Transform=transform;
             draw.DrawGeometry(B(AnimationColor),null,icon);
         }
-        draw.Pop();
+        draw.Pop(); draw.Pop();
     }
 }

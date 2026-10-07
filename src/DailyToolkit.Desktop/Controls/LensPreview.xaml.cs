@@ -15,6 +15,11 @@ public partial class LensPreview : UserControl
     private LensPhotoPreviewRenderer? _renderer;
     private LensPreviewFrame? _frame;
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Background);
+    private readonly DispatcherTimer _releaseTimer = new(DispatcherPriority.Background) { Interval=TimeSpan.FromSeconds(2) };
+    private bool _hostActive=true;
+    internal bool HasGpuResources => _renderer is not null;
+    internal bool IsRenderingScheduled => _timer.IsEnabled;
+    internal Task PendingResourceRelease { get; private set; }=Task.CompletedTask;
     private bool _dirty=true, _rendering;
     private int _generation;
     private double _pointerX=0.5,_pointerY=0.5;
@@ -31,7 +36,8 @@ public partial class LensPreview : UserControl
         _timer.Tick += (_,_) => RenderPending();
         Loaded += (_,_) => Attach();
         DataContextChanged += (_,_) => Attach();
-        IsVisibleChanged += (_,_) => UpdateTimer();
+        IsVisibleChanged += (_,_) => UpdateIdleResources();
+        _releaseTimer.Tick += (_,_) => { _releaseTimer.Stop(); DropGpuResources(); };
         Unloaded += (_,_) => Release();
     }
 
@@ -53,7 +59,7 @@ public partial class LensPreview : UserControl
             FinishDrag(); _pointerX=_pointerY=0.5;
         }
         if (e.PropertyName is nameof(GamingViewModel.MovementMode) or nameof(GamingViewModel.WheelZoomEnabled)) UpdateMovement();
-        if (e.PropertyName is not (nameof(GamingViewModel.FrameWidth) or nameof(GamingViewModel.FrameHeight)
+        if (e.PropertyName is not (nameof(GamingViewModel.EffectiveFrameWidth) or nameof(GamingViewModel.EffectiveFrameHeight)
             or nameof(GamingViewModel.Zoom) or nameof(GamingViewModel.Sharpening)
             or nameof(GamingViewModel.SelectedMonitor) or nameof(GamingViewModel.FrameRate)
             or nameof(GamingViewModel.MovementMode) or nameof(GamingViewModel.PositionResetVersion)
@@ -64,7 +70,7 @@ public partial class LensPreview : UserControl
 
     private void UpdateTimer()
     {
-        if (!IsLoaded || !IsVisible || _model is null) { _timer.Stop(); return; }
+        if (!IsLoaded || !IsVisible || !_hostActive || _model is null) { _timer.Stop(); return; }
         _timer.Interval=TimeSpan.FromSeconds(1d/(_model.FrameRate == 0 ? 60 : Math.Min(60,_model.FrameRate)));
         // Wake only for changes. A static photo does not need continuous rendering.
         if (_dirty) _timer.Start();
@@ -85,7 +91,7 @@ public partial class LensPreview : UserControl
         var generation=_generation;
         var renderer=_renderer ??= new();
         var settings = new LensPreviewSettings(monitor.Bounds.Width,monitor.Bounds.Height,
-            (int)_model.FrameWidth,(int)_model.FrameHeight,_model.Zoom,_model.Sharpening,_model.FrameRate,
+            _model.EffectiveFrameWidth,_model.EffectiveFrameHeight,_model.Zoom,_model.Sharpening,_model.FrameRate,
             _pointerX,_pointerY,_verticalGuide,_horizontalGuide,_model.BorderColorRgb);
         try
         {
@@ -192,12 +198,27 @@ public partial class LensPreview : UserControl
 
     private void Release()
     {
+        _releaseTimer.Stop();
         FinishDrag();
         _generation++; _timer.Stop();
         _dragging=false; Screen.ReleaseMouseCapture();
         if (_model is not null) _model.PropertyChanged -= SettingsChanged;
         _model=null;
         var renderer=_renderer; _renderer=null;
-        if (renderer is not null) _=Task.Run(renderer.Dispose);
+        if (renderer is not null) PendingResourceRelease=Task.Run(renderer.Dispose);
+    }
+    internal void SetHostActive(bool active) { if (_hostActive == active) return; _hostActive=active; UpdateIdleResources(); }
+    private void UpdateIdleResources()
+    {
+        UpdateTimer();
+        if (_hostActive && IsVisible) { _releaseTimer.Stop(); if (_renderer is null) { _dirty=true; UpdateTimer(); } }
+        else { FinishDrag(); _releaseTimer.Start(); }
+    }
+    private void DropGpuResources()
+    {
+        if (_hostActive && IsVisible) return;
+        _generation++; var renderer=_renderer; _renderer=null; _dirty=true;
+        // Keep the last bitmap for immediate redisplay, release the idle D3D device/texture.
+        if (renderer is not null) PendingResourceRelease=Task.Run(renderer.Dispose);
     }
 }

@@ -40,7 +40,8 @@ public sealed partial class MainViewModel
         _previewAnimationColor=AnimationColor;
         var fields=new[] { ("Window","窗口背景"),("Surface","卡片与标题栏"),("Sidebar","侧栏背景"),("Text","主要文字"),
             ("Muted","次要文字"),("Border","边框"),("Accent","强调色"),("AccentSoft","选中背景"),
-            ("AccentForeground","强调按钮文字"),("Hover","悬停背景"),("Warning","提示背景"),("WarningText","提示文字") };
+            ("AccentForeground","强调按钮文字"),("Hover","悬停背景"),("Warning","提示背景"),("WarningText","提示文字"),
+            ("ScrollThumb","滚动条滑块"),("ScrollTrack","滚动条轨道"),("SliderThumb","调节滑块"),("SliderTrack","调节轨道") };
         foreach (var (key,name) in fields)
         {
             var option=new ThemeColorOption(key,name,(string)typeof(ThemePalette).GetProperty(key)!.GetValue(Theme)!);
@@ -94,7 +95,7 @@ public sealed partial class MainViewModel
                 brush=option.Key switch
                 {
                     "Text" or "Muted" or "Border" or "WarningText" => SystemColors.WindowTextBrush,
-                    "Accent" => SystemColors.HighlightBrush, "AccentForeground" => SystemColors.HighlightTextBrush,
+                    "Accent" or "ScrollThumb" or "SliderThumb" => SystemColors.HighlightBrush, "AccentForeground" => SystemColors.HighlightTextBrush,
                     _ => SystemColors.WindowBrush
                 };
             else { brush=new SolidColorBrush((Color)ColorConverter.ConvertFromString((string)typeof(ThemePalette).GetProperty(option.Key)!.GetValue(Theme)!)); brush.Freeze(); }

@@ -36,21 +36,19 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _viewModel = viewModel;
+        _trackActivity=enableShortcuts;
         DataContext = viewModel;
         _viewModel.ApplyTheme(Resources);
         FavoritesIcon.Data=Controls.PageTransitionGeometry.CreateIcon(false);
         SettingsIcon.Data=Controls.PageTransitionGeometry.CreateIcon(true);
         SourceInitialized += (_, _) =>
         {
+            SetNativeRoundedCorners();
             if (!enableShortcuts) return;
             var source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             if (source is null) return;
             InitializeRuntime(source);
-            _shortcuts = new(source);
-            _shortcuts.ToggleRequested += _viewModel.Gaming.Toggle;
-            _shortcuts.StartRequested += _viewModel.Gaming.Start;
-            _shortcuts.StopRequested += _viewModel.Gaming.Stop;
-            RegisterLensHotkey();
+            InitializeLensShortcuts(source);
         };
         _viewModel.Gaming.PropertyChanged += OnGamingStateChanged;
         _viewModel.PropertyChanged += OnAppSettingsChanged;
@@ -61,9 +59,13 @@ public partial class MainWindow : Window
             if (++_ticks % 3 == 0) _viewModel.QueueLocalRefresh();
         };
         Loaded += (_, _) => StartLocalRuntime();
-        SizeChanged += (_, _) => { FinishPageTransition(); _viewModel.SetViewportWidth(ActualWidth); };
+        IsVisibleChanged += (_,_) => UpdateLocalPolling();
+        Activated += (_,_) => UpdateLocalPolling();
+        Deactivated += (_,_) => UpdateLocalPolling();
+        SizeChanged += (_, _) => { FinishPageTransition(); FinishNavigationTransition(); UpdateWindowCorners(); _viewModel.SetViewportWidth(ActualWidth); };
         StateChanged += (_,_) =>
         {
+            UpdateWindowCorners(); UpdateLocalPolling();
             MaximizeGlyph.Text=WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
             MaximizeButton.ToolTip=WindowState == WindowState.Maximized ? "还原" : "最大化";
             System.Windows.Automation.AutomationProperties.SetName(MaximizeButton,(string)MaximizeButton.ToolTip);
@@ -76,6 +78,7 @@ public partial class MainWindow : Window
             _clockTimer.Stop();
             DisposeRuntime();
             FinishPageTransition();
+            FinishNavigationTransition();
             _shortcuts?.Dispose();
             _viewModel.Gaming.PropertyChanged -= OnGamingStateChanged;
             _viewModel.PropertyChanged -= OnAppSettingsChanged;
@@ -115,20 +118,10 @@ public partial class MainWindow : Window
         BitmapSource? snapshot=null;
         if (animate)
         {
-            RootContent.UpdateLayout();
-            var dpi=VisualTreeHelper.GetDpi(RootContent);
-            var frame=new RenderTargetBitmap((int)Math.Ceiling(RootContent.ActualWidth*dpi.DpiScaleX),
-                (int)Math.Ceiling(RootContent.ActualHeight*dpi.DpiScaleY),dpi.PixelsPerInchX,dpi.PixelsPerInchY,PixelFormats.Pbgra32);
-            // Capture the opaque window content at its original pixel coordinates,
-            // then crop below the caption. Rendering the attached body directly
-            // includes its layout offset and exposes the new page through gaps.
-            frame.Render(RootContent); frame.Freeze();
-            var origin=BodyContent.TranslatePoint(new Point(),RootContent);
-            snapshot=new CroppedBitmap(frame,new Int32Rect((int)Math.Round(origin.X*dpi.DpiScaleX),(int)Math.Round(origin.Y*dpi.DpiScaleY),
-                (int)Math.Ceiling(BodyContent.ActualWidth*dpi.DpiScaleX),(int)Math.Ceiling(BodyContent.ActualHeight*dpi.DpiScaleY)));
-            snapshot.Freeze();
+            snapshot=CaptureBodySnapshot();
         }
         FinishPageTransition();
+        FinishNavigationTransition();
         if (!animate) { switchPage(); return; }
         var generation=_pageTransitionGeneration;
         PageTransition.Source=snapshot;
@@ -211,8 +204,14 @@ public partial class MainWindow : Window
 
     private void OnAppSettingsChanged(object? sender,PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.Page) && _viewModel.IsSettings) SettingsScroll.ScrollToTop();
-        if (e.PropertyName == nameof(MainViewModel.PageAnimationsEnabled) && !_viewModel.PageAnimationsEnabled) FinishPageTransition();
+        if (e.PropertyName == nameof(MainViewModel.Page))
+        {
+            if (_viewModel.IsSettings) SettingsScroll.ScrollToTop();
+            UpdateLocalPolling();
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded,new Action(UpdateNavigationBridge));
+        }
+        if (e.PropertyName == nameof(MainViewModel.PageAnimationsEnabled) && !_viewModel.PageAnimationsEnabled)
+        { FinishPageTransition(); FinishNavigationTransition(); }
         if (e.PropertyName is nameof(MainViewModel.Theme) or nameof(MainViewModel.AnimationColor)) _viewModel.ApplyTheme(Resources);
     }
 
@@ -295,13 +294,22 @@ public partial class MainWindow : Window
 
     private void OnGamingStateChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is not (nameof(GamingViewModel.ToggleShortcut) or nameof(GamingViewModel.ActivationMode))) return;
+        if (e.PropertyName is not (nameof(GamingViewModel.ToggleShortcut) or nameof(GamingViewModel.ActivationMode) or nameof(GamingViewModel.IsEnabled))) return;
         RegisterLensHotkey();
     }
     private void RegisterLensHotkey()
     {
         if (_shortcuts is null) return;
-        UpdateShortcutNotice(_shortcuts.Configure(_viewModel.Gaming.ToggleShortcut,_viewModel.Gaming.ActivationMode));
+        UpdateShortcutNotice(_shortcuts.Configure(_viewModel.Gaming.IsEnabled ? _viewModel.Gaming.ToggleShortcut : null,_viewModel.Gaming.ActivationMode));
+    }
+    internal bool IsLensHotkeyRegistered => _shortcuts?.IsRegistered == true;
+    internal void InitializeLensShortcuts(HwndSource source)
+    {
+        _shortcuts?.Dispose(); _shortcuts=new(source);
+        _shortcuts.ToggleRequested += _viewModel.Gaming.Toggle;
+        _shortcuts.StartRequested += _viewModel.Gaming.Start;
+        _shortcuts.StopRequested += _viewModel.Gaming.Stop;
+        RegisterLensHotkey();
     }
     private void UpdateShortcutNotice(bool registered)
     {

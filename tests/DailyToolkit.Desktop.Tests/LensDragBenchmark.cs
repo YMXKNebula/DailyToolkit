@@ -21,7 +21,7 @@ internal static partial class Program
             WindowStyle=WindowStyle.None,ResizeMode=ResizeMode.NoResize,ShowInTaskbar=false,
             ShowActivated=false,Topmost=true,Left=-20000,Top=-20000
         };
-        using var session=new ScreenLensSession();
+        using var session=new ScreenLensSession(nativePointer:false);
         try
         {
             scene.Show();

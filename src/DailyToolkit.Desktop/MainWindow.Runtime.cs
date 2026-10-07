@@ -9,6 +9,10 @@ public partial class MainWindow
     private TrayIcon? _tray;
     private HwndSource? _runtimeSource;
     private bool _exitRequested,_initializedRuntime;
+    private bool _computerInitialized;
+    private bool _trackActivity;
+    internal bool TrackActivity { get => _trackActivity; set { _trackActivity=value; UpdateLocalPolling(); } }
+    internal bool IsLocalPolling => _clockTimer.IsEnabled;
     private WindowState _lastVisibleState=WindowState.Normal;
     internal bool TrayAvailable => _tray?.Available == true;
     internal void InitializeRuntime(HwndSource source)
@@ -33,7 +37,19 @@ public partial class MainWindow
     private void StartLocalRuntime()
     {
         if (_initializedRuntime) return;
-        _initializedRuntime=true; _= _viewModel.InitializeAsync(); _clockTimer.Start();
+        _initializedRuntime=true; UpdateLocalPolling();
+        Dispatcher.BeginInvoke(new Action(UpdateNavigationBridge));
+    }
+    private void UpdateLocalPolling()
+    {
+        if (_clockTimer is null || _viewModel is null) return;
+        var visible=IsVisible && WindowState != WindowState.Minimized && (!_trackActivity || IsActive);
+        LensPhotoPreview.SetHostActive(visible);
+        if (!_initializedRuntime || !visible || !_viewModel.IsHome) { _clockTimer.Stop(); return; }
+        _viewModel.UpdateClock();
+        if (!_computerInitialized) { _computerInitialized=true; _= _viewModel.InitializeAsync(); }
+        else if (!_clockTimer.IsEnabled) _viewModel.QueueLocalRefresh();
+        _clockTimer.Start();
     }
     internal void ShowFromTray()
     {
@@ -46,7 +62,7 @@ public partial class MainWindow
     {
         if (_tray?.Available != true) return false;
         if (WindowState != WindowState.Minimized) _lastVisibleState=WindowState;
-        FinishPageTransition(); _shortcuts?.Suspend(false); Hide(); return true;
+        FinishPageTransition(); FinishNavigationTransition(); _shortcuts?.Suspend(false); Hide(); return true;
     }
     internal void RequestExit() { _exitRequested=true; Close(); }
     private IntPtr RuntimeMessage(IntPtr hwnd,int message,IntPtr wParam,IntPtr lParam,ref bool handled)

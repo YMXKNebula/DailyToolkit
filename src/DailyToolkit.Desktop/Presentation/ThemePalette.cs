@@ -16,11 +16,16 @@ public sealed record ThemePalette
     public string Hover { get; init; } = "#F0F4F1";
     public string Warning { get; init; } = "#FFF5DE";
     public string WarningText { get; init; } = "#876823";
+    public string ScrollThumb { get; init; } = "#267A5D";
+    public string ScrollTrack { get; init; } = "#E8F2EC";
+    public string SliderThumb { get; init; } = "#267A5D";
+    public string SliderTrack { get; init; } = "#E8F2EC";
     public static ThemePalette Dark => new()
     {
         Window="#171D1B", Surface="#222B27", Sidebar="#1D2521", Text="#E6EEE9", Muted="#A6B7AD",
         Border="#39473F", Accent="#73D5AC", AccentSoft="#2B4437", AccentForeground="#15241C",
-        Hover="#2B3730", Warning="#403620", WarningText="#F0D18D"
+        Hover="#2B3730", Warning="#403620", WarningText="#F0D18D",
+        ScrollThumb="#73D5AC",ScrollTrack="#2B4437",SliderThumb="#73D5AC",SliderTrack="#2B4437"
     };
     public static IReadOnlyList<ThemePreset> Presets =>
     [
@@ -52,7 +57,9 @@ public sealed record ThemePalette
     {
         var defaults=new ThemePalette(); var result=this with { };
         foreach (var field in typeof(ThemePalette).GetProperties().Where(p => p.GetMethod is { IsStatic:false }))
-            field.SetValue(result,NormalizeColor(field.GetValue(this) as string,(string)field.GetValue(defaults)!));
+            field.SetValue(result,NormalizeColor(field.GetValue(this) as string,field.Name switch
+            { "ScrollThumb" or "SliderThumb" => NormalizeColor(Accent,defaults.Accent),
+              "ScrollTrack" or "SliderTrack" => NormalizeColor(AccentSoft,defaults.AccentSoft),_ => (string)field.GetValue(defaults)! }));
         return result;
     }
 }
@@ -61,7 +68,8 @@ public sealed class ThemePreset(string name,ThemePalette palette) : ObservableOb
 {
     private bool _isSelected;
     public string Name { get; }=name;
-    public ThemePalette Palette { get; }=palette;
+    public ThemePalette Palette { get; }=palette with { ScrollThumb=palette.Accent,ScrollTrack=palette.AccentSoft,
+        SliderThumb=palette.Accent,SliderTrack=palette.AccentSoft };
     public bool IsSelected { get => _isSelected; internal set => Set(ref _isSelected,value); }
 }
 

@@ -29,7 +29,7 @@ internal static partial class Program
                     appPreferencesStore:new AppPreferencesStore(Path.Combine(directory.FullName,"settings.json")),
                     startupRegistration:new StartupFake());
                 if (dark) model.DarkThemeCommand.Execute(null); else model.LightThemeCommand.Execute(null);
-                model.Page="home";
+                model.Page="screen-lens";
                 var window=new MainWindow(model,enableShortcuts:false) { Width=width,Height=650,
                     ShowActivated=false,ShowInTaskbar=false,WindowStartupLocation=WindowStartupLocation.Manual,Left=-20000,Top=-20000 };
                 try
