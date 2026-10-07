@@ -110,12 +110,29 @@ internal static partial class Program
             var nav=(ItemsControl)window.FindName("NavigationList");
             var shared=model.NavigationItems.Single(); var feature=Descendants(nav).OfType<FeatureSwitch>().Single();
             Require(window.IsLensHotkeyRegistered,"An enabled tool did not register its hotkey");
-            await Click(feature); await Task.Delay(40);
-            var inTransition=((SolidColorBrush)feature.Background).Color;
+            byte[] ButtonColors()
+            {
+                var visual=new DrawingVisual(); using (var draw=visual.RenderOpen()) draw.DrawRectangle(feature.Background,null,new Rect(0,0,28,28));
+                var bitmap=new RenderTargetBitmap(28,28,96,96,PixelFormats.Pbgra32); bitmap.Render(visual);
+                var pixels=new byte[28*28*4]; bitmap.CopyPixels(pixels,28*4,0); return pixels;
+            }
+            await Click(feature); feature.SeekColorTransition(TimeSpan.FromMilliseconds(20));
             Require(!model.Gaming.IsEnabled && !feature.IsOn && !window.IsLensHotkeyRegistered &&
                 !model.Gaming.StartCommand.CanExecute(null) && !model.Gaming.ToggleCommand.CanExecute(null),"Disabling did not stop tool availability and hotkeys");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
-                Require(inTransition != Color.FromRgb(38,131,84) && inTransition != Color.FromRgb(196,65,77),"The red/green button jumped directly to the final color");
+            {
+                var ripple=ButtonColors(); var center=(13*28+13)*4; var edge=(2*28+13)*4;
+                Require(ripple[center+2] > 60 && ripple[center+2] < 196 && ripple[edge+2] == 38,
+                    "The button did not spread a gradient from its center while preserving the old edge color");
+                foreach (var (x,y) in new[] { (8,13),(13,8),(5,13),(13,5),(2,13),(13,2) })
+                    for (var channel=0;channel<4;channel++)
+                        Require(Math.Abs(ripple[(y*28+x)*4+channel]-ripple[((27-y)*28+27-x)*4+channel]) <= 1,
+                            "The red/green ripple layers were offset from the button center");
+                Image("button-ripple");
+                feature.Command.Execute(feature.CommandParameter); feature.SeekColorTransition(TimeSpan.Zero);
+                Require(ButtonColors().SequenceEqual(ripple),"Reversing a button ripple jumped to another color or shifted its origin");
+                feature.Command.Execute(feature.CommandParameter); feature.SeekColorTransition(TimeSpan.FromMilliseconds(100));
+            }
             model.Gaming.Start(); Require(!model.Gaming.IsActive && !model.Gaming.HasCaptureResources,"A disabled tool allocated capture resources");
             await Task.Delay(150); Require(((SolidColorBrush)feature.Background).Color == Color.FromRgb(196,65,77),"The disable color did not finish red");
             using (var restored=new GamingViewModel(gamingStore)) Require(!restored.IsEnabled,"Master disable did not persist");
@@ -143,18 +160,21 @@ internal static partial class Program
                     if (dark) model.DarkThemeCommand.Execute(null); else model.LightThemeCommand.Execute(null);
                     model.Page="settings-theme"; await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout,DispatcherPriority.ContextIdle);
                     var before=Frame();
-                    Descendants(nav).OfType<RadioButton>().Single(button => ((NavigationItem)button.DataContext).Id == "settings-background")
-                        .RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                    var option=Descendants(nav).OfType<RadioButton>().Single(button => ((NavigationItem)button.DataContext).Id == "settings-runtime");
+                    var body=(FrameworkElement)window.FindName("BodyContent");
+                    var optionOrigin=option.TranslatePoint(new Point(0,option.ActualHeight/2),body);
+                    option.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                     window.SeekNavigationTransition(TimeSpan.Zero); SameFrame(before,"The wave exposed the new page in its first frame");
-                    window.SeekNavigationTransition(TimeSpan.FromMilliseconds(110));
-                    Require(tide.Progress is > .1 and < .9 && tide.Snapshot is { IsFrozen:true } && model.Page == "settings-background",
+                    Require(tide.Origin == optionOrigin,"The wave did not start at the clicked option's leftmost edge");
+                    window.SeekNavigationTransition(TimeSpan.FromMilliseconds(70));
+                    Require(tide.Progress is > .1 and < .9 && tide.Snapshot is { IsFrozen:true } && model.Page == "settings-runtime",
                         "The navigation wave did not advance while the target page was selected");
                     Image($"wave-{width}-{dark}");
                     var interrupted=Frame();
                     Descendants(nav).OfType<RadioButton>().Single(button => ((NavigationItem)button.DataContext).Id == "settings-about")
                         .RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                     window.SeekNavigationTransition(TimeSpan.Zero); SameFrame(interrupted,"Rapid navigation discarded the visible partial wave");
-                    window.SeekNavigationTransition(TimeSpan.FromMilliseconds(220)); await Task.Delay(35);
+                    window.SeekNavigationTransition(TimeSpan.FromMilliseconds(140)); await Task.Delay(35);
                     Require(tide.Snapshot is null && !tide.IsVisible && ((UIElement)window.FindName("MainContent")).IsHitTestVisible,
                         "Completed waves retained bitmaps or blocked content input");
                 }
@@ -164,10 +184,32 @@ internal static partial class Program
                 .RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Require(tide.Snapshot is null && model.ShowThemeSettings,"Disabled animation still allocated a wave bitmap");
             model.PageAnimationsEnabled=true;
+            foreach (var speed in new[] { .1,1d,2d })
+            {
+                model.AnimationSpeed=speed;
+                model.Page="settings-theme"; window.UpdateLayout();
+                Descendants(nav).OfType<RadioButton>().Single(button => ((NavigationItem)button.DataContext).Id == "settings-runtime")
+                    .RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                window.SeekNavigationTransition(TimeSpan.FromMilliseconds(70/speed));
+                Require(Math.Abs(tide.Progress-Math.Sin(Math.PI/4)) < .01,"The tide ignored the selected animation speed");
+                window.SeekNavigationTransition(TimeSpan.FromMilliseconds(140/speed)); await Task.Delay(35);
+                var settings=(Button)window.FindName("SettingsButton"); settings.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(230/speed));
+                Require(((Image)window.FindName("PageTransition")).IsVisible &&
+                    Math.Abs(((Grid)window.FindName("PageTransitionCover")).Opacity-.5) < .01,"The footer animation ignored the selected speed");
+                window.SeekPageTransition(TimeSpan.FromMilliseconds(460/speed)); await Task.Delay(35);
+                feature=Descendants(nav).OfType<FeatureSwitch>().Single();
+                Require(feature.AnimationSpeed == speed,"The master button ignored the selected speed");
+                model.OpenSettingsCommand.Execute(null); window.UpdateLayout();
+            }
+            model.AnimationSpeed=1;
             Console.WriteLine("PASS Quick tide navigation preserves first/interrupted frames in light/dark, narrow/full layouts and releases its snapshot");
 
             window.Width=1040; model.LightThemeCommand.Execute(null); model.Page="settings-theme";
             var details=(Expander)window.FindName("ThemeDetails"); details.IsExpanded=true;
+            var speedSlider=(Slider)window.FindName("AnimationSpeedSlider");
+            Require(speedSlider.Minimum == .1 && speedSlider.Maximum == 2 && speedSlider.TickFrequency == .1 && speedSlider.IsSnapToTickEnabled,
+                "Animation speed did not expose the requested bounds and precise steps");
             await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout,DispatcherPriority.ContextIdle);
             var editor=(Grid)window.FindName("ThemeEditorGrid"); var pane=(FrameworkElement)window.FindName("ThemePreviewPane");
             Require(Grid.GetColumn(details) == 1 && pane.TranslatePoint(new Point(pane.ActualWidth,0),editor).X <= details.TranslatePoint(new Point(),editor).X,

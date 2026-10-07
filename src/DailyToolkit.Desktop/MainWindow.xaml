@@ -88,6 +88,8 @@
                   </RadioButton>
                       <controls:FeatureSwitch Grid.Column="1" Margin="0,0,4,0" VerticalAlignment="Center"
                         IsOn="{Binding IsEnabled}" ToolTip="{Binding EnableHint}" AutomationProperties.Name="{Binding EnableHint}"
+                        AnimationSpeed="{Binding DataContext.AnimationSpeed, RelativeSource={RelativeSource AncestorType=Window}}"
+                        AnimationsEnabled="{Binding DataContext.PageAnimationsEnabled, RelativeSource={RelativeSource AncestorType=Window}}"
                         Visibility="{Binding CanToggle, Converter={StaticResource VisibleWhen}}" CommandParameter="{Binding}"
                         Command="{Binding DataContext.ToggleToolCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
                     </Grid>
@@ -386,6 +388,16 @@
                 <TextBlock Text="切换动画" FontWeight="SemiBold" Margin="0,0,0,12" />
                 <CheckBox x:Name="PageAnimationSwitch" Content="启用切换动画" IsChecked="{Binding PageAnimationsEnabled, Mode=TwoWay}"
                           Foreground="{DynamicResource TextBrush}" />
+                <StackPanel IsEnabled="{Binding PageAnimationsEnabled}" Margin="0,14,0,0">
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="动画速度" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding AnimationSpeedText}" Foreground="{DynamicResource AccentBrush}" />
+                  </Grid>
+                  <Slider x:Name="AnimationSpeedSlider" Minimum="0.1" Maximum="2" TickFrequency="0.1" SmallChange="0.1"
+                          LargeChange="0.1" IsSnapToTickEnabled="True" Value="{Binding AnimationSpeed}" Margin="0,8,0,0"
+                          AutomationProperties.Name="切换动画速度" />
+                </StackPanel>
                 <WrapPanel Margin="0,12,0,0">
                   <Button Content="预览星形" Click="PreviewStar" Margin="0,0,8,0" />
                   <Button Content="预览齿轮" Click="PreviewGear" />
@@ -393,14 +405,9 @@
               </StackPanel>
             </StackPanel>
           </Border>
-          <Border x:Name="BackgroundSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowBackgroundSettings, Converter={StaticResource VisibleWhen}}">
+          <Border x:Name="RuntimeSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowRuntimeSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
-              <CheckBox Content="关闭窗口后留在托盘" IsChecked="{Binding CloseToTray}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12" />
-              <CheckBox Content="最小化时留在托盘" IsChecked="{Binding MinimizeToTray}" Foreground="{DynamicResource TextBrush}" />
-            </StackPanel>
-          </Border>
-          <Border x:Name="StartupSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowStartupSettings, Converter={StaticResource VisibleWhen}}">
-            <StackPanel>
+              <TextBlock Text="启动" FontWeight="SemiBold" Margin="0,0,0,14" />
               <StackPanel IsEnabled="{Binding CanEditStartup}">
                 <CheckBox x:Name="LoginStartupSwitch" Content="开机自启动" IsChecked="{Binding StartAtLogin}" Foreground="{DynamicResource TextBrush}" />
                 <StackPanel Margin="24,12,0,0">
@@ -412,6 +419,10 @@
               <TextBlock Text="{Binding StartupStatus}" Style="{StaticResource MutedText}" Margin="0,12,0,0" Visibility="{Binding HasStartupStatus, Converter={StaticResource VisibleWhen}}" />
               <TextBlock Text="{Binding PrivilegeText}" FontSize="13" Margin="0,14,0,10" />
               <Button Content="以管理员权限重启" Command="{Binding RunAdministratorCommand}" HorizontalAlignment="Left" />
+              <Separator Margin="0,22,0,18" />
+              <TextBlock Text="后台运行" FontWeight="SemiBold" Margin="0,0,0,14" />
+              <CheckBox Content="关闭窗口后留在托盘" IsChecked="{Binding CloseToTray}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12" />
+              <CheckBox Content="最小化时留在托盘" IsChecked="{Binding MinimizeToTray}" Foreground="{DynamicResource TextBrush}" />
             </StackPanel>
           </Border>
           <Border x:Name="AboutSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowAboutSettings, Converter={StaticResource VisibleWhen}}">
@@ -420,7 +431,7 @@
                 <Image Source="Assets/dt.png" Width="56" Height="56" Margin="0,0,16,0" />
                 <StackPanel VerticalAlignment="Center">
                   <TextBlock Text="DailyToolkit" FontSize="22" FontWeight="SemiBold" />
-                  <TextBlock x:Name="ProductVersion" Text="版本 0.6.0" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+                  <TextBlock x:Name="ProductVersion" Text="版本 0.6.1" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
                 </StackPanel>
               </StackPanel>
               <TextBlock Text="Windows 本地工具集合" Margin="0,0,0,14" />

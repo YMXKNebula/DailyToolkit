@@ -160,8 +160,8 @@ public partial class MainWindow : Window
         var easing=new SineEase { EasingMode=EasingMode.EaseInOut }; easing.Freeze();
         void Animate(DependencyObject target,DependencyProperty property,double from,double to,int duration,int delay=0)
         {
-            var animation=new DoubleAnimation(from,to,TimeSpan.FromMilliseconds(duration))
-            { BeginTime=TimeSpan.FromMilliseconds(delay),EasingFunction=easing };
+            var animation=new DoubleAnimation(from,to,_viewModel.AnimationDuration(duration))
+            { BeginTime=_viewModel.AnimationDuration(delay),EasingFunction=easing };
             // Resolve transforms by name: a Freezable used as a timeline target can be cloned
             // when the storyboard creates its clocks, leaving the displayed shape unchanged.
             if (target == scale) Storyboard.SetTargetName(animation,"PageTransitionScale");

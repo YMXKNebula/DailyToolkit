@@ -25,7 +25,7 @@ internal static partial class Program
                 model.Page="screen-lens"; model.Gaming.Zoom=4; model.Gaming.WheelZoomEnabled=false;
                 model.OpenSettingsCommand.Execute(null);
                 Require(model.IsSettings && !model.IsFavorites && !model.ShowFavoritesEmpty && !model.ShowRefresh &&
-                    model.PageTitle == "主题配色" && model.NavigationItems.Count == 5 &&
+                    model.PageTitle == "主题配色" && model.NavigationItems.Count == 4 &&
                     model.NavigationItems.Single(item => item.IsSelected).Id == "settings-theme" &&
                     !model.RefreshCommand.CanExecute(null) && !model.MoveNavigationItem("settings","computer") &&
                     model.Gaming.Zoom == 4 && !model.Gaming.IsActive,"Opening settings changed tool state or kept unrelated navigation");
@@ -38,9 +38,10 @@ internal static partial class Program
                     "Settings retained favorites behind its navigation");
                 model.Gaming.IsFavorite=true;
                 model.Page="settings-startup";
-                Require(model.ShowStartupSettings && !model.ShowThemeSettings && model.NavigationItems.Single(item => item.IsSelected).Id == "settings-startup",
+                Require(model.ShowRuntimeSettings && model.PageTitle == "软件运行" && !model.ShowThemeSettings && model.NavigationItems.Single(item => item.IsSelected).Id == "settings-runtime",
                     "Selecting a settings category exited settings or lost its selection");
-                Require(model.IsSettings && model.NavigationItems.Count == 5,"Updating a favorite replaced the open settings page");
+                model.Page="settings-background";
+                Require(model.ShowRuntimeSettings && model.NavigationItems.Count == 4,"The old background route did not resolve to software runtime");
                 model.ExitSettingsCommand.Execute(null);
                 Require(!model.IsFavorites && !model.IsSettings && model.ShowAllTools && model.ShowScreenLens,
                     "Closing settings after switching from favorites returned to another panel");
@@ -74,9 +75,17 @@ internal static partial class Program
                     "The old animation route did not resolve to theme settings");
                 model.ExitSettingsCommand.Execute(null);
                 model.PageAnimationsEnabled=false;
+                Require(model.AnimationSpeed == 1,"Missing animation speed did not default to 1x");
+                model.AnimationSpeed=9; Require(model.AnimationSpeed == 2,"Animation speed exceeded 2x");
+                model.AnimationSpeed=-1; Require(model.AnimationSpeed == .1,"Animation speed fell below 0.1x");
+                model.AnimationSpeed=.86; Require(model.AnimationSpeed == .9,"Animation speed did not round to 0.1x steps");
+                model.AnimationSpeed=double.NaN; Require(model.AnimationSpeed == .9,"Nonfinite animation speed changed preferences");
+                model.AnimationSpeed=1.7;
             }
-            using (var reopened=Create()) Require(!reopened.PageAnimationsEnabled && !reopened.Gaming.WheelZoomEnabled,
+            using (var reopened=Create()) Require(!reopened.PageAnimationsEnabled && !reopened.Gaming.WheelZoomEnabled && reopened.AnimationSpeed == 1.7,
                 "App animation preference or independent tool settings did not survive restart");
+            Require(new AppPreferences { AnimationSpeed=double.NaN }.Normalize().AnimationSpeed == 1 &&
+                new AppPreferences { AnimationSpeed=2.8 }.Normalize().AnimationSpeed == 2,"Malformed speed was not normalized on load");
             Require(!Directory.GetFiles(directory.FullName,"*.tmp").Any(),"Saving app preferences left temporary files");
             File.WriteAllText(path,"{");
             Require(store.Load().PageAnimationsEnabled,"Broken settings did not recover to defaults");

@@ -37,7 +37,7 @@ internal static partial class Program
                 model.MoveDownCommand.Execute(model.NavigationItems[0]);
                 Require(model.NavigationItems[0].Id == "screen-lens" && !model.MoveDownCommand.CanExecute(null),"A single tool enabled invalid reordering");
                 model.Page="computer";
-                Require(model.IsHome && model.IsSettings && model.PageTitle == "电脑详情" && model.NavigationItems.Count == 5,
+                Require(model.IsHome && model.IsSettings && model.PageTitle == "电脑详情" && model.NavigationItems.Count == 4,
                     "Computer details were not moved into settings");
             }
             using (var reopened=Create())

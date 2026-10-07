@@ -326,7 +326,7 @@ internal static partial class Program
                 ((System.Windows.Media.SolidColorBrush)window.FindResource("WindowBrush")).Color.ToString() == "#FF171D1B",
                 "The live theme and preview did not receive the selected palette");
             model.LightThemeCommand.Execute(null);
-            var settingsCards=new[] { "ThemeSettingsCard","BackgroundSettingsCard","StartupSettingsCard","HomeScroll","AboutSettingsCard" };
+            var settingsCards=new[] { "ThemeSettingsCard","RuntimeSettingsCard","HomeScroll","AboutSettingsCard" };
             foreach (var (item,index) in model.NavigationItems.ToArray().Select((item,index) => (item,index)))
             {
                 model.NavigateCommand.Execute(item); window.UpdateLayout();
@@ -335,7 +335,7 @@ internal static partial class Program
                     ((UIElement)window.FindName(settingsCards[index])).IsVisible,
                     "Settings navigation did not select exactly one category page");
             }
-            Require(((System.Windows.Controls.TextBlock)window.FindName("ProductVersion")).Text == "版本 0.6.0" &&
+            Require(((System.Windows.Controls.TextBlock)window.FindName("ProductVersion")).Text == "版本 0.6.1" &&
                 ((FrameworkElement)window.FindName("AboutSettingsCard")).IsVisible &&
                 !Descendants(sidebar).OfType<System.Windows.Controls.TextBlock>().Any(text => text.Text.Contains("DailyToolkit")),
                 "Product information remained in the sidebar instead of About");

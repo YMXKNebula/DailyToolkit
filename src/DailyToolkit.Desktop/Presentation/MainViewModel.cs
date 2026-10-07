@@ -32,7 +32,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private string _settingsPage="settings-theme";
     private readonly NavigationItem[] _settingsNavigation=[
         new("settings-theme","主题配色","\uE790"),
-        new("settings-background","后台运行","\uE737"), new("settings-startup","启动","\uE7E8"),
+        new("settings-runtime","软件运行","\uE7E8"),
         new("settings-computer","电脑详情","\uE770"),
         new("settings-about","关于","\uE946")];
     private readonly NavigationOrderStore _navigationStore;
@@ -134,6 +134,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         set
         {
             if (value == "settings-animation") value="settings-theme";
+            if (value is "settings-background" or "settings-startup") value="settings-runtime";
             if (value is "computer" or "home" or "tools") value="settings-computer";
             if (value == "favorites") { OpenFavorites(); return; }
             if (value == "settings" || _settingsNavigation.Any(item => item.Id == value))
@@ -154,8 +155,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool IsSettings => _settingsOpen;
     public bool ShowSettingsContent => IsSettings && !IsHome;
     public bool ShowThemeSettings => IsSettings && Page == "settings-theme";
-    public bool ShowBackgroundSettings => IsSettings && Page == "settings-background";
-    public bool ShowStartupSettings => IsSettings && Page == "settings-startup";
+    public bool ShowRuntimeSettings => IsSettings && Page == "settings-runtime";
     public bool ShowAboutSettings => IsSettings && Page == "settings-about";
     public bool HasFavorites => _navigation.Any(item => _favoriteIds.Contains(item.Id));
     public bool ShowScreenLens => Page == "screen-lens";
@@ -179,6 +179,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Notify();
         }
     }
+    public double AnimationSpeed
+    {
+        get => _appPreferences.AnimationSpeed;
+        set
+        {
+            if (!double.IsFinite(value)) return;
+            var speed=AppPreferences.NormalizeAnimationSpeed(value);
+            if (speed == AnimationSpeed) return;
+            _appPreferences=_appPreferences with { AnimationSpeed=speed }; SaveAppPreferences();
+            Notify(); Notify(nameof(AnimationSpeedText));
+        }
+    }
+    public string AnimationSpeedText => $"{AnimationSpeed:0.0}×";
+    internal TimeSpan AnimationDuration(int milliseconds) => TimeSpan.FromMilliseconds(milliseconds/AnimationSpeed);
 
     private void OpenFavorites()
     {
@@ -445,7 +459,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyToolkit", Version = "0.6.0", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyToolkit", Version = "0.6.1", FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);

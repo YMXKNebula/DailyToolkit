@@ -55,7 +55,7 @@ public sealed partial class MainViewModel
         }
         LightThemeCommand=new(_ => SetTheme(new(),new ThemePalette().Accent));
         DarkThemeCommand=new(_ => SetTheme(ThemePalette.Dark,ThemePalette.Dark.Accent));
-        ResetAppearanceCommand=new(_ => { LightThemeCommand.Execute(null); PageAnimationsEnabled=true; });
+        ResetAppearanceCommand=new(_ => { LightThemeCommand.Execute(null); PageAnimationsEnabled=true; AnimationSpeed=1; });
         SelectThemePresetCommand=new(value => { if (value is ThemePreset preset && ThemePresets.Contains(preset)) SetTheme(preset.Palette,preset.Palette.Accent); });
         SaveThemeCommand=new(_ => SetTheme(PreviewTheme,PreviewAnimationColor),() => HasThemeChanges);
         DiscardThemeCommand=new(_ => SetThemePreview(Theme,AnimationColor),() => HasThemeChanges);

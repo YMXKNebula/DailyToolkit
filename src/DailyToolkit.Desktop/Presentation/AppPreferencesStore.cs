@@ -6,6 +6,7 @@ namespace DailyToolkit.Desktop.Presentation;
 public sealed record AppPreferences
 {
     public bool PageAnimationsEnabled { get; init; } = true;
+    public double AnimationSpeed { get; init; } = 1;
     public string AnimationColor { get; init; } = "#267A5D";
     public ThemePalette Theme { get; init; } = new();
     public bool CloseToTray { get; init; }
@@ -16,9 +17,12 @@ public sealed record AppPreferences
 
     public AppPreferences Normalize() => this with
     {
+        AnimationSpeed=NormalizeAnimationSpeed(AnimationSpeed),
         AnimationColor=ThemePalette.NormalizeColor(AnimationColor,"#267A5D"),
         Theme=(Theme ?? new()).Normalize(), AdminStartup=StartAtLogin && AdminStartup
     };
+    internal static double NormalizeAnimationSpeed(double speed) => double.IsFinite(speed)
+        ? Math.Round(Math.Clamp(speed,.1,2)*10,MidpointRounding.AwayFromZero)/10 : 1;
 }
 
 public sealed class AppPreferencesStore(string? filePath=null)

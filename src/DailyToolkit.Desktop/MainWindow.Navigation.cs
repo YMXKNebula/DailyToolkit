@@ -34,14 +34,17 @@ public partial class MainWindow
         if (((FrameworkElement)sender).DataContext is not NavigationItem item || item.Id == _viewModel.Page) return;
         var animate=_viewModel.PageAnimationsEnabled && SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast && IsVisible;
         var snapshot=animate ? CaptureBodySnapshot() : null;
+        var option=(FrameworkElement)sender;
+        var origin=option.TranslatePoint(new Point(0,option.ActualHeight/2),BodyContent);
         FinishPageTransition(); FinishNavigationTransition();
         if (snapshot is null) { _viewModel.NavigateCommand.Execute(item); return; }
-        NavigationTransition.Snapshot=snapshot; NavigationTransition.Progress=0; NavigationTransition.Visibility=Visibility.Visible;
+        NavigationTransition.Origin=origin; NavigationTransition.Snapshot=snapshot;
+        NavigationTransition.Progress=0; NavigationTransition.Visibility=Visibility.Visible;
         MainContent.IsHitTestVisible=false;
         _viewModel.NavigateCommand.Execute(item);
         var generation=_navigationGeneration;
         var storyboard=_navigationStoryboard=new Storyboard();
-        var animation=new DoubleAnimation(0,1,TimeSpan.FromMilliseconds(220)) { EasingFunction=new SineEase { EasingMode=EasingMode.EaseInOut } };
+        var animation=new DoubleAnimation(0,1,_viewModel.AnimationDuration(140)) { EasingFunction=new SineEase { EasingMode=EasingMode.EaseOut } };
         Storyboard.SetTarget(animation,NavigationTransition); Storyboard.SetTargetProperty(animation,new PropertyPath(TideTransition.ProgressProperty));
         storyboard.Children.Add(animation);
         storyboard.Completed += (_,_) => { if (generation == _navigationGeneration) FinishNavigationTransition(); };
