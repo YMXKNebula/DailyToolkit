@@ -17,7 +17,7 @@ internal sealed class LensPointerController : IDisposable
     private readonly bool _nativeInput;
     private IntPtr _hook;
     private bool _dragging,_consumedDown;
-    private int _offsetX,_offsetY;
+    private int _lastX,_lastY;
 
     public LensPointerController(Func<PixelBounds?> visibleBounds, Action<int,int,int,int> move, Action<int> zoom, bool install=true,
         Func<bool>? canMove=null, Action? dragEnded=null, Action? dragStarted=null, bool nativeInput=false, Func<bool>? canZoom=null)
@@ -55,12 +55,20 @@ internal sealed class LensPointerController : IDisposable
         var bounds=_visibleBounds();
         if (bounds is null || !_canMove()) CancelDrag();
         if (bounds is null) return false;
-        if (_dragging && message == 0x200) { _move(x-_offsetX,y-_offsetY,x,y); return true; }
+        if (_dragging && message == 0x200)
+        {
+            var dx=x-_lastX; var dy=y-_lastY;
+            _lastX=x; _lastY=y;
+            // Native window messages and the low-level hook can observe the same point.
+            // Consume each physical displacement once, irrespective of the grab point.
+            if (dx != 0 || dy != 0) _move(dx,dy,x,y);
+            return true;
+        }
         var inside=x >= bounds.Left && y >= bounds.Top && x < bounds.Left+bounds.Width && y < bounds.Top+bounds.Height;
         if (!inside) return false;
         if (message == 0x20A && _canZoom()) { _zoom(delta); return true; }
         if (message != 0x201 || !_canMove()) return false;
-        _offsetX=x-bounds.Left; _offsetY=y-bounds.Top;
+        _lastX=x; _lastY=y;
         _dragging=_consumedDown=true;
         _dragStarted?.Invoke();
         return true;

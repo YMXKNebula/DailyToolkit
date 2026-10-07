@@ -17,7 +17,7 @@ namespace DailyToolkit.Desktop.Tests;
 internal static partial class Program
 {
     [STAThread]
-    public static int Main()
+    public static int Main(string[] args)
     {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Resources.MergedDictionaries.Add(new ResourceDictionary
@@ -27,7 +27,12 @@ internal static partial class Program
         var exitCode = 1;
         app.Startup += async (_, _) =>
         {
-            try { await CheckAsync(); exitCode = 0; }
+            try
+            {
+                if (!args.Contains("--live-lens-only")) await CheckAsync();
+                if (args.Contains("--live-lens") || args.Contains("--live-lens-only")) await CheckLiveLensMovementAsync();
+                exitCode = 0;
+            }
             catch (Exception exception) { Console.WriteLine($"FAIL {exception}"); }
             finally { app.Shutdown(); }
         };

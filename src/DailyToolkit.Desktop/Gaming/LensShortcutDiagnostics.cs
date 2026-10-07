@@ -409,7 +409,12 @@ internal static class LensShortcutDiagnostics
                 await Task.Delay(30); Mouse(2);
                 await Wait(() => gaming.GuidesForDiagnostics?.Visible == true,"Continuous drag did not acquire the picture.");
                 GetCursorPos(out var grip);
-                var offsetX=grip.X-starting.Left; var offsetY=grip.Y-starting.Top;
+                var reference=new LensMovement(gaming.Monitors.Select(m => m.Bounds).ToArray(),
+                    Array.FindIndex(gaming.Monitors.ToArray(),m => m.Handle == gaming.SelectedMonitor!.Handle),
+                    640,384,gaming.Zoom,starting.Left+starting.Width/2d,starting.Top+starting.Height/2d,true,centerSnap:true);
+                reference.Restore(session.MovementForDiagnostics!);
+                reference.BeginDrag();
+                var previous=grip;
                 await WalkToAsync(x,y);
                 await WalkToAsync(originX,originY);
                 Mouse(4);
@@ -420,7 +425,6 @@ internal static class LensShortcutDiagnostics
 
                 async Task WalkToAsync(int destinationX,int destinationY)
                 {
-                    var bounds=gaming.Monitors.Select(m => m.Bounds).ToArray();
                     for(var step=0;step<160;step++)
                     {
                         GetCursorPos(out var current);
@@ -428,10 +432,11 @@ internal static class LensShortcutDiagnostics
                         Mouse(1,Math.Clamp(destinationX-current.X,-24,24),Math.Clamp(destinationY-current.Y,-24,24));
                         await Task.Delay(15);
                         GetCursorPos(out current);
-                        var screen=gaming.Monitors[LensPlacement.MonitorAt(bounds,current.X,current.Y)];
-                        var expected=LensPlacement.Snap(screen.Bounds,640,384,current.X-offsetX,current.Y-offsetY).Bounds;
-                        await Wait(() => gaming.SelectedMonitor?.Handle == screen.Handle && gaming.ActiveBounds == expected,
-                            "The lens stopped following consecutive relative mouse moves across screens.");
+                        var expected=reference.Move(current.X-previous.X,current.Y-previous.Y,current.X,current.Y);
+                        previous=current;
+                        await Wait(() => gaming.SelectedMonitor?.Handle == gaming.Monitors[expected.MonitorIndex].Handle &&
+                            gaming.ActiveBounds == expected.Layout.Output,
+                            "Consecutive native moves diverged from detached motion or the virtual-axis relay.");
                     }
                     throw new InvalidOperationException("Consecutive relative mouse movement could not reach the other screen.");
                 }

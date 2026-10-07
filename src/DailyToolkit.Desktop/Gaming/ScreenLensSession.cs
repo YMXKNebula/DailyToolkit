@@ -14,10 +14,11 @@ internal sealed class ScreenLensSession : IDisposable
     private LensPointerController? _pointer;
     private LensDesktopGuides? _guides;
     private LensLayout? _layout;
+    private LensMovement? _movement;
+    private LensMovementState? _appliedMovement;
     private CaptureMonitor? _activeMonitor;
     private IntPtr _positionMonitor;
     private double _positionX=0.5,_positionY=0.5;
-    private int _centerX,_centerY;
     private double _zoom=2,_sharpening=0.35;
     private uint _borderColor=LensBorderColor.DefaultRgb;
     private bool _active;
@@ -25,7 +26,7 @@ internal sealed class ScreenLensSession : IDisposable
     private IReadOnlyList<CaptureMonitor> _monitors=[];
     private PixelBounds[] _monitorBounds=[];
     private int _width,_height,_frameRate;
-    private (int Left,int Top,int X,int Y)? _pendingMove;
+    private LensMovementState? _pendingMove;
     private bool _moveQueued;
     private int _generation;
     // Changing capture sources must not invalidate an already queued drag.
@@ -51,13 +52,22 @@ internal sealed class ScreenLensSession : IDisposable
     internal IntPtr LensHandle => _window?.Handle ?? IntPtr.Zero;
     internal LensDesktopGuides? GuidesForDiagnostics => _guides;
     internal LensCapture? CaptureForDiagnostics => _capture;
+    internal LensGpuRenderer? RendererForDiagnostics => _renderer;
+    internal LensMovementState? MovementForDiagnostics => _appliedMovement;
     internal bool HasCaptureResources => _window is not null || _renderer is not null || _capture is not null ||
         _pointer is not null || _guides is not null || _startupTimer is not null;
 
     public void SetMovement(bool movable)
     {
         IsMovableMode=movable;
-        if (!movable) { _pointer?.CancelDrag(); ClearGuides(); }
+        if (!movable)
+        {
+            _movementGeneration++;
+            _pendingMove=null; _moveQueued=false;
+            if (_appliedMovement is not null) _movement?.Restore(_appliedMovement);
+            _pointer?.CancelDrag(); ClearGuides();
+        }
+        _movement?.SetMovable(movable);
         _window?.SetMovable(movable);
         if (IsVisible) UpdateActiveStatus();
     }
@@ -69,7 +79,10 @@ internal sealed class ScreenLensSession : IDisposable
     public void UpdatePicture(double zoom,double sharpening)
     {
         _zoom=zoom; _sharpening=sharpening;
-        Reposition();
+        if (_movement is null) return;
+        _movement.UpdateZoom(zoom);
+        if (_moveQueued) _pendingMove=_movement.State;
+        else ApplyMovement(_movement.State);
     }
 
     public void SetBorderColor(uint color)
@@ -89,12 +102,12 @@ internal sealed class ScreenLensSession : IDisposable
             if (!GraphicsCaptureSession.IsSupported()) { Status = "当前 Windows 图形环境不支持屏幕捕获。"; return; }
             var centerX=monitor.Bounds.Left+(int)Math.Round(monitor.Bounds.Width*(_positionMonitor == monitor.Handle ? _positionX : 0.5));
             var centerY=monitor.Bounds.Top+(int)Math.Round(monitor.Bounds.Height*(_positionMonitor == monitor.Handle ? _positionY : 0.5));
-            var layout = LensLayout.Calculate(monitor.Bounds,width,height,_zoom,centerX,centerY);
+            var index=Array.FindIndex(_monitorBounds,b => b == monitor.Bounds);
+            _movement=new(_monitorBounds,index,width,height,_zoom,centerX,centerY,IsMovableMode,centerSnap:true);
+            var layout=_movement.State.Layout;
             _activeMonitor=monitor;
-            _centerX=layout.Output.Left+layout.Output.Width/2;
-            _centerY=layout.Output.Top+layout.Output.Height/2;
-            // Keep the sampled area aligned with the frame when a changed size clamps its position.
-            _layout=layout=LensLayout.Calculate(monitor.Bounds,width,height,_zoom,_centerX,_centerY);
+            _appliedMovement=_movement.State;
+            _layout=layout;
             _window = new(layout.Output);
             _window.SetMovable(IsMovableMode);
             _guides = new(monitor.Bounds);
@@ -160,13 +173,15 @@ internal sealed class ScreenLensSession : IDisposable
         }
     }
 
-    private void MoveFrame(int left,int top,int cursorX,int cursorY)
+    private void MoveFrame(int dx,int dy,int cursorX,int cursorY)
     {
-        if (_layout is null || _activeMonitor is null || !IsMovableMode) return;
-        var monitor=_monitors[LensPlacement.MonitorAt(_monitorBounds,cursorX,cursorY)];
+        if (_movement is null || _activeMonitor is null || !IsMovableMode) return;
+        var state=_movement.Move(dx,dy,cursorX,cursorY);
+        var monitor=_monitors[state.MonitorIndex];
         if (monitor.Handle != _activeMonitor.Handle || _moveQueued)
         {
-            _pendingMove=(left,top,cursorX,cursorY);
+            // Every delta has already been consumed. Coalesce snapshots, never deltas.
+            _pendingMove=state;
             if (_moveQueued) return;
             _moveQueued=true;
             var generation=_movementGeneration;
@@ -177,44 +192,49 @@ internal sealed class ScreenLensSession : IDisposable
                 _moveQueued=false;
                 var move=_pendingMove; _pendingMove=null;
                 if (!IsActive || !IsMovableMode || move is null) return;
-                try { MoveOnMonitor(move.Value.Left,move.Value.Top,
-                    _monitors[LensPlacement.MonitorAt(_monitorBounds,move.Value.X,move.Value.Y)]); }
+                try { ApplyMovement(move); }
                 catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); Stop(); Status="跨屏移动失败，请重新开启放大框。"; }
             });
             return;
         }
-        MoveOnMonitor(left,top,monitor);
+        ApplyMovement(state);
     }
 
-    private void MoveOnMonitor(int left,int top,CaptureMonitor monitor)
+    private void ApplyMovement(LensMovementState state)
     {
         if (_layout is null || _activeMonitor is null) return;
+        var monitor=_monitors[state.MonitorIndex];
         var changed=monitor.Handle != _activeMonitor.Handle;
-        var placement=LensPlacement.Snap(monitor.Bounds,_width,_height,left,top);
+        var layout=state.Layout;
+        if (_window?.Move(layout.Output) != true)
+        {
+            if (_appliedMovement is not null) _movement?.Restore(_appliedMovement);
+            Status="浮窗移动失败，请重新开启放大框。"; return;
+        }
         if (changed)
         {
             _generation++;
             _startupTimer?.Stop();
             _capture?.Dispose(); _capture=null;
-            if (_layout.Output.Width != placement.Bounds.Width || _layout.Output.Height != placement.Bounds.Height)
+            if (_layout.Output.Width != layout.Output.Width || _layout.Output.Height != layout.Output.Height)
             {
                 _renderer?.Dispose();
-                _renderer=new(_window!.Handle,placement.Bounds.Width,placement.Bounds.Height);
+                _renderer=new(_window!.Handle,layout.Output.Width,layout.Output.Height);
             }
             var showGuides=_guides?.Visible == true;
             _guides?.Dispose(); _guides=new(monitor.Bounds);
             _activeMonitor=monitor;
-            _layout=new(placement.Bounds,_layout.Source);
-            if (showGuides) _guides.Update(placement.Bounds,placement.VerticalGuide,placement.HorizontalGuide);
+            if (showGuides) _guides.Update(layout.Output,state.VerticalGuide,state.HorizontalGuide);
         }
         var bounds=_activeMonitor.Bounds;
-        _centerX=placement.Bounds.Left+placement.Bounds.Width/2;
-        _centerY=placement.Bounds.Top+placement.Bounds.Height/2;
-        _verticalGuide=placement.VerticalGuide; _horizontalGuide=placement.HorizontalGuide;
+        _layout=layout; _appliedMovement=state;
+        _verticalGuide=state.VerticalGuide; _horizontalGuide=state.HorizontalGuide;
         _positionMonitor=_activeMonitor.Handle;
-        _positionX=(_centerX-bounds.Left)/(double)bounds.Width;
-        _positionY=(_centerY-bounds.Top)/(double)bounds.Height;
-        Reposition();
+        _positionX=(state.X.OutputCenter-bounds.Left)/bounds.Width;
+        _positionY=(state.Y.OutputCenter-bounds.Top)/bounds.Height;
+        if (_guides is { Visible:true }) _guides.Update(layout.Output,_verticalGuide,_horizontalGuide);
+        if (!changed) _capture?.UpdateSource(layout.Source,_sharpening,_borderColor);
+        UpdateActiveStatus();
         if (changed)
         {
             BeginCapture(monitor,_layout!);
@@ -231,10 +251,16 @@ internal sealed class ScreenLensSession : IDisposable
         _positionX=_positionY=0.5;
         if (monitor is not null)
         {
-            _centerX=monitor.Bounds.Left+monitor.Bounds.Width/2;
-            _centerY=monitor.Bounds.Top+monitor.Bounds.Height/2;
+            if (_movement is not null)
+            {
+                _movementGeneration++; _pendingMove=null; _moveQueued=false;
+                var index=Array.FindIndex(_monitorBounds,b => b == monitor.Bounds);
+                _movement=new(_monitorBounds,index,_width,_height,_zoom,
+                    monitor.Bounds.Left+monitor.Bounds.Width/2d,monitor.Bounds.Top+monitor.Bounds.Height/2d,
+                    IsMovableMode,centerSnap:true);
+                ApplyMovement(_movement.State);
+            }
         }
-        Reposition();
     }
 
     private void ClearGuides()
@@ -246,22 +272,12 @@ internal sealed class ScreenLensSession : IDisposable
 
     private void ShowGuides()
     {
+        _movement?.BeginDrag();
         if (_layout is not null) _guides?.Update(_layout.Output,_verticalGuide,_horizontalGuide);
     }
 
     private void UpdateActiveStatus() => Status=$"已开启 · {_zoom:0.##}× · " +
         (!IsMovableMode ? "固定当前位置" : "按住放大画面拖动") + (WheelZoomEnabled ? "，框内滚轮调倍率" : "，滚轮调节已关闭");
-
-    private void Reposition()
-    {
-        if (_layout is null || _activeMonitor is null || !IsActive) return;
-        var layout=LensLayout.Calculate(_activeMonitor.Bounds,_layout.Output.Width,_layout.Output.Height,_zoom,_centerX,_centerY);
-        if (_window?.Move(layout.Output) != true) { Status="浮窗移动失败，请重新开启放大框。"; return; }
-        _layout=layout;
-        if (_guides is { Visible:true }) _guides.Update(layout.Output,_verticalGuide,_horizontalGuide);
-        _capture?.UpdateSource(layout.Source,_sharpening,_borderColor);
-        UpdateActiveStatus();
-    }
 
     public void Stop()
     {
@@ -274,7 +290,7 @@ internal sealed class ScreenLensSession : IDisposable
         _capture?.Dispose(); _capture = null;
         _renderer?.Dispose(); _renderer = null;
         _window?.Dispose(); _window = null;
-        _layout=null; _activeMonitor=null;
+        _layout=null; _activeMonitor=null; _movement=null; _appliedMovement=null;
         _visible=false;
         _pendingMove=null;
         _moveQueued=false;

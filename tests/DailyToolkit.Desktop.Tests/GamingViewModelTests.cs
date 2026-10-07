@@ -25,10 +25,14 @@ internal static partial class Program
             canMove:() => canMove,dragEnded:() => ended++,canZoom:() => canZoom);
         Require(!controller.Process(0x201,0,0),"Clicks outside the lens were intercepted");
         Require(!controller.Process(0x20A,0,0,120),"Wheel outside the lens was intercepted");
-        Require(controller.Process(0x201,170,116) && controller.Process(0x200,210,176) && moved == (50,80),
-            "Dragging from the magnified picture's center did not preserve its pointer offset");
+        Require(controller.Process(0x201,170,116) && controller.Process(0x200,210,176) && moved == (40,60),
+            "Dragging from the picture center did not provide its logical displacement");
         Require(controller.Process(0x202,210,176),"Picture drag did not end");
-        Require(controller.Process(0x201,12,22) && controller.Process(0x200,52,82) && moved == (50,80),"Border dragging lost its pointer offset");
+        Require(controller.Process(0x201,12,22) && controller.Process(0x200,52,82) && moved == (40,60),
+            "The grab point changed the same logical mouse displacement");
+        Require(controller.Process(0x200,60,92) && moved == (8,10),"Mouse deltas accumulated from the original grab point");
+        moved=(-1,-1);
+        Require(controller.Process(0x200,60,92) && moved == (-1,-1),"Duplicate native/hook positions consumed the same displacement twice");
         Require(controller.Process(0x202,900,900),"Drag release outside the frame was not consumed");
         Require(controller.Process(0x20A,100,100,120) && wheel == 120,"Wheel inside the lens did not adjust zoom");
         canZoom=false;
@@ -46,6 +50,18 @@ internal static partial class Program
         bounds=null;
         Require(!controller.Process(0x200,60,60) && controller.Process(0x202,60,60) &&
             !controller.Process(0x20A,100,100,120),"Hiding retained a drag or intercepted unrelated input");
+        foreach (var (offsetX,offsetY) in new[] {(0,0),(319,0),(0,191),(319,191),(160,96),(73,51)})
+        {
+            var movement=new LensMovement([new(0,0,1000,1000)],0,320,192,4,500,500,true);
+            var frame=movement.State.Layout.Output;
+            using var input=new LensPointerController(() => movement.State.Layout.Output,
+                (dx,dy,x,y) => movement.Move(dx,dy,x,y),_ => {},install:false);
+            input.Process(0x201,frame.Left+offsetX,frame.Top+offsetY);
+            input.Process(0x200,frame.Left+offsetX+40,frame.Top+offsetY+60);
+            Require(movement.State.X.SourceCenter == 540 && movement.State.Y.SourceCenter == 560 &&
+                movement.State.X.OutputCenter == 540 && movement.State.Y.OutputCenter == 560,
+                "Corner, center or other grab point changed the same logical displacement");
+        }
         using var gaming=new GamingViewModel(new GamingPreferencesStore(
             Path.Combine(Path.GetTempPath(),$"DailyToolkit-pointer-{Guid.NewGuid():N}.json")));
         gaming.FrameWidth=800; gaming.FrameHeight=240;
