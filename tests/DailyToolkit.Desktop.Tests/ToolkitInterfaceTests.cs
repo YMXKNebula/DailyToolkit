@@ -166,6 +166,14 @@ internal static partial class Program
                     option.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                     window.SeekNavigationTransition(TimeSpan.Zero); SameFrame(before,"The wave exposed the new page in its first frame");
                     Require(tide.Origin == optionOrigin,"The wave did not start at the clicked option's leftmost edge");
+                    window.SeekNavigationTransition(TimeSpan.FromMilliseconds(25)); Image($"wave-start-{width}-{dark}");
+                    var early=Frame(); var original=new byte[before.PixelWidth*before.PixelHeight*4]; var visible=new byte[original.Length];
+                    before.CopyPixels(original,before.PixelWidth*4,0); early.CopyPixels(visible,early.PixelWidth*4,0);
+                    var boundary=(int)Math.Ceiling(tide.ConnectionX*VisualTreeHelper.GetDpi(body).DpiScaleX);
+                    for (var y=0;y<early.PixelHeight;y++) for (var x=boundary;x<early.PixelWidth;x++)
+                        for (var channel=0;channel<4;channel++)
+                            Require(Math.Abs(original[(y*early.PixelWidth+x)*4+channel]-visible[(y*early.PixelWidth+x)*4+channel]) <= 3,
+                                "The first wave stage extended beyond the option row before reaching the connection");
                     window.SeekNavigationTransition(TimeSpan.FromMilliseconds(70));
                     Require(tide.Progress is > .1 and < .9 && tide.Snapshot is { IsFrozen:true } && model.Page == "settings-runtime",
                         "The navigation wave did not advance while the target page was selected");
@@ -184,6 +192,7 @@ internal static partial class Program
                 .RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Require(tide.Snapshot is null && model.ShowThemeSettings,"Disabled animation still allocated a wave bitmap");
             model.PageAnimationsEnabled=true;
+            if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             foreach (var speed in new[] { .1,1d,2d })
             {
                 model.AnimationSpeed=speed;
@@ -191,7 +200,7 @@ internal static partial class Program
                 Descendants(nav).OfType<RadioButton>().Single(button => ((NavigationItem)button.DataContext).Id == "settings-runtime")
                     .RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                 window.SeekNavigationTransition(TimeSpan.FromMilliseconds(70/speed));
-                Require(Math.Abs(tide.Progress-Math.Sin(Math.PI/4)) < .01,"The tide ignored the selected animation speed");
+                Require(Math.Abs(tide.Progress-.5) < .01,"The tide ignored the selected animation speed");
                 window.SeekNavigationTransition(TimeSpan.FromMilliseconds(140/speed)); await Task.Delay(35);
                 var settings=(Button)window.FindName("SettingsButton"); settings.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                 window.SeekPageTransition(TimeSpan.FromMilliseconds(230/speed));

@@ -39,12 +39,13 @@ public partial class MainWindow
         FinishPageTransition(); FinishNavigationTransition();
         if (snapshot is null) { _viewModel.NavigateCommand.Execute(item); return; }
         NavigationTransition.Origin=origin; NavigationTransition.Snapshot=snapshot;
+        NavigationTransition.ConnectionX=SidebarSurface.ActualWidth; NavigationTransition.OptionHeight=option.ActualHeight;
         NavigationTransition.Progress=0; NavigationTransition.Visibility=Visibility.Visible;
         MainContent.IsHitTestVisible=false;
         _viewModel.NavigateCommand.Execute(item);
         var generation=_navigationGeneration;
         var storyboard=_navigationStoryboard=new Storyboard();
-        var animation=new DoubleAnimation(0,1,_viewModel.AnimationDuration(140)) { EasingFunction=new SineEase { EasingMode=EasingMode.EaseOut } };
+        var animation=new DoubleAnimation(0,1,_viewModel.AnimationDuration(140));
         Storyboard.SetTarget(animation,NavigationTransition); Storyboard.SetTargetProperty(animation,new PropertyPath(TideTransition.ProgressProperty));
         storyboard.Children.Add(animation);
         storyboard.Completed += (_,_) => { if (generation == _navigationGeneration) FinishNavigationTransition(); };

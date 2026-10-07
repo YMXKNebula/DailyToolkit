@@ -461,7 +461,8 @@
         </Grid>
       </StackPanel>
     </Grid>
-    <controls:TideTransition x:Name="NavigationTransition" Grid.ColumnSpan="2" Panel.ZIndex="90" Visibility="Collapsed" IsHitTestVisible="False" />
+    <controls:TideTransition x:Name="NavigationTransition" Grid.ColumnSpan="2" Panel.ZIndex="90" Visibility="Collapsed" IsHitTestVisible="False"
+                             WaveBrush="{DynamicResource AccentBrush}" />
     <Image x:Name="PageTransition" Grid.ColumnSpan="2" Panel.ZIndex="100" Visibility="Collapsed"
            IsHitTestVisible="False" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top" />
     <Grid x:Name="PageTransitionCover" Grid.ColumnSpan="2" Panel.ZIndex="101" Visibility="Collapsed" IsHitTestVisible="False">
