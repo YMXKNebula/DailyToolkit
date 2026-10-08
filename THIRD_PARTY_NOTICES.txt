@@ -2,6 +2,19 @@ DailyToolkit - third-party components
 
 The portable package includes the following components under the MIT License:
 
+AMD FidelityFX Contrast Adaptive Sharpening (adapted CAS filter weights)
+https://github.com/GPUOpen-Effects/FidelityFX-CAS
+Copyright (c) 2017-2019 Advanced Micro Devices, Inc. All rights reserved.
+The lens fuses output-space CAS neighborhoods into Catmull-Rom reconstruction,
+uses the documented gamma-2 approximation and adds noise/local-range limits.
+
+AMD FidelityFX Super Resolution 1 (adapted EASU and RCAS shader routines)
+https://github.com/GPUOpen-Effects/FidelityFX-FSR
+Copyright (c) 2021 Advanced Micro Devices, Inc. All rights reserved.
+Lens-specific adaptations use clamped FP32 loads, cropped sampling, fixed
+product strength, Lanczos-3 detail reconstruction and local deringing.
+This is not FSR 2/3 or AI.
+
 Vortice.Windows 3.8.3 (Direct3D11, DXGI, DirectX, D3DCompiler)
 https://github.com/amerkoleci/Vortice.Windows
 Copyright (c) Amer Koleci and Contributors

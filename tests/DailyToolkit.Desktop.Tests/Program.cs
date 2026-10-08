@@ -29,6 +29,8 @@ internal static partial class Program
         {
             try
             {
+                if (args is ["--lens-image-checks"])
+                { LensDiagnostics.CheckShader();CheckLensUpgrade();exitCode=0;return; }
                 if (args is ["--drag-benchmark",var output])
                 {
                     await RunDragBenchmarkAsync(output); exitCode=0; return;

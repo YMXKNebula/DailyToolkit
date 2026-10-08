@@ -18,21 +18,21 @@ internal static class LensUpgradeBenchmark
         Directory.CreateDirectory(directory);
         var scenes=LensTestScenes.Create();
         var reference=await File.ReadAllTextAsync(referenceShaderPath);
-        using var stream=typeof(LensGpuRenderer).Assembly.GetManifestResourceStream("DailyToolkit.Desktop.Gaming.Lens.hlsl")!;
-        using var reader=new StreamReader(stream); var shader=await reader.ReadToEndAsync();
         var variants=new (string Name,LensImageMode Mode,string? Shader)[] {
             ("Performance",LensImageMode.Performance,null),("Clear",LensImageMode.Clear,null),
-            ("HighQuality",LensImageMode.HighQuality,null),("Pixel",LensImageMode.Pixel,null),
-            ("Bilinear",LensImageMode.Performance,"#define LENS_BILINEAR_ONLY 1\n"+shader),
-            ("BilinearCAS",LensImageMode.Clear,"#define LENS_BILINEAR_CLEAR 1\n"+shader),
-            ("Baseline069",LensImageMode.Performance,reference) };
+            ("Quality",LensImageMode.HighQuality,null),("Pixel",LensImageMode.Pixel,null),
+            ("PreviousPerformance",LensImageMode.Performance,reference),("PreviousClear",LensImageMode.Clear,reference),
+            ("PreviousQuality",LensImageMode.HighQuality,reference),("PreviousPixel",LensImageMode.Pixel,reference) };
         var metrics=await Task.Run(() => Measure(variants));
         var images=await Task.Run(() => Quality(directory,scenes,variants));
         await File.WriteAllTextAsync(Path.Combine(directory,"gpu-and-quality.json"),JsonSerializer.Serialize(new {
             Method="GPU timestamps; no capture, Present, image readback, inference or copy in timed draw loop",
             ActualCaptureFpsMeasured=false, ActualOutputFpsMeasured=false, GpuUtilizationMeasured=false,
-            SourceTexture="2048x2048 BGRA8", PassCount=1, AddedIntermediateTextures=0, HudDrawPasses=0,
-            TextureLoads=new {Performance="16 cubic + 4 repeated center loads (compiler may merge)",Clear=16,HighQuality=16,Pixel=1,Bilinear=4,BilinearCAS=12},
+            SourceTexture="2048x2048 BGRA8",PassCount=new {Performance=1,Clear=1,Quality=2,Pixel=1},
+            Strengths=new {Performance=0.35,Clear=1,Quality=1,Pixel=0},
+            AddedIntermediateTextures=new {Performance=0,Clear=0,Quality=1,Pixel=0},HudDrawPasses=0,
+            TextureLoads=new {Performance="16 cubic + 4 repeated center loads (compiler may merge)",Clear=16,
+                Quality="36 shared source loads for Lanczos-3 and edge estimation, then 5 intermediate + 4 source loads in resolve",Pixel=1},
             Metrics=metrics, Quality=images },new JsonSerializerOptions {WriteIndented=true}));
     }
 
@@ -46,6 +46,7 @@ internal static class LensUpgradeBenchmark
         foreach(var (width,height) in new[] {(640,384),(1600,1200)})
         foreach(var variant in variants)
         {
+            var strength=LensImageSettings.GetSharpening(variant.Mode);
             using var renderer=new LensGpuRenderer(IntPtr.Zero,width,height,shaderSource:variant.Shader);
             using(var device=renderer.Device.QueryInterface<IDXGIDevice>()) using(var adapter=device.GetAdapter()) adapterName=adapter.Description.Description;
             fixed(byte* pointer=input)
@@ -56,11 +57,11 @@ internal static class LensUpgradeBenchmark
                 foreach(var zoom in new[] {1d,2d,4d,8d,12d,16d})
                 {
                     var area=new SourceArea(1024-width/zoom/2+0.125,1024-height/zoom/2+0.375,width/zoom,height/zoom);
-                    renderer.Render(texture,area,0.35,present:false,imageMode:variant.Mode);
-                    for(var warmup=0;warmup<8;warmup++) renderer.RenderLast(area,0.35,present:false,imageMode:variant.Mode);
-                    var timings=Enumerable.Range(0,5).Select(_ => renderer.MeasureGpuRender(area,0.35,64,variant.Mode)).Order().ToArray();
+                    renderer.Render(texture,area,strength,present:false,imageMode:variant.Mode);
+                    for(var warmup=0;warmup<8;warmup++) renderer.RenderLast(area,strength,present:false,imageMode:variant.Mode);
+                    var timings=Enumerable.Range(0,5).Select(_ => renderer.MeasureGpuRender(area,strength,64,variant.Mode)).Order().ToArray();
                     var cpu=Stopwatch.StartNew();
-                    for(var i=0;i<64;i++) renderer.RenderLast(area,0.35,present:false,imageMode:variant.Mode);
+                    for(var i=0;i<64;i++) renderer.RenderLast(area,strength,present:false,imageMode:variant.Mode);
                     cpu.Stop();
                     var hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(renderer.ReadOutput()));
                     results.Add(new {Width=width,Height=height,Zoom=zoom,Mode=variant.Name,GpuDrawMs=timings[2],
@@ -75,7 +76,8 @@ internal static class LensUpgradeBenchmark
     private static unsafe object[] Quality(string directory,IReadOnlyDictionary<string,BitmapSource> scenes,
         (string Name,LensImageMode Mode,string? Shader)[] variants)
     {
-        var metrics=new List<object>(); var selected=variants.Take(6).ToArray();
+        var metrics=new List<object>();
+        var selected=new[] {variants[5],variants[1],variants[6],variants[2],variants[0],variants[3]};
         foreach(var (name,source) in scenes)
         {
             LensTestScenes.Save(source,Path.Combine(directory,name+"-input.png"));
@@ -99,7 +101,7 @@ internal static class LensUpgradeBenchmark
                         foreach(var zoom in new[] {2d,4d,8d,12d,16d})
                         {
                             var area=new SourceArea(64-256/zoom/2,48-192/zoom/2,256/zoom,192/zoom);
-                            renderer.Render(texture,area,0.35,present:false,imageMode:variant.Mode);
+                            renderer.Render(texture,area,LensImageSettings.GetSharpening(variant.Mode),present:false,imageMode:variant.Mode);
                             var output=renderer.ReadOutput();
                             var bitmap=BitmapSource.Create(256,192,96,96,PixelFormats.Bgra32,null,output,256*4); bitmap.Freeze();
                             LensTestScenes.Save(bitmap,Path.Combine(directory,$"{name}-{variant.Name}-{zoom:0}x.png"));
@@ -109,7 +111,7 @@ internal static class LensUpgradeBenchmark
                             double drift=0;
                             for(var step=1;step<=4;step++)
                             {
-                                renderer.RenderLast(area with {Left=area.Left+step*0.125},0.35,present:false,imageMode:variant.Mode);
+                                renderer.RenderLast(area with {Left=area.Left+step*0.125},LensImageSettings.GetSharpening(variant.Mode),present:false,imageMode:variant.Mode);
                                 var shifted=renderer.ReadOutput();
                                 for(var i=0;i<output.Length;i+=4) for(var channel=0;channel<3;channel++)
                                     drift+=Math.Pow((shifted[i+channel]-output[i+channel])/255d,2);
@@ -131,7 +133,7 @@ internal static class LensUpgradeBenchmark
             {
                 using var texture=renderer.Device.CreateTexture2D(new Texture2DDescription {Width=128,Height=96,MipLevels=1,ArraySize=1,
                     Format=Format.B8G8R8A8_UNorm,SampleDescription=new(1,0),Usage=ResourceUsage.Default,BindFlags=BindFlags.ShaderResource},new SubresourceData(new IntPtr(pointer),128*4));
-                renderer.Render(texture,new(24,24,80,48),0.35,present:false,hud:new(3.25,1),imageMode:LensImageMode.Clear);
+                renderer.Render(texture,new(24,24,80,48),1,present:false,hud:new(3.25,1),imageMode:LensImageMode.Clear);
                 var bitmap=BitmapSource.Create(256,192,96,96,PixelFormats.Bgra32,null,renderer.ReadOutput(),256*4); bitmap.Freeze();
                 LensTestScenes.Save(bitmap,Path.Combine(directory,"zoom-hud-3.25.png"));
             }

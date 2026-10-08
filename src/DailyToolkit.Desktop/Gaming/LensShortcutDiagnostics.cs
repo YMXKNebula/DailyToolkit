@@ -249,7 +249,7 @@ internal static class LensShortcutDiagnostics
             var originalSharpness=gaming.Sharpening;
             var originalZoom=gaming.Zoom;
             var frames=activeCapture.FramesRendered;
-            gaming.Sharpening=1; gaming.Zoom=10;
+            gaming.Zoom=10;
             await Wait(() => activeCapture.FramesRendered > frames,"Live settings did not produce another frame.");
             if (gaming.LensHandle != handle || gaming.CaptureForDiagnostics != activeCapture || !gaming.IsVisible)
                 throw new InvalidOperationException("Zoom or sharpening recreated the native window or capture.");
@@ -260,11 +260,10 @@ internal static class LensShortcutDiagnostics
                 for(var step=0;step<40;step++)
                 {
                     gaming.Zoom=1+(step%37)*0.25;
-                    gaming.Sharpening=(step%11)/10d;
                 }
                 await Task.Delay(2);
             }
-            gaming.Sharpening=originalSharpness; gaming.Zoom=originalZoom;
+            gaming.Zoom=originalZoom;
             frames=activeCapture.FramesRendered;
             await Wait(() => activeCapture.FramesRendered > frames,"The final burst settings did not render.");
             await Task.Delay(80);
@@ -595,7 +594,7 @@ internal static class LensShortcutDiagnostics
             gaming.IsFavorite=true;
             gaming.ResetDefaultsCommand.Execute(null);
             RequireReleased(resetHandle);
-            if (gaming.Zoom != 2 || gaming.FrameWidth != 640 || gaming.FrameHeight != 384 || gaming.Sharpening != 0.35 ||
+            if (gaming.Zoom != 2 || gaming.FrameWidth != 640 || gaming.FrameHeight != 384 || gaming.Sharpening != 1 ||
                 gaming.FrameRate != 0 || !gaming.IsFixedMode || !gaming.ToggleShortcut!.Matches(binding) ||
                 !gaming.IsToggleMode || !gaming.IsFavorite || !controller.IsRegistered)
                 throw new InvalidOperationException("Reset did not restore picture defaults while preserving personal choices and the background shortcut.");

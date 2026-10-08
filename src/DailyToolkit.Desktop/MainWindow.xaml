@@ -31,13 +31,7 @@
     <Grid x:Name="BodyContent" Grid.Row="1" Background="{DynamicResource WindowBrush}" ClipToBounds="True">
     <Grid.ColumnDefinitions><ColumnDefinition Width="188" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
     <Grid x:Name="SidebarSurface" ClipToBounds="True">
-    <Border x:Name="SidebarBase" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
-      <Border.Style>
-        <Style TargetType="Border">
-          <Setter Property="Background" Value="{DynamicResource SidebarBrush}" />
-          <Style.Triggers><DataTrigger Binding="{Binding IsFavorites}" Value="True"><Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" /></DataTrigger></Style.Triggers>
-        </Style>
-      </Border.Style>
+    <Border x:Name="SidebarBase" Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
       <DockPanel Margin="16,26,16,20">
         <Grid x:Name="SidebarFooter" DockPanel.Dock="Bottom">
           <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
@@ -266,12 +260,6 @@
                     <TextBlock Text="画面模式" FontWeight="SemiBold" Margin="0,0,0,8" />
                     <ComboBox x:Name="LensImageMode" ItemsSource="{Binding ImageModes}" DisplayMemberPath="Label" SelectedValuePath="Value"
                               SelectedValue="{Binding ImageMode}" Padding="6" Margin="0,0,0,12" AutomationProperties.Name="画面模式" />
-                    <Grid IsEnabled="{Binding CanAdjustSharpness}">
-                      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                      <TextBlock Text="清晰度" FontWeight="SemiBold" /><TextBlock Grid.Column="1" Text="{Binding SharpnessText}" />
-                    </Grid>
-                    <Slider x:Name="LensSharpness" IsEnabled="{Binding CanAdjustSharpness}" Minimum="0" Maximum="100" TickFrequency="1"
-                            IsSnapToTickEnabled="True" Value="{Binding Sharpness}" Margin="0,10,0,18" AutomationProperties.Name="清晰度" />
                     <StackPanel IsEnabled="{Binding CanConfigure}">
                     <TextBlock Text="放大框尺寸" FontWeight="SemiBold" Margin="0,0,0,8" />
                     <ComboBox ItemsSource="{Binding FrameSizePresets}" DisplayMemberPath="Label" SelectedValuePath="Value"

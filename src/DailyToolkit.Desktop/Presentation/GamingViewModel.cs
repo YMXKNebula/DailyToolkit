@@ -7,7 +7,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
 {
     private readonly ScreenLensSession _session = new();
     private CaptureMonitor? _monitor;
-    private double _zoom = 2, _width = 640, _height = 384, _sharpening = 0.35;
+    private double _zoom = 2, _width = 640, _height = 384;
     private bool _favorite;
     private int _fps;
     private int _positionResetVersion;
@@ -22,7 +22,6 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         _preferences = _preferencesStore.Load();
         _width=_preferences.FrameWidth; _height=_preferences.FrameHeight;
         _zoom=_preferences.Zoom;
-        _sharpening=_preferences.Sharpness/100;
         _session.SetImageMode(_preferences.LensImageMode);
         _session.SetMovement(IsMovableMode);
         _session.SetWheelZoom(WheelZoomEnabled);
@@ -104,22 +103,9 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public double Zoom { get => _zoom; set { if (Set(ref _zoom,LensZoom.Normalize(value))) { SavePreferences(_preferences with { Zoom=_zoom }); Notify(nameof(ZoomText)); _session.UpdatePicture(Zoom,Sharpening); } } }
     public double FrameWidth { get => _width; set { if (double.IsFinite(value) && Set(ref _width,Math.Round(Math.Clamp(value,160,1600)))) { SavePreferences(_preferences with { FrameWidth=(int)_width }); NotifyFrameSize(); } } }
     public double FrameHeight { get => _height; set { if (double.IsFinite(value) && Set(ref _height,Math.Round(Math.Clamp(value,120,1200)))) { SavePreferences(_preferences with { FrameHeight=(int)_height }); NotifyFrameSize(); } } }
-    internal double Sharpening { get => ImageMode == LensImageMode.Performance ? LensImageSettings.DefaultSharpness/100 : _sharpening; set => Sharpness=value*100; }
-    public double Sharpness
-    {
-        get => _preferences.Sharpness;
-        set
-        {
-            var normalized=LensImageSettings.NormalizeSharpness(value);
-            if (normalized == Sharpness) return;
-            SavePreferences(_preferences with { Sharpness=normalized });
-            _sharpening=normalized/100; Notify(); Notify(nameof(SharpnessText)); Notify(nameof(Sharpening));
-            _session.UpdatePicture(Zoom,Sharpening);
-        }
-    }
-    public string SharpnessText => $"{Sharpness:0}%";
+    internal double Sharpening => LensImageSettings.GetSharpening(ImageMode);
     public IReadOnlyList<LensImageOption> ImageModes { get; } = [new(LensImageMode.Performance,"性能"),
-        new(LensImageMode.Clear,"清晰（推荐）"),new(LensImageMode.HighQuality,"高质量"),new(LensImageMode.Pixel,"像素")];
+        new(LensImageMode.Clear,"清晰（推荐）"),new(LensImageMode.HighQuality,"质量"),new(LensImageMode.Pixel,"像素")];
     public LensImageMode ImageMode
     {
         get => _preferences.LensImageMode;
@@ -128,14 +114,13 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
             var mode=LensImageSettings.NormalizeMode(value);
             if (mode != ImageMode)
             {
-                SavePreferences(_preferences with { LensImageMode=mode }); Notify(); Notify(nameof(CanAdjustSharpness)); Notify(nameof(Sharpening));
+                SavePreferences(_preferences with { LensImageMode=mode }); Notify(); Notify(nameof(Sharpening));
                 _session.SetImageMode(mode);
                 _session.UpdatePicture(Zoom,Sharpening);
             }
-            if (value == LensImageMode.AIEnhanced) Status="AI 增强当前不可用，已切换至高质量模式。";
+            if (value == LensImageMode.AIEnhanced) Status="AI 增强当前不可用，已切换至质量模式。";
         }
     }
-    public bool CanAdjustSharpness => ImageMode is LensImageMode.Clear or LensImageMode.HighQuality;
     public int FrameRate { get => _fps; set => Set(ref _fps,FrameRates.Any(rate => rate.Value == value) ? value : 0); }
     public string FrameRateText => FrameRates.First(rate => rate.Value == FrameRate).Label;
     public void AdjustZoom(int wheelDelta)
@@ -258,7 +243,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         Stop();
         _wheel.Reset();
         ImageMode=LensImageMode.Clear;
-        Zoom=2; FrameSizePreset=LensFrameSizePreset.Custom; AspectRatio=LensAspectRatio.Screen; FrameWidth=640; FrameHeight=384; Sharpening=0.35; FrameRate=0;
+        Zoom=2; FrameSizePreset=LensFrameSizePreset.Custom; AspectRatio=LensAspectRatio.Screen; FrameWidth=640; FrameHeight=384; FrameRate=0;
         RefreshMonitors();
         MovementMode=LensMovementMode.Fixed; WheelZoomEnabled=true; BorderColor=LensBorderColor.Default;
         _session.ResetPosition(SelectedMonitor);

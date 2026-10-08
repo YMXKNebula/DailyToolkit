@@ -30,21 +30,23 @@ internal static partial class Program
             using(var reopened=new GamingViewModel(store)) Require(reopened.Zoom == 3.25,"Quarter zoom was not restored");
             using(var model=new GamingViewModel(store))
             {
-                Require(model.ImageMode == LensImageMode.Clear && model.Sharpness == 35,"New image defaults are unsafe");
-                model.Zoom=16; model.ImageMode=LensImageMode.Pixel; Require(!model.CanAdjustSharpness,"Pixel mode permits sharpening");
-                model.ImageMode=LensImageMode.Clear; model.Sharpness=55;
+                Require(model.ImageMode == LensImageMode.Clear && model.Sharpening == 1,"Clear mode did not use fixed full sharpness");
+                model.Zoom=16; model.ImageMode=LensImageMode.Pixel; Require(model.Sharpening == 0,"Pixel mode permits sharpening");
+                model.ImageMode=LensImageMode.Clear;
                 model.ImageMode=LensImageMode.AIEnhanced; Require(model.ImageMode == LensImageMode.HighQuality && model.Status.Contains("不可用"),"Unavailable AI did not fall back");
+                Require(model.Sharpening == 1,"Quality mode did not use fixed full sharpness");
                 model.ImageMode=LensImageMode.Performance;
-                Require(model.Sharpening == 0.35 && model.Sharpness == 55,"Performance lost its established strength or the user's clear-mode preference");
+                Require(model.Sharpening == 0.35,"Performance lost its established strength");
                 model.IsEnabled=false; model.IsEnabled=true;
                 Require(model.Zoom == 16 && model.ImageMode == LensImageMode.Performance,"Re-enabling overwrote image state");
-                model.Sharpness=double.NaN; Require(model.Sharpness == 35,"Nonfinite sharpness was accepted");
-                model.Sharpness=999; Require(model.Sharpness == 100,"Sharpness upper bound failed");
-                model.ImageMode=LensImageMode.HighQuality; model.Sharpness=55;
+                model.ImageMode=LensImageMode.HighQuality;
             }
-            using(var reopened=new GamingViewModel(store)) Require(reopened.ImageMode == LensImageMode.HighQuality && reopened.Sharpness == 55,"Image choices did not persist");
+            using(var reopened=new GamingViewModel(store)) Require(reopened.ImageMode == LensImageMode.HighQuality && reopened.Sharpening == 1,"Image choices did not persist");
+            File.WriteAllText(path,"{\"LensImageMode\":2,\"Sharpness\":35,\"Zoom\":3.25,\"ToggleShortcut\":null}");
+            using(var migrated=new GamingViewModel(store)) Require(migrated.ImageMode == LensImageMode.HighQuality && migrated.Sharpening == 1 && migrated.Zoom == 3.25 && migrated.ToggleShortcut is null,
+                "Historical sharpness was still applied or migration discarded unrelated preferences");
             File.WriteAllText(path,"{\"LensImageMode\":99,\"Sharpness\":\"Infinity\",\"Zoom\":3.24,\"ToggleShortcut\":null}");
-            Require(store.Load() is { LensImageMode:LensImageMode.Clear,Sharpness:35,Zoom:3.25,ToggleShortcut:null },"Image migration discarded unrelated preferences");
+            Require(store.Load() is { LensImageMode:LensImageMode.Clear,Sharpness:100,Zoom:3.25,ToggleShortcut:null },"Image migration discarded unrelated preferences");
             foreach(var (json,expected) in new[] {("{\"Zoom\":4}",4d),("{\"Zoom\":99,\"ToggleShortcut\":null}",16d),
                 ("{\"Zoom\":0}",1d),("{\"Zoom\":\"NaN\"}",2d),("{\"Zoom\":\"Infinity\"}",2d)})
             { File.WriteAllText(path,json); Require(store.Load().Zoom == expected,"Legacy zoom migration failed"); }
@@ -58,13 +60,16 @@ internal static partial class Program
                     Format=Format.B8G8R8A8_UNorm,SampleDescription=new(1,0),Usage=ResourceUsage.Default,BindFlags=BindFlags.ShaderResource },
                     new SubresourceData(pinned.AddrOfPinnedObject(),64*4));
                 var area=new SourceArea(0,0,64,64);
-                renderer.Render(texture,area,0.35,present:false); var original=renderer.ReadOutput();
-                renderer.RenderLast(area,0.35,present:false,hud:new(3.25,1)); var overlay=renderer.ReadOutput();
-                Require(!original.SequenceEqual(overlay),"HUD was not composited into final GPU output");
-                for(var y=0;y<192;y++) for(var x=0;x<320;x++) if(y < 8 || y >= 38 || x < 120 || x >= 200)
-                { var at=(y*320+x)*4; Require(original.AsSpan(at,4).SequenceEqual(overlay.AsSpan(at,4)),"HUD altered pixels outside its output rectangle"); }
-                renderer.RenderLast(area,0.35,present:false,hud:new(16,0));
-                Require(original.SequenceEqual(renderer.ReadOutput()),"Hidden HUD changed image output");
+                foreach(var mode in new[]{LensImageMode.Performance,LensImageMode.Clear,LensImageMode.HighQuality,LensImageMode.Pixel})
+                {
+                    renderer.Render(texture,area,0.35,present:false,imageMode:mode); var original=renderer.ReadOutput();
+                    renderer.RenderLast(area,0.35,present:false,imageMode:mode,hud:new(3.25,1)); var overlay=renderer.ReadOutput();
+                    Require(!original.SequenceEqual(overlay),$"{mode}: HUD was not composited into final GPU output");
+                    for(var y=0;y<192;y++) for(var x=0;x<320;x++) if(y < 8 || y >= 38 || x < 120 || x >= 200)
+                    { var at=(y*320+x)*4; Require(original.AsSpan(at,4).SequenceEqual(overlay.AsSpan(at,4)),$"{mode}: HUD altered pixels outside its output rectangle"); }
+                    renderer.RenderLast(area,0.35,present:false,imageMode:mode,hud:new(16,0));
+                    Require(original.SequenceEqual(renderer.ReadOutput()),$"{mode}: Hidden HUD changed image output");
+                }
             }
             finally { pinned.Free(); }
             for(var y=0;y<64;y++) for(var x=0;x<64;x++)
@@ -101,6 +106,58 @@ internal static partial class Program
                         }
                     }
                 }
+                renderer.ResizePreview(64,64);
+                renderer.RenderLast(new(0,0,64,64),0,present:false,imageMode:LensImageMode.HighQuality);
+                var native=renderer.ReadOutput();
+                for(var y=2;y<62;y++) for(var x=2;x<62;x++)
+                    Require(native.AsSpan((y*64+x)*4,3).SequenceEqual(pixels.AsSpan((y*64+x)*4,3)),"Native quality reconstruction altered aligned source pixels");
+                renderer.RenderLast(new(0.25,0,64,64),0,present:false,imageMode:LensImageMode.HighQuality);
+                Require(!native.SequenceEqual(renderer.ReadOutput()),"Native quality movement snapped fractional sampling to whole pixels");
+                renderer.ResizePreview(320,192);
+            }
+            finally { pinned.Free(); }
+            // A pure black/white glyph edge exposed the old source-space CAS
+            // headroom collapsing to zero. Check the real output, not its formula.
+            for(var y=0;y<64;y++) for(var x=0;x<64;x++)
+            { var at=(y*64+x)*4; pixels[at]=pixels[at+1]=pixels[at+2]=(byte)(x < 32 ? 0 : 255); }
+            pinned=GCHandle.Alloc(pixels,GCHandleType.Pinned);
+            try
+            {
+                using var texture=renderer.Device.CreateTexture2D(new Texture2DDescription {Width=64,Height=64,MipLevels=1,ArraySize=1,
+                    Format=Format.B8G8R8A8_UNorm,SampleDescription=new(1,0),Usage=ResourceUsage.Default,BindFlags=BindFlags.ShaderResource},
+                    new SubresourceData(pinned.AddrOfPinnedObject(),64*4));
+                var area=new SourceArea(0,0,64,64);
+                renderer.Render(texture,area,0,present:false,imageMode:LensImageMode.Clear); var soft=renderer.ReadOutput();
+                renderer.RenderLast(area,0.35,present:false,imageMode:LensImageMode.Clear); var clear=renderer.ReadOutput();
+                double EdgeEnergy(byte[] image)
+                { double total=0;for(var x=140;x<180;x++){var delta=image[(96*320+x)*4]-image[(96*320+x-1)*4];total+=delta*delta;}return total; }
+                Require(EdgeEnergy(clear)>EdgeEnergy(soft)*1.05,
+                    $"Default clear mode did not improve a black/white text edge: soft={EdgeEnergy(soft)}, clear={EdgeEnergy(clear)}");
+                Console.WriteLine($"Clear edge energy: soft={EdgeEnergy(soft)}, default={EdgeEnergy(clear)}, ratio={EdgeEnergy(clear)/EdgeEnergy(soft):F4}");
+                Require(renderer.LastDrawPassCount==1 && !renderer.HasQualityIntermediate,"Clear mode allocated the quality pipeline");
+                renderer.RenderLast(area,0,present:false,imageMode:LensImageMode.HighQuality); var unsharpened=renderer.ReadOutput();
+                var intermediate=renderer.QualityTargetForDiagnostics;
+                Require(intermediate is not null && renderer.LastDrawPassCount==2,"Quality mode did not use its separate reconstruction/resolve passes");
+                renderer.RenderLast(area,1,present:false,imageMode:LensImageMode.HighQuality);
+                Require(ReferenceEquals(intermediate,renderer.QualityTargetForDiagnostics),"Quality strength updates reallocated the intermediate texture");
+                Require(!unsharpened.SequenceEqual(renderer.ReadOutput()),"Quality resolve strength did not affect a text edge");
+                foreach(var zoom in new[]{2d,4d,8d,16d})
+                {
+                    var edgeArea=new SourceArea(32-160/zoom,32-96/zoom,320/zoom,192/zoom);
+                    renderer.RenderLast(edgeArea,1,present:false,imageMode:LensImageMode.Clear); var reference=renderer.ReadOutput();
+                    renderer.RenderLast(edgeArea,1,present:false,imageMode:LensImageMode.HighQuality); var quality=renderer.ReadOutput();
+                    Require(EdgeEnergy(quality)>=EdgeEnergy(reference),$"Quality softened a {zoom}x edge compared with full-strength clear: quality={EdgeEnergy(quality)}, clear={EdgeEnergy(reference)}");
+                    Console.WriteLine($"Quality {zoom}x edge energy: clear={EdgeEnergy(reference)}, quality={EdgeEnergy(quality)}");
+                }
+                renderer.RenderLast(area,0.35,present:false,imageMode:LensImageMode.Performance);
+                Require(renderer.LastDrawPassCount==1 && !renderer.HasQualityIntermediate,"Performance retained the quality intermediate or a second draw");
+                renderer.RenderLast(area,0.35,present:false,imageMode:LensImageMode.HighQuality);
+                renderer.ResizePreview(128,96); Require(!renderer.HasQualityIntermediate,"Resize retained a stale quality texture");
+                renderer.RenderLast(area,0.35,present:false,imageMode:LensImageMode.HighQuality);
+                Require(renderer.ReadOutput().Length==128*96*4 && renderer.QualityTargetForDiagnostics!.Description.Width==128,
+                    "Quality mode did not recreate its target at the resized output dimensions");
+                renderer.RenderLast(area,0.35,present:false,imageMode:LensImageMode.Pixel);
+                Require(renderer.LastDrawPassCount==1 && !renderer.HasQualityIntermediate,"Pixel mode retained quality processing");
             }
             finally { pinned.Free(); }
             Console.WriteLine("PASS Quarter zoom persistence/migration, signed wheel accumulation and final GPU zoom overlay");

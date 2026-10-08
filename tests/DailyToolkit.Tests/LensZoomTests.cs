@@ -11,8 +11,8 @@ internal static partial class Program
             Require(new GamingPreferences().LensImageMode == LensImageMode.Clear);
             Require(LensImageSettings.NormalizeMode((LensImageMode)99) == LensImageMode.Clear);
             Require(LensImageSettings.NormalizeMode(LensImageMode.AIEnhanced) == LensImageMode.HighQuality);
-            foreach(var (value,expected) in new[] {(-5d,0d),(101d,100d),(35.4,35d),(double.NaN,35d),(double.PositiveInfinity,35d)})
-                Require(LensImageSettings.NormalizeSharpness(value) == expected);
+            foreach(var value in new[] {-5d,0d,35.4,101d,double.NaN,double.PositiveInfinity})
+                Require((new GamingPreferences {Sharpness=value}).Normalize().Sharpness == 100);
         });
         foreach (var (input,expected) in new[] { (2d,2d),(1d,1d),(16d,16d),(1.24,1.25),(1.26,1.25),
             (3.249999,3.25),(double.NaN,2d),(double.PositiveInfinity,2d),(double.NegativeInfinity,2d),(-4d,1d),(20d,16d) })

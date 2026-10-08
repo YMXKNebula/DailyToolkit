@@ -137,13 +137,13 @@ internal static partial class Program
                 Require(reopened.Zoom == 7,"Disabled wheel zoom changed the multiplier");
                 reopened.Zoom=10;
                 Require(reopened.Zoom == 10,"The slider path could not reach 10x with wheel zoom off");
-                reopened.Sharpening=1; reopened.FrameRate=144; reopened.IsFavorite=true;
+                reopened.FrameRate=144; reopened.IsFavorite=true;
                 reopened.BorderColor="#notrgb";
                 Require(reopened.BorderColor == "#1A2B3C","Invalid frame colors were accepted");
                 var revision=reopened.PositionResetVersion;
                 reopened.ResetDefaultsCommand.Execute(null);
                 Require(reopened.FrameWidth == 640 && reopened.FrameHeight == 384 && reopened.Zoom == 2 &&
-                    reopened.Sharpening == 0.35 && reopened.FrameRate == 0 && reopened.IsFixedMode && reopened.WheelZoomEnabled &&
+                    reopened.Sharpening == 1 && reopened.FrameRate == 0 && reopened.IsFixedMode && reopened.WheelZoomEnabled &&
                     reopened.PositionResetVersion > revision && !reopened.IsActive && !reopened.HasCaptureResources && reopened.BorderColor == LensBorderColor.Default,
                     "Restoring defaults did not reset picture, placement and resource state");
                 Require(reopened.ToggleShortcut?.Name == "Ctrl + Alt + Z" && reopened.IsHoldMode && reopened.IsFavorite,

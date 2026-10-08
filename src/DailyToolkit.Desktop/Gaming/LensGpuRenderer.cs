@@ -15,8 +15,18 @@ namespace DailyToolkit.Desktop.Gaming;
 internal sealed class LensGpuRenderer : IDisposable
 {
     private sealed record ShaderCode(byte[] Vertex,byte[] Pixel);
+    private sealed record QualityShaderCode(byte[] Scale,byte[] Resolve);
     private static readonly Lazy<ShaderCode> CompiledShader=new(() => CompileShader(null));
-    internal static Task WarmShaderAsync() => Task.Run(() => { try { _=CompiledShader.Value; } catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); } });
+    private static readonly Lazy<QualityShaderCode> CompiledQualityShader=new(() => CompileQualityShader(ReadShader()));
+    internal static Task WarmShaderAsync() => Task.Run(() => { try { _=CompiledShader.Value; _=CompiledQualityShader.Value; } catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); } });
+    private static string ReadShader()
+    {
+        using var resource=typeof(LensGpuRenderer).Assembly.GetManifestResourceStream("DailyToolkit.Desktop.Gaming.Lens.hlsl")!;
+        using var reader=new StreamReader(resource); return reader.ReadToEnd();
+    }
+    private static QualityShaderCode CompileQualityShader(string shader) => new(
+        Compiler.Compile(shader,"PSQualityScale","Lens.hlsl","ps_5_0",ShaderFlags.OptimizationLevel3).Span.ToArray(),
+        Compiler.Compile(shader,"PSQualityResolve","Lens.hlsl","ps_5_0",ShaderFlags.OptimizationLevel3).Span.ToArray());
     private static ShaderCode CompileShader(string? shaderSource)
     {
         using var resource=typeof(LensGpuRenderer).Assembly.GetManifestResourceStream("DailyToolkit.Desktop.Gaming.Lens.hlsl")!;
@@ -33,13 +43,24 @@ internal sealed class LensGpuRenderer : IDisposable
     private ID3D11ShaderResourceView? _sourceView;
     private ID3D11VertexShader? _vertex;
     private ID3D11PixelShader? _pixel;
+    private ID3D11PixelShader? _qualityScale,_qualityResolve;
+    private ID3D11Texture2D? _qualityOutput;
+    private ID3D11RenderTargetView? _qualityTarget;
+    private ID3D11ShaderResourceView? _qualityView;
+    private readonly string? _customShader;
+    private readonly bool _supportsQuality;
     private Buffer? _parameters;
     private int _width, _height;
     public long FramesRendered { get; private set; }
+    internal bool HasQualityIntermediate => _qualityOutput is not null;
+    internal ID3D11Texture2D? QualityTargetForDiagnostics => _qualityOutput;
+    internal int LastDrawPassCount { get; private set; }
 
     public LensGpuRenderer(IntPtr window, int width, int height, bool software = false, string? shaderSource = null)
     {
         _width = width; _height = height;
+        _customShader=shaderSource;
+        _supportsQuality=shaderSource is null || shaderSource.Contains("PSQualityScale(",StringComparison.Ordinal);
         try
         {
             Vortice.Direct3D11.D3D11.D3D11CreateDevice(IntPtr.Zero, software ? DriverType.Warp : DriverType.Hardware,
@@ -81,12 +102,36 @@ internal sealed class LensGpuRenderer : IDisposable
         _target = Device.CreateRenderTargetView(_output);
     }
 
+    private void EnsureQualityTarget()
+    {
+        if (_qualityScale is null)
+        {
+            var shader=_customShader is null ? CompiledQualityShader.Value : CompileQualityShader(_customShader);
+            _qualityScale=Device.CreatePixelShader(shader.Scale);
+            _qualityResolve=Device.CreatePixelShader(shader.Resolve);
+        }
+        if (_qualityOutput is not null) return;
+        _qualityOutput=Device.CreateTexture2D(new Texture2DDescription {
+            Width=(uint)_width,Height=(uint)_height,MipLevels=1,ArraySize=1,
+            Format=Format.R16G16B16A16_Float,SampleDescription=new(1,0),Usage=ResourceUsage.Default,
+            BindFlags=BindFlags.RenderTarget|BindFlags.ShaderResource });
+        _qualityTarget=Device.CreateRenderTargetView(_qualityOutput);
+        _qualityView=Device.CreateShaderResourceView(_qualityOutput);
+    }
+    private void ReleaseQualityTarget()
+    {
+        _qualityView?.Dispose(); _qualityView=null;
+        _qualityTarget?.Dispose(); _qualityTarget=null;
+        _qualityOutput?.Dispose(); _qualityOutput=null;
+    }
+
     public void ResizePreview(int width, int height)
     {
         if (_swapChain is not null) throw new InvalidOperationException("Only offscreen previews can be resized.");
         if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
         if (_width == width && _height == height) return;
         _context.ClearState();
+        ReleaseQualityTarget();
         _target?.Dispose(); _target=null; _output?.Dispose(); _output=null;
         _width=width; _height=height;
         CreateOutput();
@@ -114,6 +159,7 @@ internal sealed class LensGpuRenderer : IDisposable
         uint borderColor = LensBorderColor.DefaultRgb, LensHudFrame hud = default,LensImageMode imageMode=LensImageMode.Performance)
     {
         if (_source is null) return;
+        imageMode=LensImageSettings.NormalizeMode(imageMode);
         var description=_source.Description;
         var parameters = new Parameters
         {
@@ -126,14 +172,32 @@ internal sealed class LensGpuRenderer : IDisposable
                 new((borderColor >> 16 & 255)/255f,(borderColor >> 8 & 255)/255f,(borderColor & 255)/255f,1)
         };
         _context.UpdateSubresource(in parameters, _parameters!);
-        _context.OMSetRenderTargets(_target!);
         _context.RSSetViewport(new Viewport(0,0,_width,_height));
         _context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         _context.VSSetShader(_vertex);
-        _context.PSSetShader(_pixel);
         _context.PSSetConstantBuffer(0,_parameters);
         _context.PSSetShaderResource(0,_sourceView!);
-        _context.Draw(3,0);
+        if (imageMode == LensImageMode.HighQuality && _supportsQuality)
+        {
+            EnsureQualityTarget();
+            _context.OMSetRenderTargets(_qualityTarget!);
+            _context.PSSetShader(_qualityScale);
+            _context.Draw(3,0);
+            _context.OMSetRenderTargets(_target!);
+            _context.PSSetShaderResource(1,_qualityView!);
+            _context.PSSetShader(_qualityResolve);
+            _context.Draw(3,0);
+            _context.PSSetShaderResource(1,null!);
+            LastDrawPassCount=2;
+        }
+        else
+        {
+            if (_qualityOutput is not null) ReleaseQualityTarget();
+            _context.OMSetRenderTargets(_target!);
+            _context.PSSetShader(_pixel);
+            _context.Draw(3,0);
+            LastDrawPassCount=1;
+        }
         _context.PSSetShaderResource(0,null!);
         if (present)
         {
@@ -186,6 +250,7 @@ internal sealed class LensGpuRenderer : IDisposable
     public void Dispose()
     {
         _context?.ClearState(); _context?.Flush();
+        ReleaseQualityTarget(); _qualityScale?.Dispose(); _qualityResolve?.Dispose();
         _sourceView?.Dispose(); _source?.Dispose(); _target?.Dispose(); _output?.Dispose(); _backBuffer?.Dispose();
         _parameters?.Dispose(); _pixel?.Dispose(); _vertex?.Dispose(); _swapChain?.Dispose(); _context?.Dispose(); Device?.Dispose();
     }
