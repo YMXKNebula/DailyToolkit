@@ -1,6 +1,8 @@
-# 隔离的屏幕放大 AI 原型
+# 屏幕放大 AI 实验工具
 
-仅用于生成输入图的 2× FSRCNN-small / ONNX Runtime DirectML 评估，不属于 DailyToolkit 产品，不在主解决方案中。正式包不带模型或推理运行时。
+用于测试 FSRCNN-small 2× 模型与 ONNX Runtime DirectML。它是单独的实验工程，未加入主解决方案，正式软件不附带模型或推理运行时。
+
+本项目人为主导开发，AI 辅助开发。模型是否用于正式软件，由开发者根据测试结果决定。
 
 需要 .NET 10 SDK。构建此 csproj 后，运行程序并传入作者模型路径、输出目录及可选 DXGI 适配器索引。模型与许可证分别来自 [作者项目](https://github.com/Saafke/FSRCNN_Tensorflow) 和其 Apache-2.0 LICENSE；保留下载来源、许可及 SHA-256，禁止将评估用权重误认为本项目自有素材。
 
