@@ -20,6 +20,7 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
     private IntPtr _positionMonitor;
     private double _positionX=0.5,_positionY=0.5;
     private double _zoom=2,_sharpening=0.35;
+    private LensImageMode _imageMode=LensImageMode.Clear;
     private uint _borderColor=LensBorderColor.DefaultRgb;
     private bool _active;
     private bool _visible;
@@ -35,6 +36,12 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
     private int _movementGeneration;
     private bool _verticalGuide,_horizontalGuide;
     private DispatcherTimer? _startupTimer;
+    private DispatcherTimer? _hudTimer;
+    private readonly LensZoomHud _zoomHud = new();
+    private readonly List<int> _pendingWheelRuns = new(8);
+    private bool _wheelQueued;
+    private int _wheelGeneration;
+    private static double HudTime => System.Diagnostics.Stopwatch.GetTimestamp()/(double)System.Diagnostics.Stopwatch.Frequency;
 
     public event Action? StateChanged;
     public event Action? VisibilityChanged;
@@ -76,6 +83,7 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
     public void SetWheelZoom(bool enabled)
     {
         WheelZoomEnabled=enabled;
+        if (!enabled) { _wheelGeneration++; _pendingWheelRuns.Clear(); _wheelQueued=false; }
         if (IsVisible) UpdateActiveStatus();
     }
     public void UpdatePicture(double zoom,double sharpening)
@@ -88,10 +96,56 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
         if (IsVisible) UpdateActiveStatus();
     }
 
+    // The pointer callback only accumulates deltas and posts one dispatcher operation.
+    // Persistence, geometry updates, HUD and rendering happen after the callback returns.
+    private void QueueWheelZoom(int delta)
+    {
+        if (delta == 0) return;
+        // Merge equal directions but retain reversals: +120 then -120 at 16x must end at 15.75x.
+        if (_pendingWheelRuns.Count > 0 && Math.Sign(_pendingWheelRuns[^1]) == Math.Sign(delta))
+            _pendingWheelRuns[^1]=(int)Math.Clamp((long)_pendingWheelRuns[^1]+delta,int.MinValue,int.MaxValue);
+        else _pendingWheelRuns.Add(delta);
+        if (_wheelQueued) return;
+        _wheelQueued=true;
+        var generation=_wheelGeneration;
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Input,new Action(() =>
+        {
+            if (generation != _wheelGeneration) return;
+            var pending=_pendingWheelRuns.ToArray();
+            _pendingWheelRuns.Clear(); _wheelQueued=false;
+            foreach (var run in pending)
+                if (generation == _wheelGeneration && IsActive && WheelZoomEnabled) ZoomRequested?.Invoke(run);
+        }));
+    }
+
+    public void ShowZoomHud(double zoom)
+    {
+        if (!IsVisible) return;
+        _zoomHud.Show(zoom,HudTime);
+        _capture?.UpdateHud(_zoomHud.Frame(HudTime));
+        if (_hudTimer is null)
+        {
+            _hudTimer=new(DispatcherPriority.Background) { Interval=TimeSpan.FromMilliseconds(16) };
+            _hudTimer.Tick += (_,_) =>
+            {
+                var hud=_zoomHud.Frame(HudTime);
+                _capture?.UpdateHud(hud);
+                if (hud.Opacity <= 0) _hudTimer.Stop();
+            };
+        }
+        _hudTimer.Start();
+    }
+
     public void SetBorderColor(uint color)
     {
         _borderColor=color;
         if (_layout is not null) _capture?.UpdateSource(_layout.Source,_sharpening,color);
+    }
+
+    public void SetImageMode(LensImageMode mode)
+    {
+        _imageMode=LensImageSettings.NormalizeMode(mode);
+        _capture?.UpdateImageMode(_imageMode);
     }
 
     public void Start(IReadOnlyList<CaptureMonitor> monitors,CaptureMonitor monitor,int width,int height,double zoom,double sharpening,int frameRate,
@@ -116,7 +170,7 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
             _window.SetMovable(IsMovableMode);
             _guides = new(monitor.Bounds);
             _renderer = new(_window.Handle,layout.Output.Width,layout.Output.Height);
-            _pointer = new(() => IsVisible ? _layout?.Output : null,MoveFrame,delta => ZoomRequested?.Invoke(delta),
+            _pointer = new(() => IsVisible ? _layout?.Output : null,MoveFrame,QueueWheelZoom,
                 install:nativePointer,
                 canMove:() => IsMovableMode,dragEnded:ClearGuides,dragStarted:ShowGuides,nativeInput:true,
                 canZoom:() => WheelZoomEnabled);
@@ -138,7 +192,8 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
     private void BeginCapture(CaptureMonitor monitor,LensLayout layout)
     {
         var generation=++_generation;
-        var capture=_capture=new(_renderer!,CaptureInterop.ForMonitor(monitor.Handle),layout.Source,_sharpening,_frameRate,_borderColor);
+        var capture=_capture=new(_renderer!,CaptureInterop.ForMonitor(monitor.Handle),layout.Source,_sharpening,_frameRate,_borderColor,_imageMode);
+        capture.UpdateHud(_zoomHud.Frame(HudTime));
         capture.FirstFrame += () => Application.Current.Dispatcher.BeginInvoke(() =>
         {
             if (generation != _generation || !IsActive) return;
@@ -274,13 +329,15 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
         if (_layout is not null) _guides?.Update(_layout.Output,_verticalGuide,_horizontalGuide);
     }
 
-    private void UpdateActiveStatus() => Status=$"已开启 · {_zoom:0.##}× · " +
+    private void UpdateActiveStatus() => Status=$"已开启 · {LensZoom.Format(_zoom)} · " +
         (!IsMovableMode ? "固定当前位置" : "按住放大画面拖动") + (WheelZoomEnabled ? "，框内滚轮调倍率" : "，滚轮调节已关闭");
 
     public void Stop()
     {
         _generation++;
         _movementGeneration++;
+        _wheelGeneration++; _pendingWheelRuns.Clear(); _wheelQueued=false;
+        _hudTimer?.Stop(); _zoomHud.Clear();
         _pointer?.Dispose(); _pointer=null;
         _guides?.Dispose(); _guides=null;
         _startupTimer?.Stop(); _startupTimer=null;

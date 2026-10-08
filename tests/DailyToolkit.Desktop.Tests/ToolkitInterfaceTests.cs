@@ -64,12 +64,27 @@ internal static partial class Program
             var encoder=new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(Frame()));
             using var file=File.Create(path); encoder.Save(file);
         }
-        void SameFrame(BitmapSource before,string message)
+        byte[] RegionPixels(Geometry region,BitmapSource frame)
+        {
+            var body=(FrameworkElement)window.FindName("BodyContent");
+            var origin=body.TranslatePoint(new Point(),window.PreviewContent);
+            var visual=new DrawingVisual(); using (var draw=visual.RenderOpen())
+            {
+                draw.PushTransform(new TranslateTransform(origin.X,origin.Y)); draw.DrawGeometry(Brushes.White,null,region); draw.Pop();
+            }
+            var mask=new RenderTargetBitmap(frame.PixelWidth,frame.PixelHeight,frame.DpiX,frame.DpiY,PixelFormats.Pbgra32); mask.Render(visual);
+            var pixels=new byte[frame.PixelWidth*frame.PixelHeight*4]; mask.CopyPixels(pixels,frame.PixelWidth*4,0); return pixels;
+        }
+        void SameFrame(BitmapSource before,string message,Geometry? region=null)
         {
             var after=Frame(); var a=new byte[before.PixelWidth*before.PixelHeight*4]; var b=new byte[a.Length];
             before.CopyPixels(a,before.PixelWidth*4,0); after.CopyPixels(b,after.PixelWidth*4,0);
+            var mask=region is null ? null : RegionPixels(region,before);
             var different=0; for (var i=0;i<a.Length;i+=4)
+            {
+                if (mask is not null && mask[i+3] != 255) continue;
                 if (Math.Abs(a[i]-b[i])>3 || Math.Abs(a[i+1]-b[i+1])>3 || Math.Abs(a[i+2]-b[i+2])>3 || Math.Abs(a[i+3]-b[i+3])>3) different++;
+            }
             Require(different == 0,$"{message}: {different} pixels");
         }
         try
@@ -90,7 +105,7 @@ internal static partial class Program
             Require(Descendants(sizeCombo).OfType<TextBlock>().Any(text => text.Text == "中 · 屏幕宽高的 30%") &&
                 !Descendants(sizeCombo).OfType<TextBlock>().Any(text => text.Text.Contains("LensSizeOption")),
                 "Rounded dropdown exposed an internal record instead of its display label");
-            Require(Descendants(window).OfType<Slider>().Where(control => control.IsVisible).All(control => control.Maximum == 10),
+            Require(Descendants(window).OfType<Slider>().Where(control => control.IsVisible).All(control => control.Maximum == LensZoom.Maximum || control.Maximum == 100),
                 "Manual width/height controls stayed visible under a screen-relative preset");
             using (var restored=new GamingViewModel(gamingStore)) Require(restored.FrameSizePreset == LensFrameSizePreset.Medium &&
                 restored.AspectRatio == LensAspectRatio.Square && restored.FrameWidth == 768 && restored.FrameHeight == 512,"Preset preferences did not survive restart");
@@ -110,31 +125,120 @@ internal static partial class Program
             var nav=(ItemsControl)window.FindName("NavigationList");
             var shared=model.NavigationItems.Single(); var feature=Descendants(nav).OfType<FeatureSwitch>().Single();
             Require(window.IsLensHotkeyRegistered,"An enabled tool did not register its hotkey");
-            byte[] ButtonColors()
+            void RoundedButton(string phase)
             {
-                var visual=new DrawingVisual(); using (var draw=visual.RenderOpen()) draw.DrawRectangle(feature.Background,null,new Rect(0,0,28,28));
-                var bitmap=new RenderTargetBitmap(28,28,96,96,PixelFormats.Pbgra32); bitmap.Render(visual);
-                var pixels=new byte[28*28*4]; bitmap.CopyPixels(pixels,28*4,0); return pixels;
+                var bitmap=Frame(); var dpi=VisualTreeHelper.GetDpi(window.PreviewContent);
+                var origin=feature.TranslatePoint(new Point(),window.PreviewContent);
+                var width=(int)Math.Round(feature.ActualWidth*dpi.DpiScaleX);
+                var height=(int)Math.Round(feature.ActualHeight*dpi.DpiScaleY);
+                var pixels=new byte[width*height*4];
+                bitmap.CopyPixels(new Int32Rect((int)Math.Round(origin.X*dpi.DpiScaleX),(int)Math.Round(origin.Y*dpi.DpiScaleY),width,height),pixels,width*4,0);
+                var background=((SolidColorBrush)window.FindResource("AccentSoftBrush")).Color;
+                foreach (var (x,y) in new[] { (1,1),(width-2,1),(1,height-2),(width-2,height-2) })
+                {
+                    var at=(y*width+x)*4;
+                    Require(Math.Abs(pixels[at]-background.B) <= 2 && Math.Abs(pixels[at+1]-background.G) <= 2 && Math.Abs(pixels[at+2]-background.R) <= 2,
+                        $"The actual {phase} button painted a square corner at {x},{y}");
+                }
+                var top=(width+width/2)*4;
+                Require(Math.Abs(pixels[top]-background.B)+Math.Abs(pixels[top+1]-background.G)+Math.Abs(pixels[top+2]-background.R) > 20,
+                    $"The {phase} button lost its rounded surface");
             }
-            await Click(feature); feature.SeekColorTransition(TimeSpan.FromMilliseconds(20));
+            var thumb=Descendants(feature).OfType<System.Windows.Shapes.Ellipse>().Single();
+            var position=(TranslateTransform)thumb.RenderTransform;
+            var capsuleTrack=Descendants(feature).OfType<Border>().Single(border => border.Background is SolidColorBrush { Color.A:255 });
+            void SettleThumb() => feature.SeekThumbTransition(TimeSpan.FromMilliseconds(180/feature.AnimationSpeed));
+            void SwitchAppearance(string phase)
+            {
+                SettleThumb(); RoundedButton(phase);
+                var expected=feature.IsOn ? Color.FromRgb(38,131,84) : Color.FromRgb(196,65,77);
+                Require(capsuleTrack.Background is SolidColorBrush brush && brush.Color == expected,
+                    "The capsule track kept a mixed color or gradient");
+                var frame=Frame(); var dpi=VisualTreeHelper.GetDpi(window.PreviewContent);
+                var origin=feature.TranslatePoint(new Point(),window.PreviewContent);
+                byte[] Pixel(double x,double y)
+                {
+                    var pixel=new byte[4]; frame.CopyPixels(new Int32Rect((int)Math.Round((origin.X+x)*dpi.DpiScaleX),
+                        (int)Math.Round((origin.Y+y)*dpi.DpiScaleY),1,1),pixel,4,0); return pixel;
+                }
+                var background=Pixel(feature.IsOn ? 3 : 31,10);
+                Require(Math.Abs(background[0]-expected.B)<=3 && Math.Abs(background[1]-expected.G)<=3 && Math.Abs(background[2]-expected.R)<=3,
+                    $"The actual {phase} capsule retained a square or mixed surface");
+                var knob=Pixel(feature.IsOn ? 24 : 10,10);
+                Require(knob[0]>=245 && knob[1]>=245 && knob[2]>=245 &&
+                    Math.Abs(position.X-(feature.IsOn ? 14 : 0))<.01,
+                    $"The actual {phase} thumb did not reach the correct side");
+            }
+            SwitchAppearance("green"); Image("button-green");
+            var focusVisual=new Control { Style=feature.FocusVisualStyle };
+            focusVisual.Measure(new Size(34,20)); focusVisual.Arrange(new Rect(0,0,34,20)); focusVisual.ApplyTemplate();
+            Require(Descendants(focusVisual).OfType<Border>().Single() is { CornerRadius.TopLeft:8,Background:null },
+                "The switch retained a rectangular or filled focus visual");
+            var row=Descendants(nav).OfType<RadioButton>().Single();
+            var label=Descendants(row).OfType<TextBlock>().Single(text => text.Text == "屏幕局部放大");
+            Require(label.TranslatePoint(new Point(label.ActualWidth,0),feature).X<=-3,
+                "The wider switch overlapped the navigation label");
+            var rowFocus=new Control { Style=row.FocusVisualStyle };
+            rowFocus.Measure(new Size(row.ActualWidth,row.ActualHeight));
+            rowFocus.Arrange(new Rect(0,0,row.ActualWidth,row.ActualHeight)); rowFocus.ApplyTemplate();
+            Require(Descendants(rowFocus).OfType<Border>().Single() is { CornerRadius.TopLeft:8,Background:null } &&
+                !Descendants(rowFocus).OfType<System.Windows.Shapes.Rectangle>().Any(),
+                "The navigation row retained the system dotted rectangular focus border");
+            await Click(feature);
             Require(!model.Gaming.IsEnabled && !feature.IsOn && !window.IsLensHotkeyRegistered &&
                 !model.Gaming.StartCommand.CanExecute(null) && !model.Gaming.ToggleCommand.CanExecute(null),"Disabling did not stop tool availability and hotkeys");
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
-                var ripple=ButtonColors(); var center=(13*28+13)*4; var edge=(2*28+13)*4;
-                Require(ripple[center+2] > 60 && ripple[center+2] < 196 && ripple[edge+2] == 38,
-                    "The button did not spread a gradient from its center while preserving the old edge color");
-                foreach (var (x,y) in new[] { (8,13),(13,8),(5,13),(13,5),(2,13),(13,2) })
-                    for (var channel=0;channel<4;channel++)
-                        Require(Math.Abs(ripple[(y*28+x)*4+channel]-ripple[((27-y)*28+27-x)*4+channel]) <= 1,
-                            "The red/green ripple layers were offset from the button center");
-                Image("button-ripple");
-                feature.Command.Execute(feature.CommandParameter); feature.SeekColorTransition(TimeSpan.Zero);
-                Require(ButtonColors().SequenceEqual(ripple),"Reversing a button ripple jumped to another color or shifted its origin");
-                feature.Command.Execute(feature.CommandParameter); feature.SeekColorTransition(TimeSpan.FromMilliseconds(100));
+                feature.SeekThumbTransition(TimeSpan.FromMilliseconds(90));
+                Require(position.X is >2 and <14,"The thumb jumped instead of sliding across the capsule");
+                var intermediateColor=((SolidColorBrush)capsuleTrack.Background).Color;
+                Require(intermediateColor.R is >38 and <196 && intermediateColor.G is >65 and <131,
+                    "The track color jumped instead of blending while the thumb moved");
+                Image("button-midpoint");
+                var interrupted=position.X;
+                feature.Command.Execute(feature.CommandParameter); feature.SeekThumbTransition(TimeSpan.Zero);
+                Require(Math.Abs(position.X-interrupted)<.01,"Reversing a sliding thumb jumped to the opposite side");
+                Require(((SolidColorBrush)capsuleTrack.Background).Color == intermediateColor,
+                    "Reversing the switch jumped to a stale track color");
+                SwitchAppearance("reversed green");
+                feature.Command.Execute(feature.CommandParameter);
             }
+            SwitchAppearance("red"); Image("button-red");
+            for (var toggle=0;toggle<6;toggle++)
+            {
+                var before=position.X;
+                var beforeColor=((SolidColorBrush)capsuleTrack.Background).Color;
+                feature.Command.Execute(feature.CommandParameter); feature.SeekThumbTransition(TimeSpan.Zero);
+                if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
+                    Require(Math.Abs(position.X-before)<.01,"Rapid toggles jumped to a stale thumb position");
+                if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
+                    Require(((SolidColorBrush)capsuleTrack.Background).Color == beforeColor,"Rapid toggles lost the displayed color");
+            }
+            SwitchAppearance("rapid red");
+            var toggleProvider=(IToggleProvider)UIElementAutomationPeer.CreatePeerForElement(feature)!.GetPattern(PatternInterface.Toggle);
+            toggleProvider.Toggle();
+            Require(toggleProvider.ToggleState == System.Windows.Automation.ToggleState.On && model.Gaming.IsEnabled,
+                "The accessibility toggle did not enable the tool");
+            toggleProvider.Toggle();
+            Require(toggleProvider.ToggleState == System.Windows.Automation.ToggleState.Off && !model.Gaming.IsEnabled,
+                "The accessibility toggle did not disable the tool");
+            var source=PresentationSource.FromVisual(feature);
+            foreach (var (key,state) in new[] { (System.Windows.Input.Key.Right,true),(System.Windows.Input.Key.Right,true),
+                (System.Windows.Input.Key.Left,false),(System.Windows.Input.Key.Left,false) })
+            {
+                feature.RaiseEvent(new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,source!,0,key)
+                    { RoutedEvent=System.Windows.Input.Keyboard.KeyDownEvent });
+                Require(feature.IsOn == state,"Arrow keys toggled twice instead of selecting the requested switch state");
+            }
+            feature.SetCurrentValue(FeatureSwitch.AnimationsEnabledProperty,false);
+            Require(position.X == 0,"Disabling animations left the thumb halfway across");
+            feature.Command.Execute(feature.CommandParameter);
+            Require(position.X == 14 && ((SolidColorBrush)capsuleTrack.Background).Color == Color.FromRgb(38,131,84),
+                "Animation-off mode did not switch position and color immediately");
+            feature.Command.Execute(feature.CommandParameter);
+            feature.SetCurrentValue(FeatureSwitch.AnimationsEnabledProperty,true);
+            SwitchAppearance("settled red");
             model.Gaming.Start(); Require(!model.Gaming.IsActive && !model.Gaming.HasCaptureResources,"A disabled tool allocated capture resources");
-            await Task.Delay(150); Require(((SolidColorBrush)feature.Background).Color == Color.FromRgb(196,65,77),"The disable color did not finish red");
             using (var restored=new GamingViewModel(gamingStore)) Require(!restored.IsEnabled,"Master disable did not persist");
             await Click(feature);
             Require(window.IsLensHotkeyRegistered && model.Gaming.IsEnabled && !model.Gaming.IsActive,"Re-enabling did not restore only availability");
@@ -145,12 +249,46 @@ internal static partial class Program
             Require(!Descendants(nav).OfType<FeatureSwitch>().Single().IsOn && !window.IsLensHotkeyRegistered && model.ShowScreenLens,
                 "The favorite's master switch did not update the main tool");
             model.Gaming.IsEnabled=true;
-            Console.WriteLine("PASS Animated master switches share favorites state, persist disable, unregister hotkeys and re-enable without starting capture");
+            Console.WriteLine("PASS Sliding red/green capsule switches share favorites state, persist disable, unregister hotkeys and re-enable without starting capture");
 
             model.OpenSettingsCommand.Execute(null); window.UpdateLayout();
             Require(model.NavigationItems.Single(item => item.Id == "settings-computer").Name == "电脑详情" &&
                 Descendants(nav).OfType<FeatureSwitch>().All(button => button.Visibility == Visibility.Collapsed),"Settings kept tool master switches or lost computer details");
             var tide=(TideTransition)window.FindName("NavigationTransition");
+            void CircularWave(Color accent)
+            {
+                var previous=new DrawingVisual(); using (var draw=previous.RenderOpen()) draw.DrawRectangle(Brushes.Blue,null,new Rect(0,0,320,240));
+                var snapshot=new RenderTargetBitmap(320,240,96,96,PixelFormats.Pbgra32); snapshot.Render(previous); snapshot.Freeze();
+                var overlay=new TideTransition { Origin=new Point(80,70),Progress=.3,Snapshot=snapshot,WaveBrush=new SolidColorBrush(accent) };
+                var surface=new Grid { Background=Brushes.Red }; surface.Children.Add(overlay);
+                surface.Measure(new Size(320,240)); surface.Arrange(new Rect(0,0,320,240));
+                var bitmap=new RenderTargetBitmap(320,240,96,96,PixelFormats.Pbgra32); bitmap.Render(surface);
+                var pixels=new byte[320*240*4]; bitmap.CopyPixels(pixels,320*4,0);
+                foreach (var (x,y) in new[] { (140,70),(80,130) })
+                    Require(pixels[(y*320+x)*4+2] == 255 && pixels[(y*320+x)*4] == 0,"The circular wave failed to reveal equally distant inner points");
+                foreach (var (x,y) in new[] { (185,70),(80,175),(154,144) })
+                    Require(pixels[(y*320+x)*4] == 255 && pixels[(y*320+x)*4+2] == 0,"The wave revealed pixels outside its circular boundary");
+                var horizontal=(70*320+163)*4; var vertical=(153*320+80)*4;
+                Require(pixels.AsSpan(horizontal,4).SequenceEqual(pixels.AsSpan(vertical,4)) &&
+                    pixels[horizontal+2] is >= 230 and < 255,"The wave edge was missing, too bright, or spread as an ellipse");
+                overlay.Region=new GeometryGroup
+                {
+                    FillRule=FillRule.Nonzero,Children=new GeometryCollection
+                    { new RectangleGeometry(new Rect(16,50,84,40)),new RectangleGeometry(new Rect(100,0,220,240)) }
+                };
+                surface.UpdateLayout();
+                bitmap=new RenderTargetBitmap(320,240,96,96,PixelFormats.Pbgra32); bitmap.Render(surface); bitmap.CopyPixels(pixels,320*4,0);
+                foreach (var (x,y) in new[] { (50,20),(50,180) })
+                    Require(pixels[(y*320+x)*4+2] == 255 && pixels[(y*320+x)*4] == 0,"The scoped wave covered another sidebar option");
+                Require(pixels[(180*320+280)*4] == 255,"The scoped wave stopped preserving the outgoing configuration page");
+            }
+            foreach (var preset in model.ThemePresets)
+            {
+                model.SelectThemePresetCommand.Execute(preset); window.UpdateLayout();
+                var accent=(Color)ColorConverter.ConvertFromString(model.Theme.Accent);
+                Require(((SolidColorBrush)tide.WaveBrush!).Color == accent,"The circular wave ignored the applied theme");
+                CircularWave(accent);
+            }
             if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             {
                 foreach (var width in new[] { 1040d,680d })
@@ -162,28 +300,39 @@ internal static partial class Program
                     var before=Frame();
                     var option=Descendants(nav).OfType<RadioButton>().Single(button => ((NavigationItem)button.DataContext).Id == "settings-runtime");
                     var body=(FrameworkElement)window.FindName("BodyContent");
-                    var optionOrigin=option.TranslatePoint(new Point(0,option.ActualHeight/2),body);
-                    option.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                    window.SeekNavigationTransition(TimeSpan.Zero); SameFrame(before,"The wave exposed the new page in its first frame");
-                    Require(tide.Origin == optionOrigin,"The wave did not start at the clicked option's leftmost edge");
+                    var optionOrigin=option.TranslatePoint(new Point(18,9),body);
+                    window.NavigateWithTide(option,optionOrigin);
+                    window.SeekNavigationTransition(TimeSpan.Zero); SameFrame(before,"The wave exposed the new page in its first frame",tide.Region);
+                    Require(tide.Origin == optionOrigin,"The circular wave did not start at the pointer's click position");
                     window.SeekNavigationTransition(TimeSpan.FromMilliseconds(25)); Image($"wave-start-{width}-{dark}");
                     var early=Frame(); var original=new byte[before.PixelWidth*before.PixelHeight*4]; var visible=new byte[original.Length];
                     before.CopyPixels(original,before.PixelWidth*4,0); early.CopyPixels(visible,early.PixelWidth*4,0);
-                    var boundary=(int)Math.Ceiling(tide.ConnectionX*VisualTreeHelper.GetDpi(body).DpiScaleX);
+                    var boundary=(int)Math.Ceiling(((FrameworkElement)window.FindName("SidebarSurface")).ActualWidth*VisualTreeHelper.GetDpi(body).DpiScaleX);
                     for (var y=0;y<early.PixelHeight;y++) for (var x=boundary;x<early.PixelWidth;x++)
                         for (var channel=0;channel<4;channel++)
                             Require(Math.Abs(original[(y*early.PixelWidth+x)*4+channel]-visible[(y*early.PixelWidth+x)*4+channel]) <= 3,
-                                "The first wave stage extended beyond the option row before reaching the connection");
-                    window.SeekNavigationTransition(TimeSpan.FromMilliseconds(70));
+                                "The new page appeared beyond the early circular wave");
+                    window.SeekNavigationTransition(TimeSpan.FromMilliseconds(110));
                     Require(tide.Progress is > .1 and < .9 && tide.Snapshot is { IsFrozen:true } && model.Page == "settings-runtime",
                         "The navigation wave did not advance while the target page was selected");
                     Image($"wave-{width}-{dark}");
+                    var scoped=Frame(); var mask=RegionPixels(tide.Region!,scoped);
+                    tide.Visibility=Visibility.Collapsed; var live=Frame(); tide.Visibility=Visibility.Visible;
+                    var animatedPixels=new byte[scoped.PixelWidth*scoped.PixelHeight*4]; var livePixels=new byte[animatedPixels.Length];
+                    scoped.CopyPixels(animatedPixels,scoped.PixelWidth*4,0); live.CopyPixels(livePixels,live.PixelWidth*4,0);
+                    for (var at=0;at<mask.Length;at+=4) if (mask[at+3] == 0)
+                        for (var channel=0;channel<4;channel++)
+                            Require(Math.Abs(animatedPixels[at+channel]-livePixels[at+channel]) <= 3,
+                                "The circular wave changed another option, the sidebar footer or the caption");
                     var interrupted=Frame();
                     Descendants(nav).OfType<RadioButton>().Single(button => ((NavigationItem)button.DataContext).Id == "settings-about")
                         .RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                    window.SeekNavigationTransition(TimeSpan.Zero); SameFrame(interrupted,"Rapid navigation discarded the visible partial wave");
-                    window.SeekNavigationTransition(TimeSpan.FromMilliseconds(140)); await Task.Delay(35);
-                    Require(tide.Snapshot is null && !tide.IsVisible && ((UIElement)window.FindName("MainContent")).IsHitTestVisible,
+                    var keyboardOption=Descendants(nav).OfType<RadioButton>().Single(button => ((NavigationItem)button.DataContext).Id == "settings-about");
+                    Require(tide.Origin == keyboardOption.TranslatePoint(new Point(keyboardOption.ActualWidth/2,keyboardOption.ActualHeight/2),body),
+                        "Keyboard navigation reused an earlier mouse click position");
+                    window.SeekNavigationTransition(TimeSpan.Zero); SameFrame(interrupted,"Rapid navigation discarded the visible partial wave",tide.Region);
+                    window.SeekNavigationTransition(TimeSpan.FromMilliseconds(220)); await Task.Delay(35);
+                    Require(tide.Snapshot is null && tide.Region is null && !tide.IsVisible && ((UIElement)window.FindName("MainContent")).IsHitTestVisible,
                         "Completed waves retained bitmaps or blocked content input");
                 }
             }
@@ -199,20 +348,20 @@ internal static partial class Program
                 model.Page="settings-theme"; window.UpdateLayout();
                 Descendants(nav).OfType<RadioButton>().Single(button => ((NavigationItem)button.DataContext).Id == "settings-runtime")
                     .RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                window.SeekNavigationTransition(TimeSpan.FromMilliseconds(70/speed));
+                window.SeekNavigationTransition(TimeSpan.FromMilliseconds(110/speed));
                 Require(Math.Abs(tide.Progress-.5) < .01,"The tide ignored the selected animation speed");
-                window.SeekNavigationTransition(TimeSpan.FromMilliseconds(140/speed)); await Task.Delay(35);
+                window.SeekNavigationTransition(TimeSpan.FromMilliseconds(220/speed)); await Task.Delay(35);
                 var settings=(Button)window.FindName("SettingsButton"); settings.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                 window.SeekPageTransition(TimeSpan.FromMilliseconds(230/speed));
                 Require(((Image)window.FindName("PageTransition")).IsVisible &&
                     Math.Abs(((Grid)window.FindName("PageTransitionCover")).Opacity-.5) < .01,"The footer animation ignored the selected speed");
                 window.SeekPageTransition(TimeSpan.FromMilliseconds(460/speed)); await Task.Delay(35);
                 feature=Descendants(nav).OfType<FeatureSwitch>().Single();
-                Require(feature.AnimationSpeed == speed,"The master button ignored the selected speed");
+                Require(feature.AnimationSpeed == speed,"The sliding switch ignored the selected animation speed");
                 model.OpenSettingsCommand.Execute(null); window.UpdateLayout();
             }
             model.AnimationSpeed=1;
-            Console.WriteLine("PASS Quick tide navigation preserves first/interrupted frames in light/dark, narrow/full layouts and releases its snapshot");
+            Console.WriteLine("PASS Circular navigation starts at the click, follows all theme accents and preserves first/interrupted frames, speed scaling and snapshot cleanup");
 
             window.Width=1040; model.LightThemeCommand.Execute(null); model.Page="settings-theme";
             var details=(Expander)window.FindName("ThemeDetails"); details.IsExpanded=true;

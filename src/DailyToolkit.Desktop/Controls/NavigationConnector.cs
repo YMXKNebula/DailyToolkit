@@ -11,8 +11,13 @@ public sealed class NavigationConnector : FrameworkElement
     protected override void OnRender(DrawingContext draw)
     {
         base.OnRender(draw);
-        var w=ActualWidth; var h=ActualHeight; var r=Math.Min(8,Math.Min(w,h/3));
+        var w=ActualWidth; var h=ActualHeight;
         if (w <= 0 || h <= 0) return;
+        draw.DrawGeometry(Fill,null,CreateShape(new Size(w,h)));
+    }
+    internal static StreamGeometry CreateShape(Size size)
+    {
+        var w=size.Width; var h=size.Height; var r=Math.Min(8,Math.Min(w,h/3));
         var shape=new StreamGeometry();
         using (var path=shape.Open())
         {
@@ -22,6 +27,6 @@ public sealed class NavigationConnector : FrameworkElement
             path.BezierTo(new(w,h-r*.55),new(w-r*.45,h-r),new(w-r,h-r),true,false);
             path.LineTo(new(0,h-r),true,false);
         }
-        shape.Freeze(); draw.DrawGeometry(Fill,null,shape);
+        shape.Freeze(); return shape;
     }
 }

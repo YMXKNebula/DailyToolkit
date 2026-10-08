@@ -32,12 +32,16 @@ internal sealed class LensCapture : IDisposable
     public event Action<string>? Failed;
     public event Action? FirstFrame;
     public long FramesRendered => _renderer.FramesRendered;
+    private long _framesReceived;
+    internal long FramesReceived => Interlocked.Read(ref _framesReceived);
+    internal LensImageMode ImageModeForDiagnostics => Volatile.Read(ref _settings).ImageMode;
+    internal LensHudFrame HudForDiagnostics => Volatile.Read(ref _settings).Hud;
 
     public LensCapture(LensGpuRenderer renderer, GraphicsCaptureItem item, SourceArea source, double sharpening,
-        int framesPerSecond = 0,uint borderColor = LensBorderColor.DefaultRgb)
+        int framesPerSecond = 0,uint borderColor = LensBorderColor.DefaultRgb,LensImageMode imageMode=LensImageMode.Performance)
     {
         _renderer = renderer; _item = item;
-        _settings=new(source,sharpening,borderColor);
+        _settings=new(source,sharpening,borderColor) { ImageMode=imageMode };
         _pacer=new(framesPerSecond,Stopwatch.Frequency);
         _sourceWidth=item.Size.Width; _sourceHeight=item.Size.Height;
         _device = CaptureInterop.Wrap(renderer.Device);
@@ -86,12 +90,13 @@ internal sealed class LensCapture : IDisposable
             {
                 var frame = sender.TryGetNextFrame();
                 if (frame is null) return;
+                Interlocked.Increment(ref _framesReceived);
                 // The pool holds at most two frames. Drop an older pending frame rather than
                 // making input wait behind it; the bounded drain cannot starve rendering.
                 try
                 {
                     var latest=sender.TryGetNextFrame();
-                    if (latest is not null) { frame.Dispose(); frame=latest; }
+                    if (latest is not null) { Interlocked.Increment(ref _framesReceived); frame.Dispose(); frame=latest; }
                     if (Paused) return;
                     if (frame.ContentSize.Width != _sourceWidth || frame.ContentSize.Height != _sourceHeight)
                         throw new InvalidOperationException("显示尺寸已变化，请重新开启放大框。");
@@ -99,7 +104,7 @@ internal sealed class LensCapture : IDisposable
                     if (!_pacer.ShouldRender(now)) return;
                     using var texture = CaptureInterop.Texture(frame.Surface);
                     var settings=Volatile.Read(ref _settings);
-                    _renderer.Render(texture,settings.Source,settings.Sharpening,borderColor:settings.BorderColor);
+                    _renderer.Render(texture,settings.Source,settings.Sharpening,borderColor:settings.BorderColor,hud:settings.Hud,imageMode:settings.ImageMode);
                     _lastRenderedSettings=settings;
                     if (!_firstFrameDelivered) { _firstFrameDelivered=true; FirstFrame?.Invoke(); }
                 }
@@ -117,7 +122,7 @@ internal sealed class LensCapture : IDisposable
     public void UpdateSource(SourceArea source,double sharpening,uint? borderColor=null)
     {
         var previous=Volatile.Read(ref _settings);
-        var settings=new RenderSettings(source,sharpening,borderColor ?? previous.BorderColor);
+        var settings=previous with { Source=source,Sharpening=sharpening,BorderColor=borderColor ?? previous.BorderColor };
         if (settings == previous) return;
         Volatile.Write(ref _settings,settings);
         RequestRefresh();
@@ -139,7 +144,7 @@ internal sealed class LensCapture : IDisposable
                         var settings=Volatile.Read(ref _settings);
                         // A new capture frame may already have presented this update.
                         if (ReferenceEquals(settings,_lastRenderedSettings)) continue;
-                        _renderer.RenderLast(settings.Source,settings.Sharpening,borderColor:settings.BorderColor);
+                        _renderer.RenderLast(settings.Source,settings.Sharpening,borderColor:settings.BorderColor,hud:settings.Hud,imageMode:settings.ImageMode);
                         _lastRenderedSettings=settings;
                     }
                 }
@@ -154,7 +159,23 @@ internal sealed class LensCapture : IDisposable
         });
     }
 
-    private sealed record RenderSettings(SourceArea Source,double Sharpening,uint BorderColor);
+    public void UpdateHud(LensHudFrame hud)
+    {
+        var previous=Volatile.Read(ref _settings);
+        if (previous.Hud == hud) return;
+        Volatile.Write(ref _settings,previous with { Hud=hud });
+        RequestRefresh();
+    }
+    public void UpdateImageMode(LensImageMode mode)
+    {
+        mode=LensImageSettings.NormalizeMode(mode);
+        var previous=Volatile.Read(ref _settings);
+        if (previous.ImageMode == mode) return;
+        Volatile.Write(ref _settings,previous with { ImageMode=mode });
+        RequestRefresh();
+    }
+    private sealed record RenderSettings(SourceArea Source,double Sharpening,uint BorderColor)
+    { public LensHudFrame Hud { get; init; } public LensImageMode ImageMode { get; init; } }
 
     internal (SourceArea Source,double Sharpening) SourceForDiagnostics
     {

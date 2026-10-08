@@ -1,4 +1,5 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="clr-namespace:DailyToolkit.Desktop.Controls">
     <SolidColorBrush x:Key="WindowBrush" Color="#F5F7F6" />
     <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="SidebarBrush" Color="#FFFFFF" />
@@ -63,12 +64,42 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <Style x:Key="FeatureSwitchStyle" TargetType="controls:FeatureSwitch" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="FocusVisualStyle"><Setter.Value>
+        <Style TargetType="Control">
+          <Setter Property="Template"><Setter.Value>
+            <ControlTemplate TargetType="Control">
+              <Border Margin="2" CornerRadius="8" BorderThickness="1" BorderBrush="White" IsHitTestVisible="False" />
+            </ControlTemplate>
+          </Setter.Value></Setter>
+        </Style>
+      </Setter.Value></Setter>
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="controls:FeatureSwitch">
+          <Grid Background="Transparent">
+            <ContentPresenter RecognizesAccessKey="True" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value></Setter>
+      <Style.Triggers>
+        <Trigger Property="IsPressed" Value="True"><Setter Property="Opacity" Value="0.9" /></Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+      </Style.Triggers>
+    </Style>
     <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
       <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
       <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
     </Style>
+    <Style x:Key="NavigationFocusVisual" TargetType="Control">
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="Control">
+          <Border Margin="2" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}" IsHitTestVisible="False" />
+        </ControlTemplate>
+      </Setter.Value></Setter>
+    </Style>
     <Style x:Key="NavButton" TargetType="RadioButton">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource NavigationFocusVisual}" />
       <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
       <Setter Property="FontSize" Value="14" />
       <Setter Property="Margin" Value="0,3" />

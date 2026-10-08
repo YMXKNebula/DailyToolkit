@@ -16,7 +16,7 @@ public sealed class GamingPreferencesStore(string? filePath = null,string? local
         {
             var path=File.Exists(_path) ? _path : _legacyPath ?? _path;
             if (!File.Exists(path) || new FileInfo(path).Length > 16384) return new();
-            var settings = JsonSerializer.Deserialize<GamingPreferences>(File.ReadAllText(path));
+            var settings = JsonSerializer.Deserialize<GamingPreferences>(File.ReadAllText(path))?.Normalize();
             return settings is { IsValid:true } ? settings : new();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException) { System.Diagnostics.Trace.WriteLine(exception); return new(); }

@@ -14,12 +14,16 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     private string _status = "未开启";
     private readonly GamingPreferencesStore _preferencesStore;
     private GamingPreferences _preferences;
+    private readonly LensWheelAccumulator _wheel = new();
 
     public GamingViewModel(GamingPreferencesStore? preferencesStore = null)
     {
         _preferencesStore = preferencesStore ?? new();
         _preferences = _preferencesStore.Load();
         _width=_preferences.FrameWidth; _height=_preferences.FrameHeight;
+        _zoom=_preferences.Zoom;
+        _sharpening=_preferences.Sharpness/100;
+        _session.SetImageMode(_preferences.LensImageMode);
         _session.SetMovement(IsMovableMode);
         _session.SetWheelZoom(WheelZoomEnabled);
         _session.SetBorderColor(BorderColorRgb);
@@ -97,13 +101,51 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     }
     public bool IsDisabled => !IsEnabled;
     public double MaximumZoom => LensLayout.MaximumZoom;
-    public double Zoom { get => _zoom; set { if (double.IsFinite(value) && Set(ref _zoom,Math.Clamp(value,1,MaximumZoom))) { Notify(nameof(ZoomText)); _session.UpdatePicture(Zoom,Sharpening); } } }
+    public double Zoom { get => _zoom; set { if (Set(ref _zoom,LensZoom.Normalize(value))) { SavePreferences(_preferences with { Zoom=_zoom }); Notify(nameof(ZoomText)); _session.UpdatePicture(Zoom,Sharpening); } } }
     public double FrameWidth { get => _width; set { if (double.IsFinite(value) && Set(ref _width,Math.Round(Math.Clamp(value,160,1600)))) { SavePreferences(_preferences with { FrameWidth=(int)_width }); NotifyFrameSize(); } } }
     public double FrameHeight { get => _height; set { if (double.IsFinite(value) && Set(ref _height,Math.Round(Math.Clamp(value,120,1200)))) { SavePreferences(_preferences with { FrameHeight=(int)_height }); NotifyFrameSize(); } } }
-    internal double Sharpening { get => _sharpening; set { if (double.IsFinite(value) && Set(ref _sharpening,Math.Clamp(value,0,1))) _session.UpdatePicture(Zoom,Sharpening); } }
+    internal double Sharpening { get => ImageMode == LensImageMode.Performance ? LensImageSettings.DefaultSharpness/100 : _sharpening; set => Sharpness=value*100; }
+    public double Sharpness
+    {
+        get => _preferences.Sharpness;
+        set
+        {
+            var normalized=LensImageSettings.NormalizeSharpness(value);
+            if (normalized == Sharpness) return;
+            SavePreferences(_preferences with { Sharpness=normalized });
+            _sharpening=normalized/100; Notify(); Notify(nameof(SharpnessText)); Notify(nameof(Sharpening));
+            _session.UpdatePicture(Zoom,Sharpening);
+        }
+    }
+    public string SharpnessText => $"{Sharpness:0}%";
+    public IReadOnlyList<LensImageOption> ImageModes { get; } = [new(LensImageMode.Performance,"性能"),
+        new(LensImageMode.Clear,"清晰（推荐）"),new(LensImageMode.HighQuality,"高质量"),new(LensImageMode.Pixel,"像素")];
+    public LensImageMode ImageMode
+    {
+        get => _preferences.LensImageMode;
+        set
+        {
+            var mode=LensImageSettings.NormalizeMode(value);
+            if (mode != ImageMode)
+            {
+                SavePreferences(_preferences with { LensImageMode=mode }); Notify(); Notify(nameof(CanAdjustSharpness)); Notify(nameof(Sharpening));
+                _session.SetImageMode(mode);
+                _session.UpdatePicture(Zoom,Sharpening);
+            }
+            if (value == LensImageMode.AIEnhanced) Status="AI 增强当前不可用，已切换至高质量模式。";
+        }
+    }
+    public bool CanAdjustSharpness => ImageMode is LensImageMode.Clear or LensImageMode.HighQuality;
     public int FrameRate { get => _fps; set => Set(ref _fps,FrameRates.Any(rate => rate.Value == value) ? value : 0); }
     public string FrameRateText => FrameRates.First(rate => rate.Value == FrameRate).Label;
-    public void AdjustZoom(int wheelDelta) { if (WheelZoomEnabled) Zoom += wheelDelta/120d*0.25; }
+    public void AdjustZoom(int wheelDelta)
+    {
+        if (!WheelZoomEnabled) return;
+        var ticks=_wheel.Consume(wheelDelta);
+        if (ticks == 0) return;
+        Zoom += ticks*LensZoom.Step;
+        _session.ShowZoomHud(Zoom);
+    }
     public bool WheelZoomEnabled
     {
         get => _preferences.WheelZoomEnabled;
@@ -111,6 +153,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         {
             if (value == WheelZoomEnabled) return;
             SavePreferences(_preferences with { WheelZoomEnabled=value });
+            _wheel.Reset();
             Notify(nameof(WheelZoomEnabled)); Notify(nameof(MovementHint));
             _session.SetWheelZoom(value);
         }
@@ -141,7 +184,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public bool IsRequestedVisible => IsActive;
     public bool IsVisible => _session.IsVisible;
     public bool CanConfigure => !IsActive;
-    public string ZoomText => $"{Zoom:0.##}×";
+    public string ZoomText => LensZoom.Format(Zoom);
     public string FrameSizeText => $"{EffectiveFrameWidth} × {EffectiveFrameHeight} 像素";
     public string Status { get => _status; private set => Set(ref _status,value); }
     public string ToggleText => IsActive ? "关闭放大框" : "开启放大框";
@@ -213,6 +256,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public void ResetDefaults()
     {
         Stop();
+        _wheel.Reset();
+        ImageMode=LensImageMode.Clear;
         Zoom=2; FrameSizePreset=LensFrameSizePreset.Custom; AspectRatio=LensAspectRatio.Screen; FrameWidth=640; FrameHeight=384; Sharpening=0.35; FrameRate=0;
         RefreshMonitors();
         MovementMode=LensMovementMode.Fixed; WheelZoomEnabled=true; BorderColor=LensBorderColor.Default;
@@ -243,3 +288,4 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
 public sealed record LensFrameRate(int Value,string Label);
 public sealed record LensSizeOption(LensFrameSizePreset Value,string Label);
 public sealed record LensAspectOption(LensAspectRatio Value,string Label);
+public sealed record LensImageOption(LensImageMode Value,string Label);

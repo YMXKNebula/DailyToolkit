@@ -15,6 +15,8 @@ public sealed record RuntimeRow(string Name, string Version, string Status);
 
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
+    public static string ApplicationVersion => typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+    public string VersionText => "版本 " + ApplicationVersion;
     private readonly IEnvironmentProbe _probe;
     private readonly DisplayInfo _display;
     private readonly ILocalStatusProbe _localStatus;
@@ -459,7 +461,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public string ExportJson() => JsonSerializer.Serialize(new
     {
-        Application = "DailyToolkit", Version = "0.6.1", FirstFrameMilliseconds = _firstFrameMilliseconds,
+        Application = "DailyToolkit", Version = ApplicationVersion, FirstFrameMilliseconds = _firstFrameMilliseconds,
         Environment = Report, Adaptation = Profile,
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);

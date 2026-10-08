@@ -67,11 +67,12 @@
                     </Style.Triggers></Style></Border.Style>
                     <Grid>
                       <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                  <RadioButton GroupName="Navigation" Style="{StaticResource SidebarNavButton}" Padding="8,12"
+                  <RadioButton GroupName="Navigation" Style="{StaticResource SidebarNavButton}" Padding="8,12,4,12"
                                IsChecked="{Binding IsSelected, Mode=OneWay}" CommandParameter="{Binding}"
                                Click="NavigateWithTide"
                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
                                PreviewMouseLeftButtonDown="NavigationDragStart" PreviewMouseMove="NavigationDragMove"
+                               PreviewMouseLeftButtonUp="NavigationPointerReleased"
                                AllowDrop="True" DragOver="NavigationDragOver" Drop="NavigationDrop" ToolTip="{Binding Name}" AutomationProperties.Name="{Binding Name}">
                     <RadioButton.ContextMenu>
                       <ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
@@ -104,7 +105,7 @@
     <controls:NavigationConnector x:Name="NavigationBridge" Fill="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Right"
                VerticalAlignment="Top" Width="20" IsHitTestVisible="False" Visibility="Collapsed" />
     </Grid>
-    <Border Grid.Column="1" Background="{DynamicResource AccentSoftBrush}" CornerRadius="12" Margin="0,8,8,8" IsHitTestVisible="False" />
+    <Border x:Name="ConfigurationSurface" Grid.Column="1" Background="{DynamicResource AccentSoftBrush}" CornerRadius="12" Margin="0,8,8,8" IsHitTestVisible="False" />
     <Grid x:Name="MainContent" Grid.Column="1" Margin="{Binding ContentPadding}">
       <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
       <Grid Margin="0,0,0,20">
@@ -220,7 +221,7 @@
                   <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="快捷键" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="开启/关闭放大" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <TextBox Grid.Column="1" Text="{Binding ToggleShortcutText, Mode=OneWay}" IsReadOnly="True" Padding="8,6"
                          MinWidth="62" Margin="12,0,4,0" VerticalContentAlignment="Center"
                          PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur"
@@ -262,6 +263,15 @@
                               ToolTip="在放大框或预览图内用滚轮调节倍率。关闭后仍可使用上方滑块。" />
                     <TextBlock Text="框体颜色" FontWeight="SemiBold" Margin="0,0,0,10" />
                     <controls:LensColorPicker x:Name="LensFrameColor" Margin="0,0,0,18" />
+                    <TextBlock Text="画面模式" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ComboBox x:Name="LensImageMode" ItemsSource="{Binding ImageModes}" DisplayMemberPath="Label" SelectedValuePath="Value"
+                              SelectedValue="{Binding ImageMode}" Padding="6" Margin="0,0,0,12" AutomationProperties.Name="画面模式" />
+                    <Grid IsEnabled="{Binding CanAdjustSharpness}">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                      <TextBlock Text="清晰度" FontWeight="SemiBold" /><TextBlock Grid.Column="1" Text="{Binding SharpnessText}" />
+                    </Grid>
+                    <Slider x:Name="LensSharpness" IsEnabled="{Binding CanAdjustSharpness}" Minimum="0" Maximum="100" TickFrequency="1"
+                            IsSnapToTickEnabled="True" Value="{Binding Sharpness}" Margin="0,10,0,18" AutomationProperties.Name="清晰度" />
                     <StackPanel IsEnabled="{Binding CanConfigure}">
                     <TextBlock Text="放大框尺寸" FontWeight="SemiBold" Margin="0,0,0,8" />
                     <ComboBox ItemsSource="{Binding FrameSizePresets}" DisplayMemberPath="Label" SelectedValuePath="Value"
@@ -431,7 +441,7 @@
                 <Image Source="Assets/dt.png" Width="56" Height="56" Margin="0,0,16,0" />
                 <StackPanel VerticalAlignment="Center">
                   <TextBlock Text="DailyToolkit" FontSize="22" FontWeight="SemiBold" />
-                  <TextBlock x:Name="ProductVersion" Text="版本 0.6.1" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+                  <TextBlock x:Name="ProductVersion" Text="{Binding VersionText}" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
                 </StackPanel>
               </StackPanel>
               <TextBlock Text="Windows 本地工具集合" Margin="0,0,0,14" />

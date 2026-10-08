@@ -8,7 +8,7 @@ namespace DailyToolkit.Desktop.Tests;
 
 internal static partial class Program
 {
-    private static async Task CheckLivePresetRelayAsync()
+    private static async Task CheckLivePresetRelayAsync(double zoom=4)
     {
         var monitors=LensNativeWindow.Monitors(); var origin=monitors[0];
         var target=monitors.Skip(1).FirstOrDefault(m =>
@@ -35,10 +35,17 @@ internal static partial class Program
                 Require(SetWindowPos(new WindowInteropHelper(scene).Handle,new IntPtr(-1),b.Left,b.Top,b.Width,b.Height,0x10),"Preset relay scene did not cover its monitor");
             }
             await Task.Delay(120);
+            // WPF can apply its suggested size after crossing DPI contexts on the first move.
+            for(var i=0;i<scenes.Count;i++)
+            {
+                var bounds=i==0 ? origin.Bounds : target.Bounds;
+                Require(SetWindowPos(new WindowInteropHelper(scenes[i]).Handle,new IntPtr(-1),bounds.Left,bounds.Top,bounds.Width,bounds.Height,0x10),"DPI-adjusted fixture did not fill its monitor");
+            }
+            await Task.Delay(120);
             foreach (var aspect in new[] { LensAspectRatio.Screen,LensAspectRatio.Square,LensAspectRatio.Wide })
             {
                 session.SetMovement(true); session.SetBorderColor(0x123456);
-                session.Start([origin,target],origin,640,384,4,.35,0,LensFrameSizePreset.Small,aspect);
+                session.Start([origin,target],origin,640,384,zoom,.35,0,LensFrameSizePreset.Small,aspect);
                 await WaitFor(() => session.IsVisible,"Preset capture did not start");
                 var pointer=session.PointerForDiagnostics!; var handle=session.LensHandle;
                 var state=session.MovementForDiagnostics!; var x=(int)state.X.OutputCenter; var y=(int)state.Y.OutputCenter;
@@ -90,11 +97,12 @@ internal static partial class Program
                     var color=index == 1 ? Color.FromRgb(40,140,70) : Color.FromRgb(32,64,160);
                     Require(pixels.Length == expected.Width*expected.Height*4 && Math.Abs(pixels[center]-color.B)<=2 &&
                         Math.Abs(pixels[center+1]-color.G)<=2 && Math.Abs(pixels[center+2]-color.R)<=2 &&
-                        pixels[0] == 0x56 && pixels[1] == 0x34 && pixels[2] == 0x12,"Resized live output had wrong source pixels or lost its selected border color");
+                        pixels[0] == 0x56 && pixels[1] == 0x34 && pixels[2] == 0x12,
+                        $"Resized live output mismatch at {zoom}x: {pixels.Length}/{expected.Width*expected.Height*4}; center BGRA {pixels[center]},{pixels[center+1]},{pixels[center+2]}; border {pixels[0]},{pixels[1]},{pixels[2]}");
                 }
                 pointer.Process(0x202,x,y); session.Stop(); Require(!session.HasCaptureResources,"Stopping a resized preset retained native resources");
             }
-            Console.WriteLine("PASS Live screen/1:1/16:9 presets resize on both relay directions, preserve rendered pixels/border color, and reuse the native window/pointer");
+            Console.WriteLine($"PASS Live {zoom:0.00}x screen/1:1/16:9 presets resize on both relay directions, preserve rendered pixels/border color, and reuse the native window/pointer");
         }
         finally { session.Stop(); foreach (var scene in scenes) scene.Close(); }
     }

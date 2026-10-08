@@ -1,0 +1,9 @@
+# 隔离的屏幕放大 AI 原型
+
+仅用于生成输入图的 2× FSRCNN-small / ONNX Runtime DirectML 评估，不属于 DailyToolkit 产品，不在主解决方案中。正式包不带模型或推理运行时。
+
+需要 .NET 10 SDK。构建此 csproj 后，运行程序并传入作者模型路径、输出目录及可选 DXGI 适配器索引。模型与许可证分别来自 [作者项目](https://github.com/Saafke/FSRCNN_Tensorflow) 和其 Apache-2.0 LICENSE；保留下载来源、许可及 SHA-256，禁止将评估用权重误认为本项目自有素材。
+
+程序转换冻结模型、验证 DirectML/CPU 数值一致性、记录 GPU provider profile，测量含张量上传和读回的同步推理，并生成 15 类离线画质图。4–16× 图像由真正 2× 推理加传统空间放大构成，不是对应倍率的神经网络推理。
+
+数据不代表实际放大窗口 FPS，未实现 D3D11/D3D12 零拷贝、最新帧异步推理、产品回退或 Intel 验证。产品集成范围与结论见 [0.7.0 更新说明](../../docs/RELEASE_070.md)。默认不遥测；只处理本项目生成的测试图和随软件保存的预览照片。

@@ -60,7 +60,7 @@ public partial class LensPreview : UserControl
         }
         if (e.PropertyName is nameof(GamingViewModel.MovementMode) or nameof(GamingViewModel.WheelZoomEnabled)) UpdateMovement();
         if (e.PropertyName is not (nameof(GamingViewModel.EffectiveFrameWidth) or nameof(GamingViewModel.EffectiveFrameHeight)
-            or nameof(GamingViewModel.Zoom) or nameof(GamingViewModel.Sharpening)
+            or nameof(GamingViewModel.Zoom) or nameof(GamingViewModel.Sharpening) or nameof(GamingViewModel.ImageMode)
             or nameof(GamingViewModel.SelectedMonitor) or nameof(GamingViewModel.FrameRate)
             or nameof(GamingViewModel.MovementMode) or nameof(GamingViewModel.PositionResetVersion)
             or nameof(GamingViewModel.WheelZoomEnabled) or nameof(GamingViewModel.BorderColor))) return;
@@ -92,7 +92,7 @@ public partial class LensPreview : UserControl
         var renderer=_renderer ??= new();
         var settings = new LensPreviewSettings(monitor.Bounds.Width,monitor.Bounds.Height,
             _model.EffectiveFrameWidth,_model.EffectiveFrameHeight,_model.Zoom,_model.Sharpening,_model.FrameRate,
-            _pointerX,_pointerY,_verticalGuide,_horizontalGuide,_model.BorderColorRgb);
+            _pointerX,_pointerY,_verticalGuide,_horizontalGuide,_model.BorderColorRgb,_model.ImageMode);
         try
         {
             var result=await Task.Run(() => renderer.Render(settings));

@@ -26,8 +26,17 @@ public sealed record GamingPreferences
     public LensMovementMode MovementMode { get; init; } = LensMovementMode.Fixed;
     public bool WheelZoomEnabled { get; init; } = true;
     public string BorderColor { get; init; } = LensBorderColor.Default;
+    [JsonNumberHandling(JsonNumberHandling.AllowNamedFloatingPointLiterals)]
+    public double Zoom { get; init; } = LensZoom.Default;
+    public LensImageMode LensImageMode { get; init; } = LensImageMode.Clear;
+    [JsonNumberHandling(JsonNumberHandling.AllowNamedFloatingPointLiterals)]
+    public double Sharpness { get; init; } = LensImageSettings.DefaultSharpness;
+    public GamingPreferences Normalize() => this with { Zoom=LensZoom.Normalize(Zoom),
+        LensImageMode=LensImageSettings.NormalizeMode(LensImageMode),Sharpness=LensImageSettings.NormalizeSharpness(Sharpness) };
     [JsonIgnore] public bool IsValid => Enum.IsDefined(FrameSizePreset) && Enum.IsDefined(AspectRatio) && FrameWidth is >= 160 and <= 1600 &&
         FrameHeight is >= 120 and <= 1200 && (ToggleShortcut is null || ToggleShortcut.IsValid) &&
         (ActivationMode is LensActivationMode.Toggle or LensActivationMode.Hold) &&
-        (MovementMode is LensMovementMode.Movable or LensMovementMode.Fixed) && LensBorderColor.TryParse(BorderColor,out _);
+        (MovementMode is LensMovementMode.Movable or LensMovementMode.Fixed) && LensBorderColor.TryParse(BorderColor,out _) &&
+        Zoom == LensZoom.Normalize(Zoom) && LensImageMode == LensImageSettings.NormalizeMode(LensImageMode) &&
+        Sharpness == LensImageSettings.NormalizeSharpness(Sharpness);
 }

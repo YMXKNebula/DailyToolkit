@@ -4,7 +4,7 @@ public sealed record PixelBounds(int Left, int Top, int Width, int Height);
 public sealed record SourceArea(double Left, double Top, double Width, double Height);
 public sealed record LensLayout(PixelBounds Output, SourceArea Source)
 {
-    public const double MaximumZoom=10;
+    public const double MaximumZoom=LensZoom.Maximum;
     public static LensLayout Calculate(PixelBounds monitor, int width, int height, double zoom, int centerX, int centerY)
     {
         if (monitor.Width <= 0 || monitor.Height <= 0 || width <= 0 || height <= 0 ||

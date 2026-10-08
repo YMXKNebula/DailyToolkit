@@ -41,6 +41,13 @@ public partial class App : Application
             }
             return;
         }
+        if (e.Args is ["--benchmark-lens-upgrade",var outputDirectory,var oldShader])
+        {
+            ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            try { await LensUpgradeBenchmark.RunAsync(Path.GetFullPath(outputDirectory),Path.GetFullPath(oldShader)); Shutdown(); }
+            catch (Exception exception) { await File.WriteAllTextAsync(Path.GetFullPath(outputDirectory)+".error.txt",exception.ToString()); Shutdown(1); }
+            return;
+        }
         if (e.Args is ["--check-lens-shortcuts", var shortcutOutput])
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -15,6 +16,9 @@ public partial class MainWindow
 {
     private Storyboard? _navigationStoryboard;
     private int _navigationGeneration;
+    private FrameworkElement? _navigationClickOption;
+    private Point _navigationClickOrigin;
+    private int _navigationClickGeneration;
 
     private BitmapSource CaptureBodySnapshot()
     {
@@ -31,21 +35,39 @@ public partial class MainWindow
 
     private void NavigateWithTide(object sender,RoutedEventArgs e)
     {
-        if (((FrameworkElement)sender).DataContext is not NavigationItem item || item.Id == _viewModel.Page) return;
+        var option=(FrameworkElement)sender;
+        var origin=_navigationClickOption == option ? _navigationClickOrigin :
+            option.TranslatePoint(new Point(option.ActualWidth/2,option.ActualHeight/2),BodyContent);
+        _navigationClickOption=null;
+        NavigateWithTide(option,origin);
+    }
+
+    private void NavigationPointerReleased(object sender,MouseButtonEventArgs e)
+    {
+        _navigationClickOption=(FrameworkElement)sender;
+        _navigationClickOrigin=e.GetPosition(BodyContent);
+        var generation=++_navigationClickGeneration;
+        // Click is raised by the following mouse-up handler. Do not reuse its
+        // coordinates for a later keyboard or automation invocation.
+        Dispatcher.BeginInvoke(DispatcherPriority.Input,new Action(() =>
+        { if (generation == _navigationClickGeneration) _navigationClickOption=null; }));
+    }
+
+    internal void NavigateWithTide(FrameworkElement option,Point origin)
+    {
+        if (option.DataContext is not NavigationItem item || item.Id == _viewModel.Page) return;
         var animate=_viewModel.PageAnimationsEnabled && SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast && IsVisible;
         var snapshot=animate ? CaptureBodySnapshot() : null;
-        var option=(FrameworkElement)sender;
-        var origin=option.TranslatePoint(new Point(0,option.ActualHeight/2),BodyContent);
         FinishPageTransition(); FinishNavigationTransition();
         if (snapshot is null) { _viewModel.NavigateCommand.Execute(item); return; }
         NavigationTransition.Origin=origin; NavigationTransition.Snapshot=snapshot;
-        NavigationTransition.ConnectionX=SidebarSurface.ActualWidth; NavigationTransition.OptionHeight=option.ActualHeight;
+        NavigationTransition.Region=NavigationTransitionRegion(option);
         NavigationTransition.Progress=0; NavigationTransition.Visibility=Visibility.Visible;
         MainContent.IsHitTestVisible=false;
         _viewModel.NavigateCommand.Execute(item);
         var generation=_navigationGeneration;
         var storyboard=_navigationStoryboard=new Storyboard();
-        var animation=new DoubleAnimation(0,1,_viewModel.AnimationDuration(140));
+        var animation=new DoubleAnimation(0,1,_viewModel.AnimationDuration(220));
         Storyboard.SetTarget(animation,NavigationTransition); Storyboard.SetTargetProperty(animation,new PropertyPath(TideTransition.ProgressProperty));
         storyboard.Children.Add(animation);
         storyboard.Completed += (_,_) => { if (generation == _navigationGeneration) FinishNavigationTransition(); };
@@ -53,11 +75,28 @@ public partial class MainWindow
     }
 
     internal void SeekNavigationTransition(TimeSpan offset) => _navigationStoryboard?.SeekAlignedToLastTick(this,offset,TimeSeekOrigin.BeginTime);
+    private Geometry NavigationTransitionRegion(FrameworkElement option)
+    {
+        var row=option;
+        for (DependencyObject? parent=option; parent is not null; parent=VisualTreeHelper.GetParent(parent))
+            if (parent is Border { Name:"NavigationRow" } border) { row=border; break; }
+        var origin=row.TranslatePoint(new Point(),BodyContent);
+        var width=SidebarSurface.ActualWidth-origin.X;
+        var region=new GeometryGroup { FillRule=FillRule.Nonzero };
+        region.Children.Add(new RectangleGeometry(new Rect(origin,new Size(width,row.ActualHeight)),12,12));
+        region.Children.Add(new RectangleGeometry(new Rect(origin.X+12,origin.Y,Math.Max(0,width-12),row.ActualHeight)));
+        var bridge=NavigationConnector.CreateShape(new Size(NavigationBridge.Width,row.ActualHeight+16)).Clone();
+        bridge.Transform=new TranslateTransform(SidebarSurface.ActualWidth-NavigationBridge.Width,origin.Y-8);
+        region.Children.Add(bridge);
+        region.Children.Add(new RectangleGeometry(new Rect(ConfigurationSurface.TranslatePoint(new Point(),BodyContent),ConfigurationSurface.RenderSize),12,12));
+        region.Freeze(); return region;
+    }
     private void FinishNavigationTransition()
     {
         ++_navigationGeneration;
         _navigationStoryboard?.Remove(this); _navigationStoryboard=null;
         NavigationTransition.Snapshot=null; NavigationTransition.Visibility=Visibility.Collapsed;
+        NavigationTransition.Region=null;
         MainContent.IsHitTestVisible=true;
     }
 

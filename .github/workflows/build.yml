@@ -30,6 +30,6 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: DailyToolkit-win-x64
-          path: artifacts/DailyToolkit-win-x64.zip
+          path: artifacts/DailyToolkit-*-win-x64.zip
           if-no-files-found: error
           retention-days: 14

@@ -67,7 +67,7 @@ internal static partial class Program
         gaming.FrameWidth=800; gaming.FrameHeight=240;
         Require(gaming.FrameSizeText == "800 × 240 像素","Changing width changed the height");
         for (var i=0;i<100;i++) gaming.AdjustZoom(120);
-        Require(gaming.Zoom == 10 && !gaming.IsActive,"Wheel upper limit changed activation state");
+        Require(gaming.Zoom == 16 && !gaming.IsActive,"Wheel upper limit changed activation state");
         for (var i=0;i<100;i++) gaming.AdjustZoom(-120);
         Require(gaming.Zoom == 1 && !gaming.IsActive,"Wheel lower limit changed activation state");
         Console.WriteLine("PASS Movable lenses drag from the picture or border; fixed lenses pass clicks through; wheel routing and cleanup stay safe");

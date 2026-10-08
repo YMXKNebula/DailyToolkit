@@ -35,9 +35,13 @@ internal static partial class Program
                 }
                 if (args is ["--interface-checks",var images])
                 { await CheckToolkitInterfaceAsync(images); exitCode=0; return; }
+                if (args is ["--lens-upgrade-live",var outputPath])
+                {await CheckLiveImageUpgradeAsync(outputPath);exitCode=0;return;}
+                if (args is ["--lens-upgrade-live",var matrixPath,var monitorIndex])
+                {await CheckLiveImageUpgradeAsync(matrixPath,int.Parse(monitorIndex));exitCode=0;return;}
                 if (!args.Contains("--live-lens-only")) await CheckAsync();
                 if (args.Contains("--live-lens") || args.Contains("--live-lens-only"))
-                { await CheckLiveLensMovementAsync(); await CheckLivePresetRelayAsync(); }
+                { await CheckLiveLensMovementAsync(); await CheckLivePresetRelayAsync(); await CheckLivePresetRelayAsync(16); await CheckLiveImageUpgradeAsync(); }
                 exitCode = 0;
             }
             catch (Exception exception) { Console.WriteLine($"FAIL {exception}"); }
@@ -65,6 +69,7 @@ internal static partial class Program
         await CheckSingleInstanceAsync();
         await CheckBackgroundShortcutAsync();
         LensDiagnostics.CheckShader();
+        CheckLensUpgrade();
         Console.WriteLine("PASS Actual Direct3D shader preserves colors and reconstructs subpixel edges");
         await CheckPhotoPreviewAsync();
         CheckLensPointer();
@@ -74,6 +79,6 @@ internal static partial class Program
         await CheckToolkitInterfaceAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("30/30 desktop checks passed");
+        Console.WriteLine("31/31 desktop checks passed");
     }
 }
