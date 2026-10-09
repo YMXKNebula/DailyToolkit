@@ -32,6 +32,7 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
     private LensMovementState? _pendingMove;
     private bool _moveQueued;
     private int _generation;
+    private int _firstFrameGeneration;
     // Changing capture sources must not invalidate an already queued drag.
     private int _movementGeneration;
     private bool _verticalGuide,_horizontalGuide;
@@ -194,14 +195,7 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
         var generation=++_generation;
         var capture=_capture=new(_renderer!,CaptureInterop.ForMonitor(monitor.Handle),layout.Source,_sharpening,_frameRate,_borderColor,_imageMode);
         capture.UpdateHud(_zoomHud.Frame(HudTime));
-        capture.FirstFrame += () => Application.Current.Dispatcher.BeginInvoke(() =>
-        {
-            if (generation != _generation || !IsActive) return;
-            _startupTimer?.Stop();
-            _visible=true;
-            _window?.Show(); UpdateActiveStatus();
-            VisibilityChanged?.Invoke();
-        });
+        capture.FirstFrame += () => Application.Current.Dispatcher.BeginInvoke(() => OnFirstFrame(generation));
         capture.Failed += reason => Application.Current.Dispatcher.BeginInvoke(() =>
         {
             if (generation != _generation) return;
@@ -209,20 +203,34 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
         });
         _startupTimer?.Stop();
         _startupTimer = new DispatcherTimer { Interval=TimeSpan.FromSeconds(5) };
-        _startupTimer.Tick += (_,_) =>
-        {
-            if (generation != _generation || !IsRequestedVisible) return;
-            Stop(); Status="暂时没有取得画面，请确认 Windows 允许捕获，并使用窗口或无边框模式。";
-        };
-        _=StartCaptureAsync(capture,generation);
+        _startupTimer.Tick += (_,_) => OnStartupTimeout(generation);
+        _=StartCaptureAsync(capture.StartAsync(),generation);
     }
 
-    private async Task StartCaptureAsync(LensCapture capture,int generation)
+    private void OnFirstFrame(int generation)
+    {
+        if (generation != _generation || !IsActive) return;
+        _firstFrameGeneration=generation;
+        _startupTimer?.Stop();
+        _visible=true;
+        _window?.Show(); UpdateActiveStatus();
+        VisibilityChanged?.Invoke();
+    }
+
+    private void OnStartupTimeout(int generation)
+    {
+        if (generation != _generation || !IsRequestedVisible || _firstFrameGeneration == generation) return;
+        Stop(); Status="暂时没有取得画面，请确认 Windows 允许捕获，并使用窗口或无边框模式。";
+    }
+
+    private async Task StartCaptureAsync(Task captureStart,int generation)
     {
         try
         {
-            await capture.StartAsync();
-            if (generation == _generation && IsActive) _startupTimer?.Start();
+            await captureStart;
+            // A first-frame callback may already have run while startup was pending.
+            // Visibility cannot identify readiness: relay still shows the old frame.
+            if (generation == _generation && IsActive && _firstFrameGeneration != generation) _startupTimer?.Start();
         }
         catch (Exception exception)
         {

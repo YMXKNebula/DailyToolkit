@@ -33,6 +33,14 @@ internal static partial class Program
                 { await RunNotesInputBackdropAsync(readyFile); exitCode = 0; return; }
                 if (args is ["--lens-image-checks"])
                 { LensDiagnostics.CheckShader();CheckLensUpgrade();exitCode=0;return; }
+                if (args is ["--startup-timing-checks"])
+                { await CheckLensStartupTimingAsync(); exitCode=0; return; }
+                if (args is ["--renderer-dispose-checks"])
+                { CheckRendererRepeatedDispose(); exitCode=0; return; }
+                if (args is ["--stability-checks"])
+                { await CheckLensStartupTimingAsync(); await CheckNotesStabilityAsync(); exitCode=0; return; }
+                if (args is ["--resource-stability", var resourceReport])
+                { await CheckLensResourceStabilityAsync(resourceReport); exitCode=0; return; }
                 if (args is ["--notes-checks", var notesImages])
                 {
                     await CheckNotesPersistenceAsync(); CheckNotesFocus(); await CheckNotesShortcutsAsync();
@@ -40,6 +48,8 @@ internal static partial class Program
                 }
                 if (args is ["--notes-live", var notesReport])
                 { await CheckLiveNotesAsync(notesReport); exitCode = 0; return; }
+                if (args is ["--notes-cross-process-repeat"])
+                { await CheckNotesRepeatedCrossProcessAsync(); exitCode = 0; return; }
                 if (args is ["--drag-benchmark",var output])
                 {
                     await RunDragBenchmarkAsync(output); exitCode=0; return;
@@ -80,21 +90,24 @@ internal static partial class Program
         await CheckSingleInstanceAsync();
         await CheckBackgroundShortcutAsync();
         await CheckNotesPersistenceAsync();
+        await CheckNotesStabilityAsync();
         CheckNotesFocus();
         await CheckNotesShortcutsAsync();
         await CheckNotesAppearanceAndNavigationAsync();
         await CheckNotesWindowAsync();
         LensDiagnostics.CheckShader();
         CheckLensUpgrade();
+        CheckRendererRepeatedDispose();
         Console.WriteLine("PASS Actual Direct3D shader preserves colors and reconstructs subpixel edges");
         await CheckPhotoPreviewAsync();
         CheckLensPointer();
+        await CheckLensStartupTimingAsync();
         await CheckPreviewLayoutAsync();
         await CheckTransitionContinuityAsync();
         await CheckThemeEditingAsync();
         await CheckToolkitInterfaceAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("38/38 desktop checks passed");
+        Console.WriteLine("41/41 desktop checks passed");
     }
 }

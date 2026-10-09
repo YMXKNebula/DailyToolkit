@@ -51,6 +51,7 @@ internal sealed class LensGpuRenderer : IDisposable
     private readonly bool _supportsQuality;
     private Buffer? _parameters;
     private int _width, _height;
+    private bool _disposed;
     public long FramesRendered { get; private set; }
     internal bool HasQualityIntermediate => _qualityOutput is not null;
     internal ID3D11Texture2D? QualityTargetForDiagnostics => _qualityOutput;
@@ -249,6 +250,8 @@ internal sealed class LensGpuRenderer : IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed=true;
         _context?.ClearState(); _context?.Flush();
         ReleaseQualityTarget(); _qualityScale?.Dispose(); _qualityResolve?.Dispose();
         _sourceView?.Dispose(); _source?.Dispose(); _target?.Dispose(); _output?.Dispose(); _backBuffer?.Dispose();

@@ -234,10 +234,14 @@ internal static class LensShortcutDiagnostics
             Mouse(0x0800,data:120); await Task.Delay(80);
             if (gaming.Zoom != 2.25) throw new InvalidOperationException("Disabled wheel zoom changed the live lens.");
             gaming.WheelZoomEnabled=true;
-            for (var i=0;i<40;i++) pointer.Process(0x20A,moved.Left+20,moved.Top+20,120);
-            if (gaming.Zoom != 10 || !gaming.IsVisible) throw new InvalidOperationException("Wheel zoom hid the lens at its upper limit.");
-            for (var i=0;i<40;i++) pointer.Process(0x20A,moved.Left+20,moved.Top+20,-120);
-            if (gaming.Zoom != 1 || !gaming.IsVisible) throw new InvalidOperationException("Wheel zoom hid the lens at its lower limit.");
+            var lower=LensZoom.Normalize(0);
+            var steps=(int)Math.Ceiling((gaming.MaximumZoom-lower)/LensZoom.Step)+1;
+            for (var i=0;i<steps;i++) pointer.Process(0x20A,moved.Left+20,moved.Top+20,120);
+            await Wait(() => gaming.Zoom == gaming.MaximumZoom,"Queued wheel input did not reach the current upper zoom limit.");
+            if (!gaming.IsVisible) throw new InvalidOperationException("Wheel zoom hid the lens at its upper limit.");
+            for (var i=0;i<steps;i++) pointer.Process(0x20A,moved.Left+20,moved.Top+20,-120);
+            await Wait(() => gaming.Zoom == lower,"Queued wheel input did not reach the current lower zoom limit.");
+            if (!gaming.IsVisible) throw new InvalidOperationException("Wheel zoom hid the lens at its lower limit.");
             await Task.Delay(120);
             if (!gaming.IsVisible) throw new InvalidOperationException("Rendering failed after dragging or repeated wheel changes.");
         }
@@ -545,7 +549,8 @@ internal static class LensShortcutDiagnostics
                 pointer.Process(0x200,moved.Left+82,moved.Top+72))
                 throw new InvalidOperationException("Fixed mode still allowed dragging.");
             pointer.Process(0x20A,moved.Left+20,moved.Top+20,120);
-            if (gaming.Zoom != 1.25 || !gaming.IsVisible) throw new InvalidOperationException("Fixed mode disabled wheel zoom.");
+            await Wait(() => gaming.Zoom == 1.25,"Queued fixed-mode wheel input did not update zoom.");
+            if (!gaming.IsVisible) throw new InvalidOperationException("Fixed mode wheel zoom hid the lens.");
             MoveMouse(moved.Left+160,moved.Top+120);
             await Task.Delay(30);
             if (WindowFromPoint(new() { X=moved.Left+160,Y=moved.Top+120 }) != new WindowInteropHelper(backdrop).Handle)
@@ -656,7 +661,7 @@ internal static class LensShortcutDiagnostics
                 LiveDragIndependent=true,PreviewDragIndependent=true,PreviewFixedKeepsPosition=true,ResetDefaultsResetsPreview=true,
                 NativeWindowReceivesDrag=true,CompositedPictureActuallyMoves=true,DesktopGuideCoordinates=true,DesktopGuidesHideOnRelease=true,
                 DragContinuesOutsideOriginalFrame=true,DesktopGuidesVisibleOutsideLens=true,DesktopGuidesAvoidMagnifiedPicture=true,
-                RealCursorFollowsDrag=true,ContinuousRelativeMouseDrag=true,TenTimesRemainsVisible=true,
+                RealCursorFollowsDrag=true,ContinuousRelativeMouseDrag=true,MaximumZoom=gaming.MaximumZoom,MaximumZoomRemainsVisible=true,
                 LiveWheelCanBeDisabled=true,PreviewWheelCanBeDisabled=true,
                 LiveParametersReuseCapture=true,LatestSourceSettingsWin=true,ResizedPreviewDragUsesDisplayedCenter=true,
                 LiveBorderColorUpdatesWithoutRestart=true,PreviewBorderColorMatchesLive=true,

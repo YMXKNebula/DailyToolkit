@@ -48,7 +48,7 @@
       <TextBlock Text="高度" VerticalAlignment="Center"/><TextBox x:Name="NoteHeight" Text="{Binding Height, StringFormat=0, UpdateSourceTrigger=LostFocus}" PreviewTextInput="SizeInput" DataObject.Pasting="PasteSize" LostKeyboardFocus="CommitSize" Width="70" Margin="8,0,0,8" Padding="6"/></WrapPanel>
      <CheckBox x:Name="ManualResize" Content="允许拖动右下角调整大小" IsChecked="{Binding AllowManualResize}" Margin="0,4,0,12"/>
      <Button Content="重置位置" Click="ResetPosition" HorizontalAlignment="Left"/>
-     <TextBlock Text="尺寸以整数保存。聚焦快捷键可切换编辑状态，Esc 也可取消聚焦。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
+     <TextBlock Text="宽高只填整数。按聚焦快捷键开始或结束编辑，Esc 取消聚焦。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
     </StackPanel></Border>
     <Border x:Name="AppearanceCard" Style="{StaticResource Card}" Margin="0,0,0,12">
      <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>

@@ -1,13 +1,13 @@
 # DailyToolkit 重构记录（历史）
 
-重构以已验证的 0.3.7 为基线，包含 10× 放大、滚轮开关、实时锐化和着色器预热。以下记录对应当时的实现，当前功能以 [README](../README.md) 为准。
+这次修改基于已测试的 0.3.7，包含 10× 放大、滚轮开关、实时锐化和着色器预热。以下记录对应当时的实现，当前功能以 [README](../README.md) 为准。
 
 ## 实际改动
 
 | 文件 | 改动及目的 |
 | --- | --- |
 | `src/DailyToolkit.Desktop/Presentation/GamingViewModel.cs` | 保留绑定、命令、配置、收藏、显示器选择；把原生运行时交给具体会话对象。保留既有 internal 诊断入口。 |
-| `src/DailyToolkit.Desktop/Gaming/ScreenLensSession.cs` | 新增运行时资源所有者；集中启停、首帧、失败、超时、拖动、辅助线、布局和释放。 |
+| `src/DailyToolkit.Desktop/Gaming/ScreenLensSession.cs` | 新增持有运行资源的会话对象；集中启停、首帧、失败、超时、拖动、辅助线、布局和释放。 |
 | `src/DailyToolkit.Desktop/Gaming/LensShortcutDiagnostics.cs` | 按注册、首次后台开启、真实拖动、滚轮、预览、反复启停、固定与重置、启动取消、按住、失败清理拆方法；临时诊断会话负责测试窗口和输入清理。 |
 | `src/DailyToolkit.Desktop/Gaming/LensCapture.cs` | 只在终止性捕获异常或参数更新异常时记录原始异常；成功帧处理不变。 |
 | `src/DailyToolkit.Desktop/Gaming/LensGpuRenderer.cs` | 保留渲染代码；预热失败增加原始异常记录，嵌入资源名称随项目改名。 |

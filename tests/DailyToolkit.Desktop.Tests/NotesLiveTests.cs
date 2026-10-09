@@ -16,7 +16,7 @@ internal static partial class Program
     { public int X, Y; public uint Data, Flags, Time; public UIntPtr Extra; }
     [StructLayout(LayoutKind.Sequential)] private struct NotesPoint { public int X, Y; }
     [DllImport("user32.dll", EntryPoint = "GetCursorPos")] private static extern bool ReadNotesCursor(out NotesPoint point);
-    [DllImport("user32.dll", EntryPoint = "SetCursorPos")] private static extern bool MoveNotesCursor(int x, int y);
+    [DllImport("user32.dll", EntryPoint = "SetCursorPos", SetLastError = true)] private static extern bool MoveNotesCursor(int x, int y);
     [DllImport("user32.dll", EntryPoint = "GetAsyncKeyState")] private static extern short NotesKeyState(int key);
     [DllImport("user32.dll")] private static extern uint GetDoubleClickTime();
     [DllImport("user32.dll", EntryPoint = "WindowFromPoint")] private static extern IntPtr NotesWindowAtPoint(NotesPoint point);

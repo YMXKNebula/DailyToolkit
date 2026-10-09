@@ -2,7 +2,7 @@
 
 用于测试 FSRCNN-small 2× 模型与 ONNX Runtime DirectML。它是单独的实验工程，未加入主解决方案，正式软件不附带模型或推理运行时。
 
-需要 .NET 10 SDK。构建此 csproj 后，运行程序并传入作者模型路径、输出目录及可选 DXGI 适配器索引。模型与许可证分别来自 [作者项目](https://github.com/Saafke/FSRCNN_Tensorflow) 和其 Apache-2.0 LICENSE；保留下载来源、许可及 SHA-256，禁止将评估用权重误认为本项目自有素材。
+需要 .NET 10 SDK。构建此 csproj 后，运行程序并传入模型路径、输出目录及可选 DXGI 适配器索引。权重由[原作者](https://github.com/Saafke/FSRCNN_Tensorflow)提供，使用 Apache-2.0 许可证；发布时需保留来源、许可证和 SHA-256。
 
 程序转换冻结模型、验证 DirectML/CPU 数值一致性、记录 GPU provider profile，测量含张量上传和读回的同步推理，并生成 15 类离线画质图。4–16× 图像由真正 2× 推理加传统空间放大构成，不是对应倍率的神经网络推理。
 
