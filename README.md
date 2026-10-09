@@ -2,7 +2,7 @@
 
 Windows 本地工具集，提供屏幕局部放大、浮笺和电脑信息查看，使用 C#、.NET 10 和 WPF。
 
-当前源码版本为 **0.7.3**，改动记录见 [更新说明](docs/RELEASE_073.md)。已公开的便携包可在 [Releases](https://github.com/YMXKNebula/DailyToolkit/releases) 下载。解压后运行 `DailyToolkit.exe`，无需另装 .NET。目前已在 Windows 11 x64 上验证。
+当前源码版本为 **0.7.4**，改动记录见 [更新说明](docs/RELEASE_074.md)。便携包可在 [Releases](https://github.com/YMXKNebula/DailyToolkit/releases) 下载。解压后运行 `DailyToolkit.exe`，无需另装 .NET。目前已在 Windows 11 x64 上验证。
 
 ## 屏幕局部放大
 

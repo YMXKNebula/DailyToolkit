@@ -163,7 +163,7 @@ internal static partial class Program
             Require(notes.Preferences == original, "App theme reset independent note appearance");
             Require(await notes.FlushAsync(), "Notes settings did not persist");
             var window = new MainWindow(model, enableShortcuts: false) { ShowActivated = false, ShowInTaskbar = false,
-                Left = -20000, Top = -20000, Width = 1040, Height = 960, WindowStartupLocation = WindowStartupLocation.Manual };
+                Left = -20000, Top = -20000, Width = 1040, Height = 800, WindowStartupLocation = WindowStartupLocation.Manual };
             var closed = new TaskCompletionSource(); window.Closed += (_, _) => { closedByWindow = true; closed.TrySetResult(); };
             IEnumerable<DependencyObject> Descendants(DependencyObject root)
             {
@@ -227,22 +227,30 @@ internal static partial class Program
                         "Notes checkboxes ignored the current theme's readable text color");
                     var scroll = (ScrollViewer)view.FindName("SettingsScroll"); scroll.ScrollToTop();
                     await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
-                    var preview = (FrameworkElement)view.FindName("AppearancePreview"); var previewTop = preview.TranslatePoint(new(), view);
                     Image("settings-" + (dark ? "dark" : "light") + "-top");
-                    scroll.ScrollToBottom(); await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
-                    Require(preview.IsVisible && scroll.VerticalOffset > 0 && preview.TranslatePoint(new(), view) == previewTop &&
+                    var appearanceCard = (FrameworkElement)view.FindName("AppearanceCard");
+                    appearanceCard.BringIntoView(); await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                    var appearanceScroll = (ScrollViewer)view.FindName("AppearanceScroll"); appearanceScroll.ScrollToTop();
+                    await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                    var preview = (FrameworkElement)view.FindName("AppearancePreview"); var previewTop = preview.TranslatePoint(new(), view);
+                    Require(preview.IsDescendantOf(appearanceCard) && picker.IsDescendantOf(appearanceCard),
+                        "Preview was separated from the background and font settings area");
+                    Image("settings-" + (dark ? "dark" : "light") + "-background");
+                    appearanceScroll.ScrollToBottom(); await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                    Require(preview.IsVisible && appearanceScroll.VerticalOffset > 0 && preview.TranslatePoint(new(), view) == previewTop &&
                         previewTop.Y >= 0 && previewTop.Y + preview.ActualHeight <= view.ActualHeight && Grid.GetColumn((UIElement)view.FindName("PreviewPanel")) == 1,
-                        "Adjacent preview moved out of view while scrolling appearance controls");
-                    Image("settings-" + (dark ? "dark" : "light") + "-bottom");
-                    var fontCard = picker;
-                    fontCard.BringIntoView(); await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                        $"Embedded preview moved out of view while scrolling appearance controls: top={previewTop}, height={preview.ActualHeight}, view={view.ActualHeight}, offset={appearanceScroll.VerticalOffset}");
                     Image("settings-" + (dark ? "dark" : "light") + "-font");
+                    scroll.ScrollToBottom(); await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                    Image("settings-" + (dark ? "dark" : "light") + "-bottom");
                 }
                 window.Width = 680; window.Height = 700;
                 await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
-                var narrowScroll = (ScrollViewer)view.FindName("SettingsScroll"); var previewPanel = (FrameworkElement)view.FindName("PreviewPanel");
+                ((FrameworkElement)view.FindName("AppearanceCard")).BringIntoView();
+                await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                var narrowScroll = (ScrollViewer)view.FindName("AppearanceScroll"); var previewPanel = (FrameworkElement)view.FindName("PreviewPanel");
                 Require(Grid.GetColumn(previewPanel) == 0 && Grid.GetRow(narrowScroll) == 1 && previewPanel.ActualHeight > 100,
-                    "Narrow notes page did not keep its preview above the scrolling settings");
+                    "Narrow appearance area did not keep its embedded preview above the controls");
                 var narrowTop = previewPanel.TranslatePoint(new(), view);
                 narrowScroll.ScrollToBottom(); await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
                 Require(narrowTop == previewPanel.TranslatePoint(new(), view) && narrowScroll.VerticalOffset > 0,
@@ -250,7 +258,7 @@ internal static partial class Program
                 Image("settings-light-narrow");
             }
             finally { window.Close(); await closed.Task.WaitAsync(TimeSpan.FromSeconds(10)); }
-            Console.WriteLine("PASS Notes independent presets, navigation star, mouse switches, position radios, selection-only fonts, color swatches and persistent wide/narrow previews");
+            Console.WriteLine("PASS Notes independent presets, navigation star, mouse switches, position radios, selection-only fonts, color swatches and embedded wide/narrow appearance previews");
         }
         finally { if (!closedByWindow) model?.Dispose(); directory.Delete(true); }
     }
