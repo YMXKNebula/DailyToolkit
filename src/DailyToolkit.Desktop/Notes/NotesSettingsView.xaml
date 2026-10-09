@@ -103,12 +103,13 @@
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <CheckBox x:Name="PreviewFocused" Content="聚焦效果预览" IsChecked="True" Checked="PreviewFocusChanged" Unchecked="PreviewFocusChanged" Margin="0,0,0,12"/>
         <Border x:Name="AppearancePreview" Grid.Row="1" Padding="4,3,4,3" BorderThickness="2" ClipToBounds="True">
-         <Grid><Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="*"/><RowDefinition Height="{DynamicResource NotesFooterHeight}"/></Grid.RowDefinitions>
+         <Grid><Grid.RowDefinitions><RowDefinition Height="{DynamicResource NotesHeaderHeight}"/><RowDefinition Height="*"/><RowDefinition Height="{DynamicResource NotesFooterHeight}"/></Grid.RowDefinitions>
           <Border x:Name="PreviewMove" Width="46" Height="5" CornerRadius="2.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
           <Border x:Name="PreviewEditorFrame" Grid.Row="1" BorderThickness="1" CornerRadius="6">
-           <TextBox x:Name="PreviewText" Text="待办&#xA;&#xA;买菜&#xA;整理书桌&#xA;读书 30 分钟" TextWrapping="Wrap" IsReadOnly="True" AcceptsReturn="True" Padding="6,7" BorderThickness="0" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+           <Grid><Grid.RowDefinitions><RowDefinition Height="{DynamicResource NotesTextTopInset}"/><RowDefinition Height="*"/><RowDefinition Height="{DynamicResource NotesTextBottomInset}"/></Grid.RowDefinitions>
+           <TextBox x:Name="PreviewText" Grid.Row="1" Text="待办&#xA;&#xA;买菜&#xA;整理书桌&#xA;读书 30 分钟" TextWrapping="Wrap" IsReadOnly="True" AcceptsReturn="True" Padding="6,7" BorderThickness="0" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <TextBox.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource NotesScrollBar}"/></TextBox.Resources>
-           </TextBox>
+           </TextBox></Grid>
           </Border>
           <Button x:Name="PreviewHide" Grid.Row="2" Width="28" Height="28" HorizontalAlignment="Left" IsHitTestVisible="False" Style="{StaticResource NotesHideButton}"/>
           <Thumb x:Name="PreviewResize" Grid.Row="2" Width="28" Height="28" HorizontalAlignment="Right" Focusable="False" IsHitTestVisible="False" Template="{StaticResource NotesResizeGrip}"/>

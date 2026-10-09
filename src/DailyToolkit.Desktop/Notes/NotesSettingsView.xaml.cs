@@ -13,12 +13,14 @@ namespace DailyToolkit.Desktop.Notes;
 public partial class NotesSettingsView : UserControl
 {
     private NotesViewModel? _model;
+    private readonly NotesDisplayArea _displayArea;
     internal Func<KeyboardShortcut?>? LensShortcut { get; set; }
     internal Action<bool>? ShortcutEditing { get; set; }
     internal Action? ToggleRequested { get; set; }
     public NotesSettingsView()
     {
         InitializeComponent();
+        _displayArea = new(AppearancePreview, PreviewText);
         DataContextChanged += (_, _) =>
         {
             if (_model is not null) _model.PropertyChanged -= Changed;
@@ -66,6 +68,7 @@ public partial class NotesSettingsView : UserControl
         if (_model is null) return;
         var preferences = _model.Preferences;
         var focused = PreviewFocused.IsChecked == true;
+        _displayArea.Apply(focused);
         NotesWindow.PaintChrome(AppearancePreview, PreviewEditorFrame, PreviewText, PreviewHide, PreviewResize, PreviewMove, preferences, focused);
         BackgroundColorSwatch.Background = NotesWindow.Brush(preferences.Background.Color, 1);
         FontColorSwatch.Background = NotesWindow.Brush(preferences.Font.Color, 1);

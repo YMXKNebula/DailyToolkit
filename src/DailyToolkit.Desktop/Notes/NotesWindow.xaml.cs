@@ -14,6 +14,7 @@ namespace DailyToolkit.Desktop.Notes;
 internal partial class NotesWindow : Window
 {
     private readonly NotesViewModel _model;
+    private readonly NotesDisplayArea _displayArea;
     private HwndSource? _source;
     private NotesPreferences? _applied;
     private Point _pressPoint;
@@ -29,6 +30,7 @@ internal partial class NotesWindow : Window
     public NotesWindow(NotesViewModel model)
     {
         InitializeComponent(); _model = model; DataContext = model;
+        _displayArea = new(NoteBackground, Editor);
         ApplyPreferences();
         SourceInitialized += (_, _) => { _source = HwndSource.FromHwnd(Handle); _source?.AddHook(Message); Place(); };
         _model.PropertyChanged += Changed;
@@ -82,6 +84,7 @@ internal partial class NotesWindow : Window
     private void ApplyFocusAppearance()
     {
         var preferences = _model.Preferences;
+        _displayArea.Apply(_model.IsFocused);
         PaintChrome(NoteBackground, EditorFrame, Editor, HideButton, ResizeGrip, MoveIndicator, preferences, _model.IsFocused);
         DragHandle.Cursor = _model.IsFocused && _model.Movable ? Cursors.SizeAll : Cursors.Arrow;
         DragHandle.ToolTip = _model.IsFocused && _model.Movable ? "按住顶部区域即可拖动。" : null;
@@ -98,7 +101,6 @@ internal partial class NotesWindow : Window
         // Scrollbars retain their layout space while becoming transparent and noninteractive.
         editor.Tag = focused;
         surface.Resources["NotesChromeOpacity"] = opacity;
-        surface.Resources["NotesFooterHeight"] = new GridLength(focused ? 28 : 6);
         surface.Resources["ScrollThumbBrush"] = Brush(preferences.FocusBorderColor, 1);
         surface.Resources["ScrollTrackBrush"] = Brush(preferences.FocusBorderColor, .12);
         editor.Foreground = Brush(preferences.Font.Color, opaque ? 1 : preferences.Font.Opacity);

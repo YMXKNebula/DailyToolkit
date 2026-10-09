@@ -329,6 +329,7 @@ internal static partial class Program
         try
         {
             await controller.Ready;
+            model.Text = "首行\n" + string.Join('\n', Enumerable.Range(1, 42).Select(line => $"初次显示第 {line} 行"));
             model.SetShortcut(false, new(3, 0x83, "Ctrl + Alt + F20"), null);
             model.SetShortcut(true, new(7, 0x83, "Ctrl + Alt + Shift + F20"), null);
             controller.ToggleFocus(); await controller.Pending;
@@ -337,7 +338,10 @@ internal static partial class Program
             // A real owned hotkey supplies legitimate last input. Posted WM_HOTKEY messages
             // cannot grant foreground rights and would give false results in a background test runner.
             PressNotesTestHotkey(); await Task.Delay(120); await controller.Pending;
-            Require(model.IsFocused && foreground.Current == controller.NoteWindow?.Handle, "Real registered hotkey did not give notes foreground focus");
+            for (var attempt = 0; attempt < 40 && !model.IsFocused; attempt++) { await Task.Delay(25); await controller.Pending; }
+            Require(model.IsFocused && foreground.Current == controller.NoteWindow?.Handle,
+                $"Real registered hotkey did not give notes foreground focus: visible={model.IsVisible}, focused={model.IsFocused}, foreground={foreground.Current}, note={controller.NoteWindow?.Handle}, notice={model.Notice}");
+            Require(controller.NoteWindow!.NoteEditor.GetFirstVisibleLineIndex() == 0, "Showing a long note for the first time skipped its first line");
             Require(companion.Activate(), "Test companion could not activate from its foreground process"); await Task.Delay(60);
             controller.Toggle(); await controller.Pending;
             PressNotesTestHotkey(); await Task.Delay(120); await controller.Pending;
@@ -429,6 +433,30 @@ internal static partial class Program
             window.UpdateLayout();
             Require(new Size(window.NoteEditor.ActualWidth, window.NoteEditor.ActualHeight) == focusedEditorSize,
                 "Refocusing did not restore the original editor area");
+            foreach (var offset in new[] { 160d, double.MaxValue })
+            {
+                if (offset == double.MaxValue) window.NoteEditor.ScrollToEnd(); else window.NoteEditor.ScrollToVerticalOffset(offset);
+                await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                var visibleIndex = window.NoteEditor.GetCharacterIndexFromPoint(new Point(20, window.NoteEditor.ActualHeight / 2), true);
+                window.NoteEditor.Select(visibleIndex, 0);
+                var character = window.NoteEditor.GetRectFromCharacterIndex(visibleIndex);
+                var position = window.NoteEditor.TranslatePoint(character.TopLeft, window);
+                var originalOffset = window.NoteEditor.VerticalOffset;
+                WindowImage(offset == double.MaxValue ? "floating-notes-end-focused" : "floating-notes-middle-focused");
+                controller.Unfocus(); await Task.Delay(100); window.UpdateLayout();
+                var expanded = window.NoteEditor.GetRectFromCharacterIndex(visibleIndex);
+                var top = writingFrame.TranslatePoint(new(), window);
+                Require(Math.Abs(top.X - top.Y) < .1 && Math.Abs(top.X - (window.Height - top.Y - writingFrame.ActualHeight)) < .1,
+                    "Unfocused display area did not use equal top, bottom and side margins");
+                Require((window.NoteEditor.TranslatePoint(expanded.TopLeft, window) - position).Length < .1 && expanded.Height == character.Height,
+                    $"Expanding a scrolled note moved or stretched visible text: offset={originalOffset}");
+                WindowImage(offset == double.MaxValue ? "floating-notes-end-unfocused" : "floating-notes-middle-unfocused");
+                controller.ToggleFocus(); await controller.Pending; await Task.Delay(100); window.UpdateLayout();
+                Require(Math.Abs(window.NoteEditor.VerticalOffset - originalOffset) < .1 &&
+                    (window.NoteEditor.TranslatePoint(window.NoteEditor.GetRectFromCharacterIndex(visibleIndex).TopLeft, window) - position).Length < .1,
+                    "Refocusing a scrolled note lost its scroll offset or text position");
+            }
+            window.NoteEditor.ScrollToHome(); window.NoteEditor.Select(0, 0);
             model.OpaqueWhenFocused = false;
             await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
             Require(((SolidColorBrush)noteBackground.Background).Color.A == 77 && ((SolidColorBrush)writingFrame.BorderBrush).Color.A == 77 &&
