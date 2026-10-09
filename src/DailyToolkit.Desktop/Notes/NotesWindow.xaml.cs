@@ -119,7 +119,7 @@ internal partial class NotesWindow : Window
         editor.Foreground = Brush(preferences.Font.Color, opaque ? 1 : preferences.Font.Opacity);
         editor.CaretBrush = editor.Foreground;
         hide.Foreground = resize.Foreground = moveIndicator.Background = accent;
-        hide.Background = resize.Background = Brush(preferences.FocusBorderColor, opacity * .12);
+        hide.Background = resize.Background = Brushes.Transparent;
         hide.BorderThickness = resize.BorderThickness = new(0);
         hide.BorderBrush = resize.BorderBrush = Brushes.Transparent;
         hide.Visibility = focused ? Visibility.Visible : Visibility.Hidden;
