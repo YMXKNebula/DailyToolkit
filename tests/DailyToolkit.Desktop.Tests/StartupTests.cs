@@ -18,7 +18,7 @@ internal static partial class Program
         public StartupChoice Choice=new(false,false,false);
         public bool IsAdministrator { get; set; }
         public int Authorizations,Launches,ApplyCalls,ActiveCalls,MaximumActiveCalls;
-        public bool Cancel;
+        public bool Cancel, CancelLaunch, LastRequiredTask;
         public TaskCompletionSource? Pending,Started;
         public StartupChoice Read() => Choice;
         public async Task ApplyAsync(StartupChoice choice)
@@ -34,7 +34,8 @@ internal static partial class Program
             }
             finally { ActiveCalls--; }
         }
-        public void LaunchAdministrator(bool requireRegisteredTask=false) { Launches++; }
+        public void LaunchAdministrator(bool requireRegisteredTask=false)
+        { LastRequiredTask = requireRegisteredTask; Launches++; if (CancelLaunch) throw new Win32Exception(1223); }
     }
     private static async Task CheckStartupSettingsAsync()
     {
@@ -96,6 +97,15 @@ internal static partial class Program
                 startup.Authorizations == authorizations && startup.Launches == launches && restarts == previousRestarts &&
                 model.CanEditStartup && !model.HasStartupStatus && !model.RunAdministratorCommand.CanExecute(null),
                 "An already elevated app could not enable administrator startup without another authorization or restart");
+            startup.IsAdministrator=false; startup.CancelLaunch=true;
+            var beforeCanceledRestart=restarts;
+            model.RunAdministratorCommand.Execute(null);
+            Require(!startup.LastRequiredTask && restarts == beforeCanceledRestart && model.StartupStatus.Contains("无法切换"),
+                "A manual administrator restart required a possibly stale task or exited the original app after canceled UAC");
+            startup.CancelLaunch=false; model.RunAdministratorCommand.Execute(null);
+            Require(!startup.LastRequiredTask && restarts == beforeCanceledRestart + 1,
+                "A manual administrator restart could not request the current executable with existing administrator preferences");
+            startup.IsAdministrator=true;
             model.AdminStartup=false; await model.PendingStartupChange;
             Require(startup.Choice is { Enabled:true,Administrator:false } && store.Load().StartAtLogin,
                 "An elevated app could not switch back to normal startup");
@@ -123,6 +133,11 @@ internal static partial class Program
             Require(StartupRegistration.SameExecutable(@"C:\工具\DailyToolkit.exe", @"c:\工具\DailyToolkit.exe") &&
                 !StartupRegistration.SameExecutable(@"C:\工具\0.7.0\DailyToolkit.exe", @"C:\工具\0.7.1\DailyToolkit.exe"),
                 "Administrator handoff matched a different version directory or rejected case-insensitive current path");
+            var administratorStart=StartupRegistration.CreateAdministratorStartInfo(@"C:\工具\0.7.2\DailyToolkit.exe");
+            Require(administratorStart.FileName == @"C:\工具\0.7.2\DailyToolkit.exe" && administratorStart.UseShellExecute &&
+                administratorStart.Verb == "runas" && administratorStart.WorkingDirectory == @"C:\工具\0.7.2" &&
+                administratorStart.ArgumentList.SequenceEqual(["--admin-task", "--show"]),
+                "UAC fallback did not launch and show this version with the matching working directory");
             var xml=XDocument.Parse(StartupRegistration.CreateTaskXml(@"C:\工具 & files\DailyToolkit.exe","S-1-5-21-123"));
             XNamespace ns="http://schemas.microsoft.com/windows/2004/02/mit/task";
             string Value(string name) => xml.Descendants(ns+name).Single().Value;
@@ -149,10 +164,21 @@ internal static partial class Program
                     !StartupRegistration.IsCurrentUser(""),"Task accounts were not compared by resolved SID");
                 definition.XmlText=StartupRegistration.CreateTaskXml(@"C:\工具\DailyToolkit.exe",sid);
                 definition.Principal.UserId=identity.Name;
-                dynamic task=new System.Dynamic.ExpandoObject(); task.Definition=definition;
+                dynamic task=new System.Dynamic.ExpandoObject(); task.Definition=definition; task.Enabled=true;
                 Require(StartupRegistration.OwnedTask(task),"An owned task returned with an account name was rejected");
+                Require(StartupRegistration.CanRunAdministratorTask(task, @"C:\工具\DailyToolkit.exe"),
+                    "A matching enabled administrator task was rejected");
+                Require(!StartupRegistration.CanRunAdministratorTask(task, @"C:\工具\0.7.2\DailyToolkit.exe") &&
+                    !StartupRegistration.CanRunAdministratorTask(null, @"C:\工具\DailyToolkit.exe"),
+                    "A missing task or a task pointing at an older directory could restart the app");
+                task.Enabled=false;
+                Require(!StartupRegistration.CanRunAdministratorTask(task, @"C:\工具\DailyToolkit.exe"), "Disabled administrator task was runnable");
+                task.Enabled=true; definition.Principal.RunLevel=0;
+                Require(!StartupRegistration.CanRunAdministratorTask(task, @"C:\工具\DailyToolkit.exe"), "Non-elevated task was runnable as administrator");
+                definition.Principal.RunLevel=1;
                 definition.Principal.UserId="S-1-5-18";
-                Require(!StartupRegistration.OwnedTask(task),"A task for a different identity passed the ownership check");
+                Require(!StartupRegistration.OwnedTask(task) && !StartupRegistration.CanRunAdministratorTask(task, @"C:\工具\DailyToolkit.exe"),
+                    "A task for a different identity passed the ownership or launch check");
                 definition.Principal.UserId=sid; definition.RegistrationInfo.Description="Other application";
                 Require(!StartupRegistration.OwnedTask(task),"A foreign task passed the ownership check");
                 var registered=StartupRegistration.FindTask(((dynamic)scheduler).GetFolder("\\"),"DailyToolkit-"+sid);

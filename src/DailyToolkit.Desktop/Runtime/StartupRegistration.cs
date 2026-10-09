@@ -65,23 +65,25 @@ public sealed class StartupRegistration : IStartupRegistration
         try
         {
             service = Connect(); dynamic? task = FindTask(((dynamic)service).GetFolder("\\"));
-            return task is not null && OwnedTask(task!) &&
-                SameExecutable((string)task!.Definition.Actions[1].Path, _executable);
+            return CanRunAdministratorTask(task, _executable);
         }
         finally { if (service is not null) Marshal.FinalReleaseComObject(service); }
     }
     internal static bool SameExecutable(string registered, string executable) =>
         string.Equals(Path.GetFullPath(System.Environment.ExpandEnvironmentVariables(registered.Trim('"'))),
             Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase);
+    internal static bool CanRunAdministratorTask(dynamic? task, string executable) =>
+        task is not null && OwnedTask(task!) && task!.Enabled && task!.Definition.Principal.RunLevel == 1 &&
+        SameExecutable((string)task!.Definition.Actions[1].Path, executable);
     public async Task ApplyAsync(StartupChoice choice)
     {
-        if (choice.Enabled && choice.Administrator && !IsAdministrator && !Read().Administrator)
+        if (choice.Enabled && choice.Administrator && !IsAdministrator && !RegisteredTaskTargetsCurrentExecutable())
         {
             var start=new ProcessStartInfo(_executable) { UseShellExecute=true,Verb="runas",WindowStyle=ProcessWindowStyle.Hidden };
             start.ArgumentList.Add("--configure-admin-startup"); start.ArgumentList.Add(UserSid);
             using var process=Process.Start(start) ?? throw new InvalidOperationException("没有启动授权程序。");
             await process.WaitForExitAsync();
-            if (process.ExitCode != 0 || !Read().Administrator) throw new InvalidOperationException("管理员自启未能启用，请确认授权和任务计划服务状态。");
+            if (process.ExitCode != 0 || !RegisteredTaskTargetsCurrentExecutable()) throw new InvalidOperationException("管理员自启未能启用，请确认授权和当前版本的任务路径。");
             return;
         }
         Configure(choice);
@@ -135,12 +137,19 @@ public sealed class StartupRegistration : IStartupRegistration
         try
         {
             service=Connect(); dynamic? task=FindTask(((dynamic)service).GetFolder("\\"));
-            if (task is not null && OwnedTask(task!) && task!.Enabled && task!.Definition.Principal.RunLevel == 1) { task!.Run(null); return; }
-            if (requireRegisteredTask) throw new InvalidOperationException("管理员启动任务不可用，请重新启用管理员自启。");
-            var start=new ProcessStartInfo(_executable) { UseShellExecute=true,Verb="runas" }; start.ArgumentList.Add("--admin-task");
-            Process.Start(start)?.Dispose();
+            if (CanRunAdministratorTask(task, _executable)) { task!.Run(null); return; }
+            if (requireRegisteredTask) throw new InvalidOperationException("管理员启动任务指向其它版本或不可用，请在当前版本重新启用管理员自启。");
+            using var process = Process.Start(CreateAdministratorStartInfo(_executable)) ??
+                throw new InvalidOperationException("没有启动当前版本的管理员程序。");
         }
         finally { if (service is not null) Marshal.FinalReleaseComObject(service); }
+    }
+    internal static ProcessStartInfo CreateAdministratorStartInfo(string executable)
+    {
+        var start = new ProcessStartInfo(executable) { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden,
+            WorkingDirectory = Path.GetDirectoryName(executable)! };
+        start.ArgumentList.Add("--admin-task"); start.ArgumentList.Add("--show");
+        return start;
     }
     internal static int ConfigureElevated(string sid)
     {

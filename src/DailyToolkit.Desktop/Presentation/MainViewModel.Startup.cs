@@ -116,7 +116,8 @@ public sealed partial class MainViewModel
     }
     private void RequestAdministrator()
     {
-        try { _startupRegistration.LaunchAdministrator(requireRegisteredTask:_appPreferences.AdminStartup); AdministratorRestartRequested?.Invoke(); }
+        // A manual restart may request UAC for this executable when the stored task belongs to an older directory.
+        try { _startupRegistration.LaunchAdministrator(); AdministratorRestartRequested?.Invoke(); }
         catch (Exception e) when (e is COMException or Win32Exception or InvalidOperationException or UnauthorizedAccessException)
         { StartupStatus="无法切换运行权限："+e.Message; }
     }

@@ -109,7 +109,7 @@ public partial class App : Application
                     if (!startupRegistration.Read().Administrator) throw new InvalidOperationException("管理员启动任务已被移除，请重新启用管理员自启。");
                     if (startupRegistration.RegisteredTaskTargetsCurrentExecutable())
                     { startupRegistration.LaunchAdministrator(requireRegisteredTask:true); Shutdown(); return; }
-                    startupRecoveryNotice="管理员自启任务仍指向另一版本，本次以普通权限打开当前版本。要更换自启版本，请在当前版本关闭后重新启用自启。";
+                    startupRecoveryNotice="管理员自启任务仍指向另一版本，本次以普通权限打开当前版本。请在当前版本中关闭开机自启，再重新启用开机自启和管理员启动。";
                 }
                 catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException or InvalidOperationException or System.ComponentModel.Win32Exception)
                 {
