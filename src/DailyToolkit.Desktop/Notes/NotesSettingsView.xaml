@@ -3,6 +3,7 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:controls="clr-namespace:DailyToolkit.Desktop.Controls">
  <UserControl.Resources>
+  <ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="NotesChrome.xaml"/></ResourceDictionary.MergedDictionaries>
   <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Style>
   <Style TargetType="RadioButton"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Style>
   <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
@@ -11,6 +12,7 @@
    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
    <Setter Property="BorderThickness" Value="1"/>
   </Style>
+  </ResourceDictionary>
  </UserControl.Resources>
  <Grid x:Name="SettingsLayout" SizeChanged="SettingsSizeChanged" IsEnabled="{Binding IsLoaded}">
   <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -41,6 +43,7 @@
      </WrapPanel>
      <TextBlock Text="可移动时，按住顶部即可拖动。" Style="{StaticResource MutedText}" Margin="0,0,0,16"/>
      <CheckBox Content="始终置顶" IsChecked="{Binding Topmost}" Margin="0,0,0,12"/>
+     <CheckBox x:Name="ClickFocus" Content="点击浮笺聚焦" IsChecked="{Binding FocusOnClick}" Margin="0,0,0,12"/>
      <WrapPanel><TextBlock Text="宽度" VerticalAlignment="Center"/><TextBox x:Name="NoteWidth" Text="{Binding Width, StringFormat=0, UpdateSourceTrigger=LostFocus}" PreviewTextInput="SizeInput" DataObject.Pasting="PasteSize" LostKeyboardFocus="CommitSize" Width="70" Margin="8,0,16,8" Padding="6"/>
       <TextBlock Text="高度" VerticalAlignment="Center"/><TextBox x:Name="NoteHeight" Text="{Binding Height, StringFormat=0, UpdateSourceTrigger=LostFocus}" PreviewTextInput="SizeInput" DataObject.Pasting="PasteSize" LostKeyboardFocus="CommitSize" Width="70" Margin="8,0,0,8" Padding="6"/></WrapPanel>
      <CheckBox x:Name="ManualResize" Content="允许拖动右下角调整大小" IsChecked="{Binding AllowManualResize}" Margin="0,4,0,12"/>
@@ -99,13 +102,16 @@
        <Grid x:Name="PreviewPanel" Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Top">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <CheckBox x:Name="PreviewFocused" Content="聚焦效果预览" IsChecked="True" Checked="PreviewFocusChanged" Unchecked="PreviewFocusChanged" Margin="0,0,0,12"/>
-        <Border x:Name="AppearancePreview" Grid.Row="1" Padding="12,4,12,4" BorderThickness="2" ClipToBounds="True">
-         <Grid><Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="*"/><RowDefinition Height="28"/></Grid.RowDefinitions>
-          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-           <TextBlock x:Name="PreviewText" Text="待办&#xA;&#xA;买菜&#xA;整理书桌&#xA;读书 30 分钟" TextWrapping="Wrap"/>
-          </ScrollViewer>
-          <TextBlock x:Name="PreviewHide" Grid.Row="2" Text="—" Width="28" HorizontalAlignment="Left" VerticalAlignment="Center" TextAlignment="Center" FontSize="16"/>
-          <TextBlock x:Name="PreviewResize" Grid.Row="2" Text="◢" Width="28" HorizontalAlignment="Right" VerticalAlignment="Center" TextAlignment="Center" FontSize="12"/>
+        <Border x:Name="AppearancePreview" Grid.Row="1" Padding="4,3,4,3" BorderThickness="2" ClipToBounds="True">
+         <Grid><Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="*"/><RowDefinition Height="{DynamicResource NotesFooterHeight}"/></Grid.RowDefinitions>
+          <Border x:Name="PreviewMove" Width="46" Height="5" CornerRadius="2.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          <Border x:Name="PreviewEditorFrame" Grid.Row="1" BorderThickness="1" CornerRadius="6">
+           <TextBox x:Name="PreviewText" Text="待办&#xA;&#xA;买菜&#xA;整理书桌&#xA;读书 30 分钟" TextWrapping="Wrap" IsReadOnly="True" AcceptsReturn="True" Padding="6,7" BorderThickness="0" Background="Transparent" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <TextBox.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource NotesScrollBar}"/></TextBox.Resources>
+           </TextBox>
+          </Border>
+          <Button x:Name="PreviewHide" Grid.Row="2" Width="28" Height="28" HorizontalAlignment="Left" IsHitTestVisible="False" Style="{StaticResource NotesHideButton}"/>
+          <Thumb x:Name="PreviewResize" Grid.Row="2" Width="28" Height="28" HorizontalAlignment="Right" Focusable="False" IsHitTestVisible="False" Template="{StaticResource NotesResizeGrip}"/>
          </Grid>
         </Border>
        </Grid>

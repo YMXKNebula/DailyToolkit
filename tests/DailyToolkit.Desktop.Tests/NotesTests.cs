@@ -39,7 +39,7 @@ internal static partial class Program
                 await model.Ready;
                 Require(model.IsLoaded && model.Text == "" && model.Preferences == new NotesPreferences(), "Missing notes did not initialize defaults");
                 model.Text = "第一行\n第二行 📝"; model.FontSize = 26; model.BackgroundOpacity = .4;
-                model.AllowManualResize = false; model.FocusBorderColor = "#A675D1"; model.Width = 361.5; model.Height = 419.6;
+                model.AllowManualResize = false; model.FocusOnClick = true; model.FocusBorderColor = "#A675D1"; model.Width = 361.5; model.Height = 419.6;
                 for (var attempt = 0; attempt < 30 && !File.Exists(store.SettingsPath); attempt++) await Task.Delay(100);
                 Require(File.Exists(store.ContentPath) && await File.ReadAllTextAsync(store.ContentPath) == model.Text,
                     "Debounced autosave did not preserve Unicode multi-line notes without hiding or exiting");
@@ -51,7 +51,7 @@ internal static partial class Program
             {
                 await reopened.Ready;
                 Require(reopened.Text.Contains("隐藏前最后输入") && reopened.FontSize == 26 && reopened.BackgroundOpacity == .4 &&
-                    !reopened.AllowManualResize && reopened.FocusBorderColor == "#A675D1" && reopened.Width == 362 && reopened.Height == 420,
+                    !reopened.AllowManualResize && reopened.FocusOnClick && reopened.FocusBorderColor == "#A675D1" && reopened.Width == 362 && reopened.Height == 420,
                     "Text and independent appearance did not survive a new model/version");
                 var text = reopened.Text; reopened.ResetSettings();
                 Require(await reopened.FlushAsync() && reopened.Text == text && reopened.Preferences == new NotesPreferences(), "Reset settings changed note content");
@@ -60,7 +60,7 @@ internal static partial class Program
             Require((await store.LoadAsync()).Preferences == new NotesPreferences(), "Older settings missing notes fields failed");
             await File.WriteAllTextAsync(store.SettingsPath, "{\"Width\":360.5,\"Height\":420.4,\"DoubleClickUnfocus\":true,\"ClickToFocus\":true}");
             var migrated = (await store.LoadAsync()).Preferences;
-            Require(migrated.Width == 361 && migrated.Height == 420 && migrated.AllowManualResize && migrated.OpaqueWhenFocused,
+            Require(migrated.Width == 361 && migrated.Height == 420 && migrated.AllowManualResize && migrated.OpaqueWhenFocused && !migrated.FocusOnClick,
                 "Legacy settings did not preserve rounded size and new defaults");
             await store.SaveSettingsAsync(migrated);
             var migratedJson = await File.ReadAllTextAsync(store.SettingsPath);
@@ -238,6 +238,24 @@ internal static partial class Program
                 Require(((SolidColorBrush)favoriteIcon.Fill).Color.A == 0, "Favorite icon did not become outlined after removing the favorite");
                 var resize = (CheckBox)view.FindName("ManualResize"); resize.IsChecked = false;
                 Require(!notes.AllowManualResize, "Resize setting did not update notes");
+                var clickFocus = (CheckBox)view.FindName("ClickFocus"); clickFocus.IsChecked = true;
+                Require(notes.FocusOnClick, "Position click-focus setting did not update notes"); clickFocus.IsChecked = false;
+                var previewFocus = (CheckBox)view.FindName("PreviewFocused");
+                var previewResize = (FrameworkElement)view.FindName("PreviewResize");
+                var previewHide = (FrameworkElement)view.FindName("PreviewHide");
+                var previewMove = (FrameworkElement)view.FindName("PreviewMove");
+                var previewFrame = (Border)view.FindName("PreviewEditorFrame");
+                previewFocus.IsChecked = true; resize.IsChecked = true;
+                Require(!notes.Movable && previewResize.Visibility == Visibility.Visible && previewHide.Visibility == Visibility.Visible &&
+                    previewMove.Visibility == Visibility.Hidden && ((SolidColorBrush)previewFrame.BorderBrush).Color.A == 255,
+                    "Focused fixed preview did not retain its resize corner and writing border");
+                movableMode.IsChecked = true;
+                Require(previewMove.Visibility == Visibility.Visible, "Focused movable preview lacked its central move indicator");
+                previewFocus.IsChecked = false;
+                Require(previewResize.Visibility == Visibility.Hidden && previewHide.Visibility == Visibility.Hidden &&
+                    previewMove.Visibility == Visibility.Hidden && ((SolidColorBrush)previewFrame.BorderBrush).Color.A == 0,
+                    "Unfocused preview retained writing border or interactive chrome");
+                fixedMode.IsChecked = true; previewFocus.IsChecked = true;
                 notes.Width = 362.3; notes.Height = 419.8;
                 Require(((TextBox)view.FindName("NoteWidth")).Text == "362" && ((TextBox)view.FindName("NoteHeight")).Text == "420", "Note dimensions displayed fractional values");
                 var textPicker = (DailyToolkit.Desktop.Controls.ColorPicker)view.FindName("FontColorPicker");
@@ -251,7 +269,7 @@ internal static partial class Program
                 Require(favorite.Command == notes.ToggleFavoriteCommand, "Shared title star did not return to notes");
                 notes.FontColor = "#B02070";
                 Require(((SolidColorBrush)((Button)view.FindName("FontColorSwatch")).Background).Color == Color.FromRgb(176, 32, 112) &&
-                    ((SolidColorBrush)((TextBlock)view.FindName("PreviewText")).Foreground).Color == Color.FromRgb(176, 32, 112),
+                    ((SolidColorBrush)((TextBox)view.FindName("PreviewText")).Foreground).Color == Color.FromRgb(176, 32, 112),
                     "Text color swatch and adjacent preview failed to update together");
                 notes.ResetFont(); notes.ResetBackground();
                 foreach (var dark in new[] { true, false })
@@ -324,6 +342,15 @@ internal static partial class Program
             controller.Toggle(); await controller.Pending;
             PressNotesTestHotkey(); await Task.Delay(120); await controller.Pending;
             var window = controller.NoteWindow!;
+            void WindowImage(string name)
+            {
+                if (images is null) return;
+                Directory.CreateDirectory(images); window.UpdateLayout(); var dpi = VisualTreeHelper.GetDpi(window);
+                var bitmap = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth * dpi.DpiScaleX),
+                    (int)Math.Ceiling(window.ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+                bitmap.Render(window); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                using var stream = File.Create(Path.Combine(images, name + ".png")); encoder.Save(stream);
+            }
             Require(model.IsVisible && model.IsFocused && window.NoteEditor.IsKeyboardFocusWithin && window.Opacity == 1 && window.Topmost,
                 $"Native note show did not focus editor or conflated whole-window opacity/topmost: visible={model.IsVisible}, focused={model.IsFocused}, keyboard={window.NoteEditor.IsKeyboardFocusWithin}, foreground={foreground.Current}, note={window.Handle}, notice={model.Notice}");
             window.NoteEditor.Text = "文本编辑 / selection"; window.NoteEditor.Select(3, 4);
@@ -358,18 +385,64 @@ internal static partial class Program
             controller.Toggle(); await controller.Pending; await Task.Delay(80);
             model.BackgroundOpacity = .3; model.FontOpacity = .4; model.FocusBorderColor = "#4285F4";
             var noteBackground = (Border)window.FindName("NoteBackground");
+            var writingFrame = (Border)window.FindName("EditorFrame");
+            var hideButton = (FrameworkElement)window.FindName("HideButton");
+            var resizeGrip = (FrameworkElement)window.FindName("ResizeGrip");
+            var moveIndicator = (FrameworkElement)window.FindName("MoveIndicator");
+            window.NoteEditor.Text = string.Join('\n', Enumerable.Range(1, 50).Select(line => $"第 {line} 行 · scrolling fixture"));
+            window.NoteEditor.ScrollToHome(); window.UpdateLayout();
+            IEnumerable<DependencyObject> NoteDescendants(DependencyObject root)
+            {
+                for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+                {
+                    var child = VisualTreeHelper.GetChild(root, i); yield return child;
+                    foreach (var nested in NoteDescendants(child)) yield return nested;
+                }
+            }
+            var scrollbar = NoteDescendants(window.NoteEditor).OfType<System.Windows.Controls.Primitives.ScrollBar>()
+                .Single(bar => bar.Orientation == Orientation.Vertical);
             Require(window.Opacity == 1 && ((SolidColorBrush)noteBackground.Background).Color.A == 255 &&
-                ((SolidColorBrush)window.NoteEditor.Foreground).Color.A == 255 && ((SolidColorBrush)noteBackground.BorderBrush).Color == Color.FromRgb(66, 133, 244),
+                ((SolidColorBrush)window.NoteEditor.Foreground).Color.A == 255 && ((SolidColorBrush)noteBackground.BorderBrush).Color == Color.FromRgb(66, 133, 244) &&
+                writingFrame.BorderBrush == noteBackground.BorderBrush && scrollbar.IsVisible && scrollbar.IsEnabled && scrollbar.Opacity == 1 &&
+                hideButton.IsVisible && resizeGrip.IsVisible && moveIndicator.Visibility == Visibility.Hidden,
                 "Focus did not apply an opaque background/text and configured border");
+            WindowImage("floating-notes-fixed-focused");
             var focusedSize = new Size(window.Width, window.Height);
+            var focusedEditorSize = new Size(window.NoteEditor.ActualWidth, window.NoteEditor.ActualHeight);
+            var focusedCharacter = window.NoteEditor.GetRectFromCharacterIndex(0);
+            var focusedTextOrigin = window.NoteEditor.TranslatePoint(focusedCharacter.TopLeft, window);
             PressNotesTestHotkey(true); await Task.Delay(100); await controller.Pending;
             Require(!model.IsFocused && ((SolidColorBrush)noteBackground.Background).Color.A == 77 &&
                 ((SolidColorBrush)window.NoteEditor.Foreground).Color.A == 102 && ((SolidColorBrush)noteBackground.BorderBrush).Color.A == 0 &&
-                focusedSize == new Size(window.Width, window.Height), "Focus shortcut did not remove border and restore independent alpha without resizing");
+                focusedSize == new Size(window.Width, window.Height) && ((SolidColorBrush)writingFrame.BorderBrush).Color.A == 0 &&
+                !hideButton.IsVisible && !resizeGrip.IsVisible && scrollbar.Opacity == 0 && !scrollbar.IsHitTestVisible,
+                "Focus shortcut did not hide chrome and restore independent alpha without resizing");
+            window.UpdateLayout();
+            Require(window.NoteEditor.ActualHeight >= focusedEditorSize.Height + 20 && window.NoteEditor.ActualWidth == focusedEditorSize.Width,
+                "Unfocused text did not expand into the hidden controls' space or changed its wrapping width");
+            var unfocusedCharacter = window.NoteEditor.GetRectFromCharacterIndex(0);
+            Require(window.NoteEditor.TranslatePoint(unfocusedCharacter.TopLeft, window) == focusedTextOrigin &&
+                unfocusedCharacter.Height == focusedCharacter.Height, "Expanding the display area shifted or stretched the text");
+            WindowImage("floating-notes-unfocused");
             PressNotesTestHotkey(true); await Task.Delay(100); await controller.Pending;
             Require(model.IsFocused && ((SolidColorBrush)noteBackground.Background).Color.A == 255, "Same shortcut failed to restore focus and opacity");
+            window.UpdateLayout();
+            Require(new Size(window.NoteEditor.ActualWidth, window.NoteEditor.ActualHeight) == focusedEditorSize,
+                "Refocusing did not restore the original editor area");
             model.OpaqueWhenFocused = false;
-            Require(((SolidColorBrush)noteBackground.Background).Color.A == 77, "Focus opacity opt-out ignored the configured background alpha");
+            await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+            Require(((SolidColorBrush)noteBackground.Background).Color.A == 77 && ((SolidColorBrush)writingFrame.BorderBrush).Color.A == 77 &&
+                Math.Abs(scrollbar.Opacity - .3) < .001 && scrollbar.IsHitTestVisible,
+                "Focused writing border and scrollbar ignored the configured background alpha");
+            model.Movable = true;
+            Require(moveIndicator.Visibility == Visibility.Visible && ((Border)moveIndicator).Background == writingFrame.BorderBrush,
+                "Focused move indicator did not follow the frame color/opacity");
+            WindowImage("floating-notes-movable-translucent");
+            model.Movable = false;
+            Require(!moveIndicator.IsVisible && resizeGrip.IsVisible, "Fixed mode incorrectly hid its resize corner");
+            model.AllowManualResize = false;
+            Require(!resizeGrip.IsVisible && hideButton.IsVisible, "Disabling manual resize removed unrelated controls or kept the grip");
+            model.AllowManualResize = true;
             model.OpaqueWhenFocused = true;
             var bounds = NotesPositionService.Bounds(window.Handle);
             Require(NotesPositionService.WorkAreas().Any(bounds.Intersects), "Note remained outside available monitors");
@@ -381,13 +454,7 @@ internal static partial class Program
                 "Closed target kept editor keyboard focus or hid the note");
             controller.ToggleFocus(); await controller.Pending;
             Require(model.IsFocused && !model.Notice.StartsWith("先前窗口已关闭", StringComparison.Ordinal), "Successful focus retained a stale restore failure");
-            if (images is not null)
-            {
-                Directory.CreateDirectory(images); window.UpdateLayout();
-                var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-                bitmap.Render(window); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-                using var stream = File.Create(Path.Combine(images, "floating-notes-window.png")); encoder.Save(stream);
-            }
+            WindowImage("floating-notes-window");
             model.IsEnabled = false; await controller.Pending;
             Require(!model.IsVisible && controller.NoteWindow is null && model.Text == window.NoteEditor.Text, "Disable did not release window or preserve text");
             model.IsEnabled = true; controller.Toggle(); await controller.Pending;

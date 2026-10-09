@@ -66,15 +66,10 @@ public partial class NotesSettingsView : UserControl
         if (_model is null) return;
         var preferences = _model.Preferences;
         var focused = PreviewFocused.IsChecked == true;
-        var opaque = focused && preferences.OpaqueWhenFocused;
-        AppearancePreview.Background = NotesWindow.Brush(preferences.Background.Color, opaque ? 1 : preferences.Background.Opacity);
-        AppearancePreview.CornerRadius = new(preferences.Background.Radius);
-        AppearancePreview.BorderBrush = focused ? NotesWindow.Brush(preferences.FocusBorderColor, 1) : System.Windows.Media.Brushes.Transparent;
+        NotesWindow.PaintChrome(AppearancePreview, PreviewEditorFrame, PreviewText, PreviewHide, PreviewResize, PreviewMove, preferences, focused);
         BackgroundColorSwatch.Background = NotesWindow.Brush(preferences.Background.Color, 1);
         FontColorSwatch.Background = NotesWindow.Brush(preferences.Font.Color, 1);
         FocusColorSwatch.Background = NotesWindow.Brush(preferences.FocusBorderColor, 1);
-        PreviewHide.Foreground = PreviewResize.Foreground = PreviewText.Foreground = NotesWindow.Brush(preferences.Font.Color, opaque ? 1 : preferences.Font.Opacity);
-        PreviewResize.Visibility = preferences.AllowManualResize ? Visibility.Visible : Visibility.Collapsed;
         PreviewText.FontSize = preferences.Font.Size; PreviewText.FontFamily = new(preferences.Font.Family + ", Microsoft YaHei UI");
         PreviewText.FontWeight = preferences.Font.Bold ? FontWeights.Bold : FontWeights.Normal;
         UpdatePreviewDimensions();

@@ -5,23 +5,27 @@
         Background="Transparent" ShowInTaskbar="False" ShowActivated="False" ResizeMode="NoResize"
         MinWidth="240" MinHeight="180" MaxWidth="1200" MaxHeight="1400"
         WindowStartupLocation="Manual" TextOptions.TextRenderingMode="Grayscale">
-  <Border x:Name="NoteBackground" BorderThickness="2" Padding="10,4,10,4">
+  <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="NotesChrome.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
+  <Border x:Name="NoteBackground" BorderThickness="2" Padding="4,3,4,3">
     <Grid>
-      <Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="28"/></Grid.RowDefinitions>
+      <Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="{DynamicResource NotesFooterHeight}"/></Grid.RowDefinitions>
       <Border x:Name="DragHandle" Background="Transparent" Cursor="Arrow"
-              ToolTip="可移动模式：按住顶部区域即可拖动。"/>
-      <Button x:Name="HideButton" Grid.Row="3" HorizontalAlignment="Left" Content="—" Width="28" Height="28" Padding="0" Background="Transparent"
-              BorderThickness="0" Focusable="False" Click="HideNote" ToolTip="隐藏浮笺" AutomationProperties.Name="隐藏浮笺"/>
-      <TextBox x:Name="Editor" Grid.Row="1" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+              ToolTip="可移动模式：按住顶部区域即可拖动。">
+        <Border x:Name="MoveIndicator" Width="46" Height="5" CornerRadius="2.5" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+      </Border>
+      <Button x:Name="HideButton" Grid.Row="3" HorizontalAlignment="Left" Width="28" Height="28" Padding="0" Style="{StaticResource NotesHideButton}"
+              Click="HideNote" ToolTip="隐藏浮笺" AutomationProperties.Name="隐藏浮笺"/>
+      <Border x:Name="EditorFrame" Grid.Row="1" BorderThickness="1" CornerRadius="6">
+      <TextBox x:Name="Editor" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
                AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
                HorizontalScrollBarVisibility="Disabled" Background="Transparent" BorderThickness="0"
-               Padding="4,6" IsUndoEnabled="True" UndoLimit="200" AutomationProperties.Name="浮笺正文"/>
+               Padding="6,7" IsUndoEnabled="True" UndoLimit="200" AutomationProperties.Name="浮笺正文">
+        <TextBox.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource NotesScrollBar}"/></TextBox.Resources>
+      </TextBox></Border>
       <TextBlock Grid.Row="2" x:Name="SaveNotice" Text="{Binding Notice}" FontSize="11" TextWrapping="Wrap"
                  Foreground="#D53C3C" MaxHeight="84" Margin="2,3,14,0"/>
       <Thumb x:Name="ResizeGrip" Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Center"
-             Width="28" Height="28" Focusable="False" Cursor="SizeNWSE" DragStarted="BeginResize" DragDelta="ResizeNote" ToolTip="调整尺寸" AutomationProperties.Name="调整浮笺尺寸">
-        <Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="Transparent"><TextBlock Text="◢" Foreground="{TemplateBinding Foreground}" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></ControlTemplate></Thumb.Template>
-      </Thumb>
+             Width="28" Height="28" Focusable="False" Cursor="SizeNWSE" DragStarted="BeginResize" DragDelta="ResizeNote" ToolTip="调整尺寸" AutomationProperties.Name="调整浮笺尺寸" Template="{StaticResource NotesResizeGrip}"/>
     </Grid>
   </Border>
 </Window>

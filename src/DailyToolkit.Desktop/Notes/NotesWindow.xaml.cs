@@ -22,6 +22,7 @@ internal partial class NotesWindow : Window
     private bool _pressed, _applying, _closing, _composing, _keyboardReleased, _dragging, _manualDragging;
     internal IntPtr Handle => new WindowInteropHelper(this).Handle;
     internal TextBox NoteEditor => Editor;
+    public event Action? BeforeMouseActivate;
     public event Action? UnfocusRequested;
     public event Action? HideRequested;
 
@@ -73,9 +74,6 @@ internal partial class NotesWindow : Window
             Editor.FontFamily = new(preferences.Font.Family + ", Microsoft YaHei UI");
             Editor.FontSize = preferences.Font.Size; Editor.FontWeight = preferences.Font.Bold ? FontWeights.Bold : FontWeights.Normal;
             Editor.IsReadOnly = !_model.ContentWritable;
-            ResizeGrip.Visibility = preferences.AllowManualResize ? Visibility.Visible : Visibility.Collapsed;
-            DragHandle.Cursor = _model.Movable ? Cursors.SizeAll : Cursors.Arrow;
-            DragHandle.ToolTip = _model.Movable ? "按住顶部区域即可拖动。" : "固定模式：窗口位置不会随拖动改变。";
             if (Handle != IntPtr.Zero && (_applied?.X != preferences.X || _applied?.Y != preferences.Y)) Place();
             _applied = preferences;
         }
@@ -84,12 +82,33 @@ internal partial class NotesWindow : Window
     private void ApplyFocusAppearance()
     {
         var preferences = _model.Preferences;
-        var opaque = _model.IsFocused && preferences.OpaqueWhenFocused;
-        NoteBackground.Background = Brush(preferences.Background.Color, opaque ? 1 : preferences.Background.Opacity);
-        NoteBackground.BorderBrush = _model.IsFocused ? Brush(preferences.FocusBorderColor, 1) : Brushes.Transparent;
-        Editor.Foreground = Brush(preferences.Font.Color, opaque ? 1 : preferences.Font.Opacity);
-        Editor.CaretBrush = Editor.Foreground;
-        HideButton.Foreground = Editor.Foreground; ResizeGrip.Foreground = Editor.Foreground;
+        PaintChrome(NoteBackground, EditorFrame, Editor, HideButton, ResizeGrip, MoveIndicator, preferences, _model.IsFocused);
+        DragHandle.Cursor = _model.IsFocused && _model.Movable ? Cursors.SizeAll : Cursors.Arrow;
+        DragHandle.ToolTip = _model.IsFocused && _model.Movable ? "按住顶部区域即可拖动。" : null;
+    }
+    internal static void PaintChrome(Border surface, Border editorFrame, TextBox editor, Control hide, Control resize,
+        Border moveIndicator, NotesPreferences preferences, bool focused)
+    {
+        var opaque = focused && preferences.OpaqueWhenFocused;
+        var opacity = opaque ? 1 : preferences.Background.Opacity;
+        var accent = Brush(preferences.FocusBorderColor, opacity);
+        surface.Background = Brush(preferences.Background.Color, opacity);
+        surface.CornerRadius = new(preferences.Background.Radius);
+        surface.BorderBrush = editorFrame.BorderBrush = focused ? accent : Brushes.Transparent;
+        // Scrollbars retain their layout space while becoming transparent and noninteractive.
+        editor.Tag = focused;
+        surface.Resources["NotesChromeOpacity"] = opacity;
+        surface.Resources["NotesFooterHeight"] = new GridLength(focused ? 28 : 6);
+        surface.Resources["ScrollThumbBrush"] = Brush(preferences.FocusBorderColor, 1);
+        surface.Resources["ScrollTrackBrush"] = Brush(preferences.FocusBorderColor, .12);
+        editor.Foreground = Brush(preferences.Font.Color, opaque ? 1 : preferences.Font.Opacity);
+        editor.CaretBrush = editor.Foreground;
+        hide.Foreground = resize.Foreground = moveIndicator.Background = accent;
+        hide.Background = resize.Background = Brush(preferences.FocusBorderColor, opacity * .12);
+        hide.BorderBrush = resize.BorderBrush = Brush(preferences.FocusBorderColor, opacity * .35);
+        hide.Visibility = focused ? Visibility.Visible : Visibility.Hidden;
+        resize.Visibility = focused && preferences.AllowManualResize ? Visibility.Visible : Visibility.Hidden;
+        moveIndicator.Visibility = focused && preferences.PositionMode == NotesPositionMode.Movable ? Visibility.Visible : Visibility.Hidden;
     }
     private void Place()
     {
@@ -161,7 +180,11 @@ internal partial class NotesWindow : Window
         if (message == 0x0021) // WM_MOUSEACTIVATE arrives before the user click activates the HWND.
         {
             if (!_model.IsFocused)
-            { _keyboardReleased = true; handled = true; return new IntPtr(3); } // MA_NOACTIVATE: still allow window controls.
+            {
+                if (!_model.FocusOnClick)
+                { _keyboardReleased = true; handled = true; return new IntPtr(3); } // MA_NOACTIVATE still permits dragging.
+                BeforeMouseActivate?.Invoke(); _keyboardReleased = false;
+            }
         }
         if (message is 0x007E or 0x001A) Dispatcher.BeginInvoke(RecoverPosition, DispatcherPriority.Background);
         return IntPtr.Zero;
@@ -183,8 +206,9 @@ internal partial class NotesWindow : Window
     }
     private void OnNoteMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (!_model.IsFocused && _model.FocusOnClick) FocusEditor();
         if (!_model.IsFocused && !HideButton.IsMouseOver && !ResizeGrip.IsMouseOver && !DragHandle.IsMouseOver)
-        { e.Handled = true; return; } // Editing starts only through an explicit keyboard action.
+        { e.Handled = true; return; } // Disabled mouse focus leaves the current application active.
         if (!_model.IsFocused && DragHandle.IsMouseOver && !_model.Movable) { e.Handled = true; return; }
         if (InsideEditor(e.OriginalSource as DependencyObject)) return;
         if (e.ChangedButton != MouseButton.Left || e.ClickCount != 1 || !_model.Movable || !DragHandle.IsMouseOver) return;
@@ -231,7 +255,7 @@ internal partial class NotesWindow : Window
     private void BeginResize(object sender, DragStartedEventArgs e) { _resizeWidth = Width; _resizeHeight = Height; }
     private void ResizeNote(object sender, DragDeltaEventArgs e)
     {
-        if (!_model.AllowManualResize) return;
+        if (!_model.IsFocused || !_model.AllowManualResize) return;
         _resizeWidth = Math.Clamp(_resizeWidth + e.HorizontalChange, MinWidth, MaxWidth);
         _resizeHeight = Math.Clamp(_resizeHeight + e.VerticalChange, MinHeight, MaxHeight);
         Width = Math.Round(_resizeWidth, MidpointRounding.AwayFromZero);

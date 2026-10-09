@@ -16,6 +16,7 @@ public sealed record NotesPreferences
     public KeyboardShortcut? FocusShortcut { get; init; } = new(7, 0x4E, "Ctrl + Alt + Shift + N");
     public NotesPositionMode PositionMode { get; init; } = NotesPositionMode.Fixed;
     public bool Topmost { get; init; } = true;
+    public bool FocusOnClick { get; init; }
     public bool AllowManualResize { get; init; } = true;
     public bool OpaqueWhenFocused { get; init; } = true;
     public string FocusBorderColor { get; init; } = "#267A5D";

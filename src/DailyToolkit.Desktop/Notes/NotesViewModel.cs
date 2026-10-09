@@ -77,6 +77,7 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
     public string Status => !IsEnabled ? "已停用" : !IsVisible ? "已隐藏" : IsFocused ? "正在编辑" : "显示中 · 未聚焦";
     public bool IsEnabled { get => _preferences.IsEnabled; set => Update(_preferences with { IsEnabled = value }); }
     public bool Topmost { get => _preferences.Topmost; set => Update(_preferences with { Topmost = value }); }
+    public bool FocusOnClick { get => _preferences.FocusOnClick; set => Update(_preferences with { FocusOnClick = value }); }
     public bool AllowManualResize { get => _preferences.AllowManualResize; set => Update(_preferences with { AllowManualResize = value }); }
     public bool OpaqueWhenFocused { get => _preferences.OpaqueWhenFocused; set => Update(_preferences with { OpaqueWhenFocused = value }); }
     public string FocusBorderColor { get => _preferences.FocusBorderColor;

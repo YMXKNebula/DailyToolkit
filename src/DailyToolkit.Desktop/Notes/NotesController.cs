@@ -95,6 +95,7 @@ internal sealed class NotesController : IDisposable
         if (_window is null)
         {
             _window = new(_model);
+            _window.BeforeMouseActivate += _focus.Capture;
             _window.UnfocusRequested += Unfocus;
             _window.HideRequested += () => Queue(HideAsync);
         }
