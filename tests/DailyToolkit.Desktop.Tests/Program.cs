@@ -93,6 +93,6 @@ internal static partial class Program
         await CheckToolkitInterfaceAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("37/37 desktop checks passed");
+        Console.WriteLine("38/38 desktop checks passed");
     }
 }

@@ -16,6 +16,8 @@ public sealed record NotesPreferences
     public KeyboardShortcut? FocusShortcut { get; init; } = new(7, 0x4E, "Ctrl + Alt + Shift + N");
     public NotesPositionMode PositionMode { get; init; } = NotesPositionMode.Fixed;
     public bool Topmost { get; init; } = true;
+    public bool DoubleClickUnfocus { get; init; } = true;
+    public bool ClickToFocus { get; init; } = true;
     // Position is in virtual-desktop physical pixels; dimensions are in WPF DIPs.
     public double? X { get; init; }
     public double? Y { get; init; }
@@ -69,8 +71,8 @@ public static class NotesPosition
             Y = area.Y + Math.Min(32, Math.Max(0, area.Height - window.Height)) };
     }
 
-    public static bool CanStartDrag(NotesPositionMode mode, TimeSpan held, double dx, double dy,
+    public static bool CanStartDrag(NotesPositionMode mode, double dx, double dy,
         double horizontalThreshold, double verticalThreshold, int clickCount) =>
-        mode == NotesPositionMode.Movable && clickCount == 1 && held >= TimeSpan.FromMilliseconds(200) &&
+        mode == NotesPositionMode.Movable && clickCount == 1 &&
         (Math.Abs(dx) >= horizontalThreshold || Math.Abs(dy) >= verticalThreshold);
 }

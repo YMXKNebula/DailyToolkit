@@ -36,6 +36,7 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
     public NotesViewModel(NotesStore? store = null)
     {
         Store = store ?? new();
+        ToggleFavoriteCommand = new(_ => IsFavorite = !IsFavorite);
         _saveTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(400) };
         _saveTimer.Tick += SaveTick;
         Ready = LoadAsync();
@@ -57,12 +58,19 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
     public string Notice { get => _notice; set => Set(ref _notice, value); }
     public bool IsVisible { get => _visible; internal set { if (Set(ref _visible, value)) Notify(nameof(Status)); } }
     public bool IsFocused { get => _focused; internal set { if (Set(ref _focused, value)) Notify(nameof(Status)); } }
-    public bool IsFavorite { get => _favorite; set => Set(ref _favorite, value); }
+    public bool IsFavorite { get => _favorite; set { if (Set(ref _favorite, value)) { Notify(nameof(FavoriteSymbol)); Notify(nameof(FavoriteHint)); } } }
+    public string FavoriteSymbol => IsFavorite ? "★" : "☆";
+    public string FavoriteHint => IsFavorite ? "取消收藏" : "加入收藏夹";
+    public RelayCommand ToggleFavoriteCommand { get; }
     public string Status => !IsEnabled ? "已停用" : !IsVisible ? "已隐藏" : IsFocused ? "正在编辑" : "显示中 · 未聚焦";
     public bool IsEnabled { get => _preferences.IsEnabled; set => Update(_preferences with { IsEnabled = value }); }
     public bool Topmost { get => _preferences.Topmost; set => Update(_preferences with { Topmost = value }); }
+    public bool DoubleClickUnfocus { get => _preferences.DoubleClickUnfocus; set => Update(_preferences with { DoubleClickUnfocus = value }); }
+    public bool ClickToFocus { get => _preferences.ClickToFocus; set => Update(_preferences with { ClickToFocus = value }); }
     public bool Movable { get => _preferences.PositionMode == NotesPositionMode.Movable;
         set => Update(_preferences with { PositionMode = value ? NotesPositionMode.Movable : NotesPositionMode.Fixed }); }
+    public bool IsFixedMode { get => !Movable; set { if (value) Movable = false; } }
+    public bool IsMovableMode { get => Movable; set { if (value) Movable = true; } }
     public string ToggleShortcutText => _preferences.ToggleShortcut?.Name ?? "未设置";
     public string FocusShortcutText => _preferences.FocusShortcut?.Name ?? "未设置";
     public double Width { get => _preferences.Width; set => Update(_preferences with { Width = value }); }
@@ -80,7 +88,7 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
     public double FontSize { get => _preferences.Font.Size;
         set => Update(_preferences with { Font = _preferences.Font with { Size = value } }); }
     public string FontFamily { get => _preferences.Font.Family;
-        set => Update(_preferences with { Font = _preferences.Font with { Family = value } }); }
+        set { if (!string.IsNullOrWhiteSpace(value)) Update(_preferences with { Font = _preferences.Font with { Family = value } }); } }
     public bool FontBold { get => _preferences.Font.Bold;
         set => Update(_preferences with { Font = _preferences.Font with { Bold = value } }); }
 

@@ -39,6 +39,7 @@ internal static partial class Program
                 await model.Ready;
                 Require(model.IsLoaded && model.Text == "" && model.Preferences == new NotesPreferences(), "Missing notes did not initialize defaults");
                 model.Text = "第一行\n第二行 📝"; model.FontSize = 26; model.BackgroundOpacity = .4;
+                model.DoubleClickUnfocus = false; model.ClickToFocus = false;
                 for (var attempt = 0; attempt < 30 && !File.Exists(store.SettingsPath); attempt++) await Task.Delay(100);
                 Require(File.Exists(store.ContentPath) && await File.ReadAllTextAsync(store.ContentPath) == model.Text,
                     "Debounced autosave did not preserve Unicode multi-line notes without hiding or exiting");
@@ -49,7 +50,8 @@ internal static partial class Program
             using (var reopened = new NotesViewModel(store))
             {
                 await reopened.Ready;
-                Require(reopened.Text.Contains("隐藏前最后输入") && reopened.FontSize == 26 && reopened.BackgroundOpacity == .4,
+                Require(reopened.Text.Contains("隐藏前最后输入") && reopened.FontSize == 26 && reopened.BackgroundOpacity == .4 &&
+                    !reopened.DoubleClickUnfocus && !reopened.ClickToFocus,
                     "Text and independent appearance did not survive a new model/version");
                 var text = reopened.Text; reopened.ResetSettings();
                 Require(await reopened.FlushAsync() && reopened.Text == text && reopened.Preferences == new NotesPreferences(), "Reset settings changed note content");
@@ -148,7 +150,8 @@ internal static partial class Program
             Require(notes.Preferences.Background == background && notes.BackgroundPresets.Count >= 6, "Font preset replaced background settings");
             Require(!notes.SetShortcut(true, notes.Preferences.ToggleShortcut, model.Gaming.ToggleShortcut) &&
                 !notes.SetShortcut(false, model.Gaming.ToggleShortcut, model.Gaming.ToggleShortcut), "Shortcut validation accepted notes or lens conflicts");
-            notes.IsFavorite = true; model.Page = "floating-notes"; model.OpenFavoritesCommand.Execute(null);
+            notes.ToggleFavoriteCommand.Execute(null); model.Page = "floating-notes"; model.OpenFavoritesCommand.Execute(null);
+            Require(notes.FavoriteSymbol == "★" && notes.FavoriteHint == "取消收藏", "Notes favorite star did not update");
             Require(model.NavigationItems.Single().Id == "floating-notes" && model.ShowFloatingNotes && !model.ShowRefresh, "Notes favorite cloned or lost tool routing");
             model.ToggleToolCommand.Execute(model.NavigationItems.Single());
             Require(!notes.IsEnabled && !model.NavigationItems.Single().IsEnabled && model.Gaming.IsEnabled, "Notes disable affected lens or retained enabled navigation");
@@ -187,13 +190,33 @@ internal static partial class Program
                 Require(view.IsVisible && notes.InstalledFonts.Count > 0,
                     $"Notes page or installed font list stayed unavailable: page={model.Page}, visible={view.IsVisible}, fonts={notes.InstalledFonts.Count}");
                 var picker = Descendants(view).OfType<ComboBox>().Single(); picker.ApplyTemplate();
-                Require(picker.Template.FindName("PART_EditableTextBox", picker) is TextBox, "Editable font picker lacked its editor");
+                Require(!picker.IsEditable && picker.Template.FindName("PART_EditableTextBox", picker) is null,
+                    "Font chooser still exposed a text input");
                 picker.SelectedItem = notes.InstalledFonts.First(family => family != notes.FontFamily);
                 Require(notes.FontFamily == (string)picker.SelectedItem, "Selecting an installed font did not update notes");
-                var editor = (TextBox)picker.Template.FindName("PART_EditableTextBox", picker);
-                editor.Text = "Consolas";
+                picker.SelectedItem = "Consolas";
                 await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
-                Require(notes.FontFamily == "Consolas", "Typing a font family did not update notes");
+                Require(notes.FontFamily == "Consolas", "Installed font selection did not update notes");
+                var fixedMode = (RadioButton)view.FindName("NotesFixedMode");
+                var movableMode = (RadioButton)view.FindName("NotesMovableMode");
+                movableMode.IsChecked = true;
+                Require(notes.Movable && fixedMode.IsChecked == false, "Position radios did not select movable mode");
+                fixedMode.IsChecked = true;
+                Require(!notes.Movable && movableMode.IsChecked == false, "Position radios did not select fixed mode");
+                var favorite = (Button)view.FindName("FavoriteButton");
+                favorite.Command.Execute(null);
+                Require(!notes.IsFavorite && notes.FavoriteSymbol == "☆" &&
+                    !new FavoritesStore(Path.Combine(directory.FullName, "favorites.json")).Load().Contains("floating-notes"),
+                    "Favorite star command did not update the existing navigation item");
+                var doubleClickSwitch = (DailyToolkit.Desktop.Controls.FeatureSwitch)view.FindName("DoubleClickSwitch");
+                var clickSwitch = (DailyToolkit.Desktop.Controls.FeatureSwitch)view.FindName("ClickFocusSwitch");
+                doubleClickSwitch.SetCurrentValue(DailyToolkit.Desktop.Controls.FeatureSwitch.IsOnProperty, false);
+                clickSwitch.SetCurrentValue(DailyToolkit.Desktop.Controls.FeatureSwitch.IsOnProperty, false);
+                Require(!notes.DoubleClickUnfocus && !notes.ClickToFocus, "Mouse switches did not write independent preferences");
+                notes.FontColor = "#B02070";
+                Require(((SolidColorBrush)((Border)view.FindName("FontColorSwatch")).Background).Color == Color.FromRgb(176, 32, 112) &&
+                    ((SolidColorBrush)((TextBlock)view.FindName("PreviewText")).Foreground).Color == Color.FromRgb(176, 32, 112),
+                    "Text color swatch and adjacent preview failed to update together");
                 notes.ResetFont(); notes.ResetBackground();
                 foreach (var dark in new[] { true, false })
                 {
@@ -202,16 +225,32 @@ internal static partial class Program
                     var color = ((SolidColorBrush)window.FindResource("TextBrush")).Color;
                     Require(Descendants(view).OfType<CheckBox>().All(box => box.Foreground is SolidColorBrush brush && brush.Color == color),
                         "Notes checkboxes ignored the current theme's readable text color");
-                    var scroll = Descendants(view).OfType<ScrollViewer>().First(); scroll.ScrollToTop(); window.UpdateLayout();
+                    var scroll = (ScrollViewer)view.FindName("SettingsScroll"); scroll.ScrollToTop();
+                    await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                    var preview = (FrameworkElement)view.FindName("AppearancePreview"); var previewTop = preview.TranslatePoint(new(), view);
                     Image("settings-" + (dark ? "dark" : "light") + "-top");
                     scroll.ScrollToBottom(); await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
-                    Require(((FrameworkElement)view.FindName("AppearancePreview")).IsVisible && scroll.VerticalOffset > 0,
-                        "Font preview and data controls could not be reached by scrolling");
+                    Require(preview.IsVisible && scroll.VerticalOffset > 0 && preview.TranslatePoint(new(), view) == previewTop &&
+                        previewTop.Y >= 0 && previewTop.Y + preview.ActualHeight <= view.ActualHeight && Grid.GetColumn((UIElement)view.FindName("PreviewPanel")) == 1,
+                        "Adjacent preview moved out of view while scrolling appearance controls");
                     Image("settings-" + (dark ? "dark" : "light") + "-bottom");
+                    var fontCard = picker;
+                    fontCard.BringIntoView(); await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                    Image("settings-" + (dark ? "dark" : "light") + "-font");
                 }
+                window.Width = 680; window.Height = 700;
+                await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                var narrowScroll = (ScrollViewer)view.FindName("SettingsScroll"); var previewPanel = (FrameworkElement)view.FindName("PreviewPanel");
+                Require(Grid.GetColumn(previewPanel) == 0 && Grid.GetRow(narrowScroll) == 1 && previewPanel.ActualHeight > 100,
+                    "Narrow notes page did not keep its preview above the scrolling settings");
+                var narrowTop = previewPanel.TranslatePoint(new(), view);
+                narrowScroll.ScrollToBottom(); await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                Require(narrowTop == previewPanel.TranslatePoint(new(), view) && narrowScroll.VerticalOffset > 0,
+                    "Narrow preview disappeared when scrolling controls");
+                Image("settings-light-narrow");
             }
             finally { window.Close(); await closed.Task.WaitAsync(TimeSpan.FromSeconds(10)); }
-            Console.WriteLine("PASS Notes independent presets, hotkeys, navigation, privacy, themed controls and editable installed fonts");
+            Console.WriteLine("PASS Notes independent presets, navigation star, mouse switches, position radios, selection-only fonts, color swatches and persistent wide/narrow previews");
         }
         finally { if (!closedByWindow) model?.Dispose(); directory.Delete(true); }
     }
@@ -263,6 +302,7 @@ internal static partial class Program
             Escape(); await Task.Delay(60);
             Require(model.IsVisible && !model.IsFocused && foreground.Current == new WindowInteropHelper(companion).Handle, "Escape did not restore previous window");
             controller.Refocus(); await controller.Pending;
+            await CheckNotesMouseGesturesAsync(model, controller, window, companion);
             companion.Activate(); await Task.Delay(80);
             Require(model.IsVisible && !model.IsFocused && foreground.Current == new WindowInteropHelper(companion).Handle,
                 "External deactivation hid note or stole focus");

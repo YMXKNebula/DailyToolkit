@@ -37,15 +37,43 @@ public partial class NotesSettingsView : UserControl
         };
     }
     private void Changed(object? sender, PropertyChangedEventArgs e) { if (IsVisible && e.PropertyName == "") UpdatePreview(); }
+    private void SettingsSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var sideBySide = e.NewSize.Width >= 620;
+        SettingsLayout.ColumnDefinitions[0].Width = new(3, GridUnitType.Star);
+        SettingsLayout.ColumnDefinitions[1].Width = sideBySide ? new(2, GridUnitType.Star) : new(0);
+        SettingsLayout.RowDefinitions[0].Height = sideBySide ? new(1, GridUnitType.Star) : new(Math.Min(210, e.NewSize.Height * .35));
+        SettingsLayout.RowDefinitions[1].Height = sideBySide ? new(0) : new(1, GridUnitType.Star);
+        Grid.SetRow(SettingsScroll, sideBySide ? 0 : 1);
+        Grid.SetColumn(PreviewPanel, sideBySide ? 1 : 0);
+        PreviewPanel.Margin = sideBySide ? new(12, 0, 0, 12) : new(0, 0, 8, 12);
+        PreviewHint.Visibility = sideBySide ? Visibility.Visible : Visibility.Collapsed;
+        UpdatePreviewDimensions();
+    }
+    private void UpdatePreviewDimensions()
+    {
+        if (_model is null) return;
+        var sideBySide = SettingsLayout.ActualWidth >= 620;
+        var width = Math.Max(0, SettingsLayout.ActualWidth * (sideBySide ? .4 : 1) - (sideBySide ? 50 : 46));
+        var availableHeight = sideBySide ? SettingsLayout.ActualHeight : SettingsLayout.RowDefinitions[0].Height.Value;
+        var height = width * _model.Height / _model.Width;
+        AppearancePreview.Height = Math.Max(0, Math.Min(height, availableHeight - (sideBySide ? 134 : 84)));
+    }
     private void UpdatePreview()
     {
         if (_model is null) return;
         var preferences = _model.Preferences;
         AppearancePreview.Background = NotesWindow.Brush(preferences.Background.Color, preferences.Background.Opacity);
         AppearancePreview.CornerRadius = new(preferences.Background.Radius);
+        AppearancePreview.BorderBrush = NotesWindow.Brush(preferences.Font.Color, .2);
+        BackgroundColorSwatch.Background = NotesWindow.Brush(preferences.Background.Color, 1);
+        FontColorSwatch.Background = NotesWindow.Brush(preferences.Font.Color, 1);
+        PreviewHandle.Foreground = NotesWindow.Brush(preferences.Font.Color, .7);
+        PreviewHide.Foreground = NotesWindow.Brush(preferences.Font.Color, preferences.Font.Opacity);
         PreviewText.Foreground = NotesWindow.Brush(preferences.Font.Color, preferences.Font.Opacity);
         PreviewText.FontSize = preferences.Font.Size; PreviewText.FontFamily = new(preferences.Font.Family + ", Microsoft YaHei UI");
         PreviewText.FontWeight = preferences.Font.Bold ? FontWeights.Bold : FontWeights.Normal;
+        UpdatePreviewDimensions();
     }
     private void ShortcutFocus(object sender, KeyboardFocusChangedEventArgs e) => ShortcutEditing?.Invoke(true);
     private void ShortcutBlur(object sender, KeyboardFocusChangedEventArgs e) => ShortcutEditing?.Invoke(false);

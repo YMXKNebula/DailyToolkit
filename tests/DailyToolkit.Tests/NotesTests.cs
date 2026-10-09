@@ -42,13 +42,13 @@ internal static partial class Program
             Require(recovered.X == 132 && recovered.Y == 232 && recovered.Width == window.Width);
             Require(NotesPosition.Recover(window, []) == window);
         });
-        Test("Notes drag needs both hold time and movement and never starts fixed or double click", () =>
+        Test("Notes drag starts on movement without waiting and never starts fixed or double click", () =>
         {
-            bool Drag(NotesPositionMode mode, int time, double dx, double dy, int clicks = 1) =>
-                NotesPosition.CanStartDrag(mode, TimeSpan.FromMilliseconds(time), dx, dy, 4, 4, clicks);
-            Require(!Drag(NotesPositionMode.Movable, 199, 100, 100) && !Drag(NotesPositionMode.Movable, 500, 3, 3));
-            Require(Drag(NotesPositionMode.Movable, 200, -4, 0) && Drag(NotesPositionMode.Movable, 200, 0, 4));
-            Require(!Drag(NotesPositionMode.Fixed, 500, 100, 100) && !Drag(NotesPositionMode.Movable, 500, 100, 100, 2));
+            bool Drag(NotesPositionMode mode, double dx, double dy, int clicks = 1) =>
+                NotesPosition.CanStartDrag(mode, dx, dy, 4, 4, clicks);
+            Require(!Drag(NotesPositionMode.Movable, 3, 3) && !Drag(NotesPositionMode.Movable, 0, 0));
+            Require(Drag(NotesPositionMode.Movable, -4, 0) && Drag(NotesPositionMode.Movable, 0, 4));
+            Require(!Drag(NotesPositionMode.Fixed, 100, 100) && !Drag(NotesPositionMode.Movable, 100, 100, 2));
         });
     }
 }

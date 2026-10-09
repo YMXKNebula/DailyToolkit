@@ -1,99 +1,125 @@
 <UserControl x:Class="DailyToolkit.Desktop.Notes.NotesSettingsView"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
- xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:controls="clr-namespace:DailyToolkit.Desktop.Controls">
  <UserControl.Resources>
-  <Style TargetType="CheckBox">
-   <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
-  </Style>
+  <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Style>
+  <Style TargetType="RadioButton"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Style>
   <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
    <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
    <Setter Property="BorderThickness" Value="1"/>
   </Style>
-  <Style x:Key="FontPicker" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
-   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
-    <Grid>
-     <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-      Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Padding="6">
-      <TextBlock Text="⌄" HorizontalAlignment="Right" Margin="0,0,4,0" Foreground="{DynamicResource MutedBrush}"/>
-     </ToggleButton>
-     <TextBox x:Name="PART_EditableTextBox" Margin="8,4,30,4" BorderThickness="0" Background="Transparent"
-      Foreground="{TemplateBinding Foreground}" VerticalContentAlignment="Center"/>
-     <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False">
-      <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="4"
-       MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="280">
-       <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto"><ItemsPresenter/></ScrollViewer>
-      </Border>
-     </Popup>
-    </Grid>
-   </ControlTemplate></Setter.Value></Setter>
-  </Style>
  </UserControl.Resources>
- <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-  <StackPanel Margin="0,0,8,0" IsEnabled="{Binding IsLoaded}">
-   <Border Style="{StaticResource Card}"><StackPanel>
-    <DockPanel Margin="0,0,0,12"><CheckBox DockPanel.Dock="Right" Content="收藏" IsChecked="{Binding IsFavorite}"/>
-     <TextBlock Text="基础功能与快捷键" FontWeight="SemiBold"/></DockPanel>
-    <WrapPanel Margin="0,0,0,14"><Button Content="显示 / 隐藏浮笺" Click="ToggleNote" IsEnabled="{Binding IsEnabled}" Margin="0,0,8,0"/>
-     <Button Content="再次聚焦" Click="FocusNote" IsEnabled="{Binding IsEnabled}"/>
-     <TextBlock Text="{Binding Status}" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}"/></WrapPanel>
-    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-     <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-     <TextBlock Text="显示 / 隐藏" VerticalAlignment="Center"/>
-     <TextBox Grid.Column="1" Tag="toggle" Text="{Binding ToggleShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="0,4,8,4" Padding="8"
-      PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="按下新的快捷键；Esc 取消。" AutomationProperties.Name="浮笺显示隐藏快捷键"/>
-     <Button Grid.Column="2" Tag="toggle" Content="清空" Click="ClearShortcut" Padding="8"/>
-     <TextBlock Grid.Row="1" Text="再次聚焦" VerticalAlignment="Center"/>
-     <TextBox Grid.Row="1" Grid.Column="1" Tag="focus" Text="{Binding FocusShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="0,4,8,4" Padding="8"
-      PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="只聚焦已经显示的浮笺。" AutomationProperties.Name="浮笺再次聚焦快捷键"/>
-     <Button Grid.Row="1" Grid.Column="2" Tag="focus" Content="清空" Click="ClearShortcut" Padding="8"/>
-    </Grid>
-    <Button Content="恢复默认快捷键" Click="ResetShortcuts" HorizontalAlignment="Left" Margin="0,12,0,0"/>
-    <TextBlock Text="Esc 或双击顶部手柄取消聚焦，笔记仍保持显示。" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,12,0,0"/>
-   </StackPanel></Border>
-   <Border Style="{StaticResource Card}"><StackPanel>
-    <TextBlock Text="位置模式" FontWeight="SemiBold" Margin="0,0,0,12"/>
-    <CheckBox Content="允许移动" IsChecked="{Binding Movable}"/>
-    <TextBlock Text="关闭时固定位置；开启后，在顶部手柄长按约 200 毫秒并拖动。正文用于编辑。" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,10,0,0"/>
-   </StackPanel></Border>
-   <Border Style="{StaticResource Card}"><StackPanel>
-    <TextBlock Text="窗口与位置" FontWeight="SemiBold" Margin="0,0,0,12"/>
-    <CheckBox Content="始终置顶" IsChecked="{Binding Topmost}" Margin="0,0,0,12"/>
-    <WrapPanel><TextBlock Text="宽度" VerticalAlignment="Center"/><TextBox Text="{Binding Width}" Width="80" Margin="10,0,18,0" Padding="6"/>
-     <TextBlock Text="高度" VerticalAlignment="Center"/><TextBox Text="{Binding Height}" Width="80" Margin="10,0,18,0" Padding="6"/>
-     <Button Content="重置位置" Click="ResetPosition"/></WrapPanel>
-    <TextBlock Text="也可拖动浮笺右下角调整尺寸。置顶不会持续抢占输入焦点。" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,12,0,0"/>
-   </StackPanel></Border>
-   <Border Style="{StaticResource Card}"><StackPanel>
-    <TextBlock Text="背景外观" FontWeight="SemiBold" Margin="0,0,0,12"/>
-    <ItemsControl ItemsSource="{Binding BackgroundPresets}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-     <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Value}" Click="ApplyBackground" Margin="0,0,8,8" Padding="10,7"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-    <WrapPanel Margin="0,4,0,12"><TextBlock Text="颜色" VerticalAlignment="Center"/><TextBox Text="{Binding BackgroundColor}" Tag="background" LostFocus="ValidateColor" Width="110" Margin="10,0,12,0" Padding="6" ToolTip="#RRGGBB，例如 #FFF0AA"/>
-     <Button Content="恢复默认背景" Click="ResetBackground"/></WrapPanel>
-    <TextBlock Text="背景透明度"/><Slider Value="{Binding BackgroundOpacity}" Minimum="0.05" Maximum="1" Margin="0,8,0,14" AutomationProperties.Name="浮笺背景透明度"/>
-    <TextBlock Text="圆角"/><Slider Value="{Binding Radius}" Minimum="0" Maximum="40" Margin="0,8,0,0" AutomationProperties.Name="浮笺圆角"/>
-   </StackPanel></Border>
-   <Border Style="{StaticResource Card}"><StackPanel>
-    <TextBlock Text="字体外观" FontWeight="SemiBold" Margin="0,0,0,12"/>
-    <ItemsControl ItemsSource="{Binding FontPresets}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-     <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Value}" Click="ApplyFont" Margin="0,0,8,8" Padding="10,7"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-    <ComboBox Style="{StaticResource FontPicker}" ItemsSource="{Binding InstalledFonts}" Text="{Binding FontFamily, UpdateSourceTrigger=PropertyChanged}" IsEditable="True" Padding="6" Margin="0,4,0,12" AutomationProperties.Name="浮笺字体"/>
-    <WrapPanel Margin="0,0,0,12"><TextBlock Text="文字颜色" VerticalAlignment="Center"/><TextBox Text="{Binding FontColor}" Tag="font" LostFocus="ValidateColor" Width="110" Margin="10,0,12,0" Padding="6" ToolTip="#RRGGBB"/>
-     <CheckBox Content="粗体" IsChecked="{Binding FontBold}" VerticalAlignment="Center" Margin="0,0,12,0"/><Button Content="恢复默认字体" Click="ResetFont"/></WrapPanel>
-    <TextBlock Text="字号（10–72）"/><Slider Value="{Binding FontSize}" Minimum="10" Maximum="72" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,8,0,14" AutomationProperties.Name="浮笺字号"/>
-    <TextBlock Text="文字透明度"/><Slider Value="{Binding FontOpacity}" Minimum="0.1" Maximum="1" Margin="0,8,0,14" AutomationProperties.Name="浮笺文字透明度"/>
-    <Border x:Name="AppearancePreview" Padding="16" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" MinHeight="100">
-     <TextBlock x:Name="PreviewText" Text="浮笺 · 随手记下想法&#xA;背景和文字可以分别设置。" TextWrapping="Wrap"/>
+ <Grid x:Name="SettingsLayout" SizeChanged="SettingsSizeChanged" IsEnabled="{Binding IsLoaded}">
+  <Grid.ColumnDefinitions><ColumnDefinition Width="3*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+  <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="0"/></Grid.RowDefinitions>
+  <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+   <StackPanel Margin="0,0,8,0">
+    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+     <Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+      <TextBlock Text="显示 / 隐藏" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+      <TextBox Grid.Column="1" Tag="toggle" Text="{Binding ToggleShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="12,0,4,8" Padding="8,6" MinWidth="62" VerticalContentAlignment="Center"
+       PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="按下新的快捷键；Esc 取消。" AutomationProperties.Name="浮笺显示隐藏快捷键"/>
+      <Button Grid.Column="2" Tag="toggle" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12" Margin="0,0,0,8"/>
+      <Button x:Name="FavoriteButton" Grid.Column="3" Command="{Binding ToggleFavoriteCommand}" Margin="4,0,0,8"
+       Padding="4,6" FontSize="17" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AccentBrush}"
+       ToolTip="{Binding FavoriteHint}" AutomationProperties.Name="{Binding FavoriteHint}">
+       <TextBlock Text="{Binding FavoriteSymbol}" FontFamily="Segoe UI Symbol" FontSize="17"/>
+      </Button>
+      <TextBlock Grid.Row="1" Text="再次聚焦" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+      <TextBox Grid.Row="1" Grid.Column="1" Tag="focus" Text="{Binding FocusShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="12,0,4,0" Padding="8,6" MinWidth="62" VerticalContentAlignment="Center"
+       PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="只聚焦已经显示的浮笺。" AutomationProperties.Name="浮笺再次聚焦快捷键"/>
+      <Button Grid.Row="1" Grid.Column="2" Tag="focus" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12"/>
+     </Grid>
+     <Button Content="恢复默认快捷键" Click="ResetShortcuts" HorizontalAlignment="Left" Margin="0,12,0,12"/>
+     <WrapPanel><Button Content="显示 / 隐藏浮笺" Click="ToggleNote" IsEnabled="{Binding IsEnabled}" Margin="0,0,8,8"/>
+      <Button Content="再次聚焦" Click="FocusNote" IsEnabled="{Binding IsEnabled}" Margin="0,0,0,8"/></WrapPanel>
+     <TextBlock Text="{Binding Status}" Foreground="{DynamicResource MutedBrush}"/>
+    </StackPanel></Border>
+    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+     <TextBlock Text="位置" FontWeight="SemiBold" Margin="0,0,0,10"/>
+     <WrapPanel Margin="0,0,0,12">
+      <RadioButton x:Name="NotesFixedMode" Content="固定" GroupName="NotesMovement" IsChecked="{Binding IsFixedMode, Mode=TwoWay}" Margin="0,0,18,0"/>
+      <RadioButton x:Name="NotesMovableMode" Content="可移动" GroupName="NotesMovement" IsChecked="{Binding IsMovableMode, Mode=TwoWay}"/>
+     </WrapPanel>
+     <TextBlock Text="可移动模式：按住顶部区域即可拖动，正文仍用于编辑。" Style="{StaticResource MutedText}" Margin="0,0,0,16"/>
+     <CheckBox Content="始终置顶" IsChecked="{Binding Topmost}" Margin="0,0,0,12"/>
+     <WrapPanel><TextBlock Text="宽度" VerticalAlignment="Center"/><TextBox Text="{Binding Width}" Width="70" Margin="8,0,16,8" Padding="6"/>
+      <TextBlock Text="高度" VerticalAlignment="Center"/><TextBox Text="{Binding Height}" Width="70" Margin="8,0,0,8" Padding="6"/></WrapPanel>
+     <Button Content="重置位置" Click="ResetPosition" HorizontalAlignment="Left"/>
+     <TextBlock Text="也可拖动浮笺右下角调整尺寸。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
+    </StackPanel></Border>
+    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+     <TextBlock Text="鼠标与聚焦" FontWeight="SemiBold" Margin="0,0,0,12"/>
+     <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <TextBlock Text="双击任意位置取消聚焦" TextWrapping="Wrap" VerticalAlignment="Center"/>
+      <controls:FeatureSwitch x:Name="DoubleClickSwitch" Grid.Column="1" IsOn="{Binding DoubleClickUnfocus, Mode=TwoWay}" Margin="12,0,0,0"
+       AnimationSpeed="{Binding DataContext.AnimationSpeed, RelativeSource={RelativeSource AncestorType=Window}}"
+       AnimationsEnabled="{Binding DataContext.PageAnimationsEnabled, RelativeSource={RelativeSource AncestorType=Window}}"
+       AutomationProperties.Name="双击浮笺任意位置取消聚焦"/>
+     </Grid>
+     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <TextBlock Text="点击浮笺再次聚焦" TextWrapping="Wrap" VerticalAlignment="Center"/>
+      <controls:FeatureSwitch x:Name="ClickFocusSwitch" Grid.Column="1" IsOn="{Binding ClickToFocus, Mode=TwoWay}" Margin="12,0,0,0"
+       AnimationSpeed="{Binding DataContext.AnimationSpeed, RelativeSource={RelativeSource AncestorType=Window}}"
+       AnimationsEnabled="{Binding DataContext.PageAnimationsEnabled, RelativeSource={RelativeSource AncestorType=Window}}"
+       AutomationProperties.Name="点击浮笺任意位置再次聚焦"/>
+     </Grid>
+     <TextBlock Text="关闭双击开关后，正文双击可选词。关闭点击开关后，使用快捷键或上方按钮再次聚焦。Esc 始终可取消聚焦。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
+    </StackPanel></Border>
+    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+     <TextBlock Text="背景外观" FontWeight="SemiBold" Margin="0,0,0,12"/>
+     <ItemsControl ItemsSource="{Binding BackgroundPresets}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Value}" Click="ApplyBackground" Margin="0,0,8,8" Padding="10,7"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+     <WrapPanel Margin="0,4,0,12"><TextBlock Text="颜色" VerticalAlignment="Center"/>
+      <TextBox Text="{Binding BackgroundColor, UpdateSourceTrigger=PropertyChanged}" Tag="background" LostFocus="ValidateColor" Width="110" Margin="10,0,8,0" Padding="6" ToolTip="#RRGGBB，例如 #FFF0AA"/>
+      <Border x:Name="BackgroundColorSwatch" Width="28" Height="28" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" VerticalAlignment="Center" ToolTip="{Binding BackgroundColor}" AutomationProperties.Name="背景颜色预览"/>
+     </WrapPanel>
+     <Button Content="恢复默认背景" Click="ResetBackground" HorizontalAlignment="Left" Margin="0,0,0,14"/>
+     <TextBlock Text="背景透明度"/><Slider Value="{Binding BackgroundOpacity}" Minimum="0.05" Maximum="1" Margin="0,8,0,14" AutomationProperties.Name="浮笺背景透明度"/>
+     <TextBlock Text="圆角"/><Slider Value="{Binding Radius}" Minimum="0" Maximum="40" Margin="0,8,0,0" AutomationProperties.Name="浮笺圆角"/>
+    </StackPanel></Border>
+    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+     <TextBlock Text="字体外观" FontWeight="SemiBold" Margin="0,0,0,12"/>
+     <ItemsControl ItemsSource="{Binding FontPresets}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Value}" Click="ApplyFont" Margin="0,0,8,8" Padding="10,7"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+     <ComboBox x:Name="FontChoice" ItemsSource="{Binding InstalledFonts}" SelectedItem="{Binding FontFamily, Mode=TwoWay}" IsEditable="False" IsTextSearchEnabled="True" Padding="6" Margin="0,4,0,12" MaxDropDownHeight="280" AutomationProperties.Name="浮笺字体"/>
+     <WrapPanel Margin="0,0,0,12"><TextBlock Text="文字颜色" VerticalAlignment="Center"/>
+      <TextBox Text="{Binding FontColor, UpdateSourceTrigger=PropertyChanged}" Tag="font" LostFocus="ValidateColor" Width="110" Margin="10,0,8,0" Padding="6" ToolTip="#RRGGBB"/>
+      <Border x:Name="FontColorSwatch" Width="28" Height="28" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" VerticalAlignment="Center" ToolTip="{Binding FontColor}" AutomationProperties.Name="文字颜色预览"/>
+     </WrapPanel>
+     <WrapPanel Margin="0,0,0,14"><CheckBox Content="粗体" IsChecked="{Binding FontBold}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+      <Button Content="恢复默认字体" Click="ResetFont"/></WrapPanel>
+     <TextBlock Text="字号（10–72）"/><Slider Value="{Binding FontSize}" Minimum="10" Maximum="72" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,8,0,14" AutomationProperties.Name="浮笺字号"/>
+     <TextBlock Text="文字透明度"/><Slider Value="{Binding FontOpacity}" Minimum="0.1" Maximum="1" Margin="0,8,0,0" AutomationProperties.Name="浮笺文字透明度"/>
+    </StackPanel></Border>
+    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+     <TextBlock Text="数据管理" FontWeight="SemiBold" Margin="0,0,0,12"/>
+     <WrapPanel><Button Content="立即保存" Click="SaveNow" Margin="0,0,8,8"/><Button Content="导出文本" Click="ExportText" Margin="0,0,8,8"/>
+      <Button Content="打开数据目录" Click="OpenDirectory" Margin="0,0,8,8"/><Button Content="恢复全部默认设置" Click="ResetSettings" Margin="0,0,8,8"/></WrapPanel>
+     <TextBlock Text="笔记仅保存在本机。恢复设置保留正文；更换软件版本也会沿用原有笔记。" Style="{StaticResource MutedText}"/>
+     <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,12,0,0"/>
+    </StackPanel></Border>
+   </StackPanel>
+  </ScrollViewer>
+  <Border x:Name="PreviewPanel" Grid.Column="1" Style="{StaticResource Card}" Margin="12,0,0,12" VerticalAlignment="Top">
+   <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <TextBlock Text="外观预览" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,14"/>
+    <Border x:Name="AppearancePreview" Grid.Row="1" Padding="12" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" ClipToBounds="True">
+     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <DockPanel Margin="0,0,0,10"><TextBlock x:Name="PreviewHide" Text="—" DockPanel.Dock="Right" FontSize="16"/>
+       <TextBlock x:Name="PreviewHandle" Text="浮笺  ···" FontSize="12"/></DockPanel>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+       <TextBlock x:Name="PreviewText" Text="浮笺 · 随手记下想法&#xA;&#xA;今天想做的事：&#xA;写下灵感，慢慢完成。" TextWrapping="Wrap"/>
+      </ScrollViewer>
+     </Grid>
     </Border>
-   </StackPanel></Border>
-   <Border Style="{StaticResource Card}"><StackPanel>
-    <TextBlock Text="数据管理" FontWeight="SemiBold" Margin="0,0,0,12"/>
-    <WrapPanel><Button Content="立即保存" Click="SaveNow" Margin="0,0,8,8"/><Button Content="导出文本" Click="ExportText" Margin="0,0,8,8"/>
-     <Button Content="打开数据目录" Click="OpenDirectory" Margin="0,0,8,8"/><Button Content="恢复全部默认设置" Click="ResetSettings" Margin="0,0,8,8"/></WrapPanel>
-    <TextBlock Text="笔记仅保存在本机。恢复设置保留正文；更换软件版本也会沿用原有笔记。" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap"/>
-    <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,12,0,0"/>
-   </StackPanel></Border>
-  </StackPanel>
- </ScrollViewer>
+    <TextBlock x:Name="PreviewHint" Grid.Row="2" Text="调整背景、字体或文字颜色，预览会即时更新。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
+   </Grid>
+  </Border>
+ </Grid>
 </UserControl>

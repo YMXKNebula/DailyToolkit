@@ -9,7 +9,7 @@
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <Border x:Name="DragHandle" Background="Transparent" Cursor="Hand" Margin="0,0,40,0"
-              ToolTip="可移动模式：长按并拖动。双击此处取消聚焦。">
+              ToolTip="可移动模式：按住顶部区域即可拖动。">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
           <TextBlock x:Name="HandleLabel" Text="浮笺  ···" FontSize="12" Margin="3,0"/>
         </StackPanel>
@@ -23,7 +23,7 @@
       <TextBlock Grid.Row="2" x:Name="SaveNotice" Text="{Binding Notice}" FontSize="11" TextWrapping="Wrap"
                  Foreground="#D53C3C" MaxHeight="84" Margin="2,3,14,0"/>
       <Thumb x:Name="ResizeGrip" Grid.Row="1" Grid.RowSpan="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-             Width="14" Height="14" Cursor="SizeNWSE" DragDelta="ResizeNote" ToolTip="调整尺寸" AutomationProperties.Name="调整浮笺尺寸">
+             Width="14" Height="14" Focusable="False" Cursor="SizeNWSE" DragDelta="ResizeNote" ToolTip="调整尺寸" AutomationProperties.Name="调整浮笺尺寸">
         <Thumb.Template><ControlTemplate TargetType="Thumb"><TextBlock Text="◢" Foreground="#808080" FontSize="12"/></ControlTemplate></Thumb.Template>
       </Thumb>
     </Grid>

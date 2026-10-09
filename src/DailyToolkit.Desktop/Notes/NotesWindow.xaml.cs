@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,10 +16,8 @@ internal partial class NotesWindow : Window
     private readonly NotesViewModel _model;
     private HwndSource? _source;
     private NotesPreferences? _applied;
-    private readonly DispatcherTimer _holdTimer = new(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(200) };
     private Point _pressPoint;
     private Point _dragAnchor;
-    private long _pressTime;
     private bool _pressed, _applying, _closing, _composing, _keyboardReleased, _dragging;
     internal IntPtr Handle => new WindowInteropHelper(this).Handle;
     internal TextBox NoteEditor => Editor;
@@ -35,7 +32,7 @@ internal partial class NotesWindow : Window
         SourceInitialized += (_, _) => { _source = HwndSource.FromHwnd(Handle); _source?.AddHook(Message); Place(); };
         _model.PropertyChanged += Changed;
         Activated += (_, _) => QueueEditorFocus();
-        Deactivated += (_, _) => { StopPress(); _model.IsFocused = false; };
+        Deactivated += (_, _) => { StopPress(); _keyboardReleased = true; _model.IsFocused = false; };
         IsKeyboardFocusWithinChanged += (_, _) => _model.IsFocused = IsVisible && IsActive && IsKeyboardFocusWithin &&
             !_keyboardReleased && new NotesForeground().Current == Handle;
         LocationChanged += (_, _) => RememberPosition();
@@ -45,7 +42,6 @@ internal partial class NotesWindow : Window
         DragHandle.MouseMove += (_, e) => TryDrag(e.GetPosition(DragHandle));
         DragHandle.LostMouseCapture += (_, _) => StopPress();
         PreviewMouseUp += (_, _) => StopPress();
-        _holdTimer.Tick += (_, _) => { _holdTimer.Stop(); TryDrag(Mouse.GetPosition(DragHandle)); };
         TextCompositionManager.AddPreviewTextInputStartHandler(Editor, (_, _) => _composing = true);
         TextCompositionManager.AddPreviewTextInputHandler(Editor, (_, _) => _composing = false);
         Closing += (_, e) => { if (!_closing) { e.Cancel = true; HideRequested?.Invoke(); } };
@@ -79,6 +75,7 @@ internal partial class NotesWindow : Window
             Editor.IsReadOnly = !_model.ContentWritable;
             HandleLabel.Foreground = Brush(preferences.Font.Color, .7);
             DragHandle.Cursor = _model.Movable ? Cursors.SizeAll : Cursors.Hand;
+            DragHandle.ToolTip = _model.Movable ? "按住顶部区域即可拖动。" : "固定模式：窗口位置不会随拖动改变。";
             if (Handle != IntPtr.Zero && (_applied?.X != preferences.X || _applied?.Y != preferences.Y)) Place();
             _applied = preferences;
         }
@@ -151,7 +148,11 @@ internal partial class NotesWindow : Window
             catch (Win32Exception) { _model.Notice = "跨屏位置暂时未能调整，请松开后重试。"; }
         }
         if (message == 0x0021) // WM_MOUSEACTIVATE arrives before the user click activates the HWND.
-        { BeforeMouseActivate?.Invoke(); _keyboardReleased = false; }
+        {
+            if (!_model.ClickToFocus && !_model.IsFocused)
+            { _keyboardReleased = true; handled = true; return new IntPtr(3); } // MA_NOACTIVATE: still allow window controls.
+            BeforeMouseActivate?.Invoke(); _keyboardReleased = false;
+        }
         if (message is 0x007E or 0x001A) Dispatcher.BeginInvoke(RecoverPosition, DispatcherPriority.Background);
         return IntPtr.Zero;
     }
@@ -172,20 +173,24 @@ internal partial class NotesWindow : Window
     }
     private void OnNoteMouseDown(object sender, MouseButtonEventArgs e)
     {
-        _keyboardReleased = false;
-        if (InsideEditor(e.OriginalSource as DependencyObject)) return;
-        if (e.ClickCount == 2 && e.ChangedButton is MouseButton.Left or MouseButton.Right)
+        if (_model.DoubleClickUnfocus && e.ClickCount >= 2 && e.ClickCount % 2 == 0 && e.ChangedButton is MouseButton.Left or MouseButton.Right)
         { StopPress(); e.Handled = true; UnfocusRequested?.Invoke(); return; }
-        if (_keyboardReleased || !_model.IsFocused) FocusEditor();
+        if (!_model.IsFocused)
+        {
+            if (_model.ClickToFocus) { _keyboardReleased = false; FocusEditor(); }
+            else if (InsideEditor(e.OriginalSource as DependencyObject) && !ResizeGrip.IsMouseOver)
+            { e.Handled = true; return; } // Prevent the editor's default mouse focus when click-to-focus is disabled.
+        }
+        if (InsideEditor(e.OriginalSource as DependencyObject)) return;
         if (e.ChangedButton != MouseButton.Left || e.ClickCount != 1 || !_model.Movable || !DragHandle.IsMouseOver) return;
-        _pressed = true; _pressTime = Stopwatch.GetTimestamp(); _pressPoint = e.GetPosition(DragHandle);
+        _pressed = true; _pressPoint = e.GetPosition(DragHandle);
         _dragAnchor = e.GetPosition(this);
-        DragHandle.CaptureMouse(); _holdTimer.Start(); e.Handled = true;
+        DragHandle.CaptureMouse(); e.Handled = true;
     }
     private void TryDrag(Point current)
     {
         if (!_pressed || Mouse.LeftButton != MouseButtonState.Pressed) return;
-        if (!NotesPosition.CanStartDrag(_model.Preferences.PositionMode, Stopwatch.GetElapsedTime(_pressTime),
+        if (!NotesPosition.CanStartDrag(_model.Preferences.PositionMode,
             current.X - _pressPoint.X, current.Y - _pressPoint.Y,
             SystemParameters.MinimumHorizontalDragDistance, SystemParameters.MinimumVerticalDragDistance, 1)) return;
         StopPress();
@@ -198,7 +203,7 @@ internal partial class NotesWindow : Window
         finally { _dragging = false; }
         RememberPosition();
     }
-    private void StopPress() { _pressed = false; _holdTimer.Stop(); if (DragHandle.IsMouseCaptured) DragHandle.ReleaseMouseCapture(); }
+    private void StopPress() { _pressed = false; if (DragHandle.IsMouseCaptured) DragHandle.ReleaseMouseCapture(); }
     private void ResizeNote(object sender, DragDeltaEventArgs e)
     { Width = Math.Clamp(Width + e.HorizontalChange, MinWidth, MaxWidth); Height = Math.Clamp(Height + e.VerticalChange, MinHeight, MaxHeight); }
     private void HideNote(object sender, RoutedEventArgs e) => HideRequested?.Invoke();
