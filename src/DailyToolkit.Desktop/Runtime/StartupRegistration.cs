@@ -59,6 +59,20 @@ public sealed class StartupRegistration : IStartupRegistration
         }
         finally { if (service is not null) Marshal.FinalReleaseComObject(service); }
     }
+    internal bool RegisteredTaskTargetsCurrentExecutable()
+    {
+        object? service = null;
+        try
+        {
+            service = Connect(); dynamic? task = FindTask(((dynamic)service).GetFolder("\\"));
+            return task is not null && OwnedTask(task!) &&
+                SameExecutable((string)task!.Definition.Actions[1].Path, _executable);
+        }
+        finally { if (service is not null) Marshal.FinalReleaseComObject(service); }
+    }
+    internal static bool SameExecutable(string registered, string executable) =>
+        string.Equals(Path.GetFullPath(System.Environment.ExpandEnvironmentVariables(registered.Trim('"'))),
+            Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase);
     public async Task ApplyAsync(StartupChoice choice)
     {
         if (choice.Enabled && choice.Administrator && !IsAdministrator && !Read().Administrator)

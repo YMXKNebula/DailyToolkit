@@ -31,6 +31,13 @@ internal static partial class Program
             {
                 if (args is ["--lens-image-checks"])
                 { LensDiagnostics.CheckShader();CheckLensUpgrade();exitCode=0;return; }
+                if (args is ["--notes-checks", var notesImages])
+                {
+                    await CheckNotesPersistenceAsync(); CheckNotesFocus(); await CheckNotesShortcutsAsync();
+                    await CheckNotesAppearanceAndNavigationAsync(notesImages); await CheckNotesWindowAsync(notesImages); exitCode = 0; return;
+                }
+                if (args is ["--notes-live", var notesReport])
+                { await CheckLiveNotesAsync(notesReport); exitCode = 0; return; }
                 if (args is ["--drag-benchmark",var output])
                 {
                     await RunDragBenchmarkAsync(output); exitCode=0; return;
@@ -70,6 +77,11 @@ internal static partial class Program
         await CheckTrayLifecycleAsync();
         await CheckSingleInstanceAsync();
         await CheckBackgroundShortcutAsync();
+        await CheckNotesPersistenceAsync();
+        CheckNotesFocus();
+        await CheckNotesShortcutsAsync();
+        await CheckNotesAppearanceAndNavigationAsync();
+        await CheckNotesWindowAsync();
         LensDiagnostics.CheckShader();
         CheckLensUpgrade();
         Console.WriteLine("PASS Actual Direct3D shader preserves colors and reconstructs subpixel edges");
@@ -81,6 +93,6 @@ internal static partial class Program
         await CheckToolkitInterfaceAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("31/31 desktop checks passed");
+        Console.WriteLine("37/37 desktop checks passed");
     }
 }

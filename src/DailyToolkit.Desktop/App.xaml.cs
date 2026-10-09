@@ -107,7 +107,9 @@ public partial class App : Application
                 try
                 {
                     if (!startupRegistration.Read().Administrator) throw new InvalidOperationException("管理员启动任务已被移除，请重新启用管理员自启。");
-                    startupRegistration.LaunchAdministrator(requireRegisteredTask:true); Shutdown(); return;
+                    if (startupRegistration.RegisteredTaskTargetsCurrentExecutable())
+                    { startupRegistration.LaunchAdministrator(requireRegisteredTask:true); Shutdown(); return; }
+                    startupRecoveryNotice="管理员自启任务仍指向另一版本，本次以普通权限打开当前版本。要更换自启版本，请在当前版本关闭后重新启用自启。";
                 }
                 catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException or InvalidOperationException or System.ComponentModel.Win32Exception)
                 {
@@ -129,7 +131,8 @@ public partial class App : Application
             preferencesStore=new(Path.Combine(previewDirectory.FullName,"settings.json"));
             preferencesStore.Save(localPreferences);
         }
-        var viewModel = new MainViewModel(new WindowsEnvironmentProbe(), NativeWindowsInfo.ReadDisplay(),appPreferencesStore:preferencesStore);
+        var viewModel = new MainViewModel(new WindowsEnvironmentProbe(), NativeWindowsInfo.ReadDisplay(),appPreferencesStore:preferencesStore,
+            notesStore: previewDirectory is null ? null : new Notes.NotesStore(Path.Combine(previewDirectory.FullName,"Notes")));
         if (startupRecoveryNotice is not null) viewModel.Page="settings";
         try
         {

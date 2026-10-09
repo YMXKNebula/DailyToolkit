@@ -7,6 +7,7 @@ using System.Windows.Data;
 using DailyToolkit.Core.Environment;
 using DailyToolkit.Desktop.Environment;
 using DailyToolkit.Desktop.Gaming;
+using DailyToolkit.Desktop.Notes;
 
 namespace DailyToolkit.Desktop.Presentation;
 
@@ -40,7 +41,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly NavigationOrderStore _navigationStore;
     private readonly List<string> _navigationOrder;
     // Each installed tool gets one entry here; favorites reuse the same entries and tool state.
-    private readonly NavigationItem[] _navigation=[new("screen-lens","屏幕局部放大","\uE71E",canToggle:true)];
+    private readonly NavigationItem[] _navigation=[new("screen-lens","屏幕局部放大","\uE71E",canToggle:true),
+        new("floating-notes","浮笺","\uE70B",canToggle:true)];
     private string _softwareSearch = "";
     private string _notice = "";
     private bool _isRefreshing;
@@ -56,7 +58,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public MainViewModel(IEnvironmentProbe probe, DisplayInfo display, ILocalStatusProbe? localStatus = null,
         TimeProvider? clock = null, FavoritesStore? favoritesStore = null, GamingPreferencesStore? gamingPreferencesStore = null,
         NavigationOrderStore? navigationStore = null, AppPreferencesStore? appPreferencesStore = null,
-        Runtime.IStartupRegistration? startupRegistration = null)
+        Runtime.IStartupRegistration? startupRegistration = null, NotesStore? notesStore = null)
     {
         _probe = probe;
         _display = display;
@@ -72,6 +74,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         InitializeStartup(startupRegistration);
         foreach (var item in _navigation) if (!_navigationOrder.Contains(item.Id)) _navigationOrder.Add(item.Id);
         Gaming = new(gamingPreferencesStore);
+        Notes = new(notesStore);
+        Notes.IsFavorite = _favoriteIds.Contains("floating-notes");
+        _navigation[1].IsEnabled = Notes.IsEnabled;
         _navigation[0].IsEnabled=Gaming.IsEnabled;
         Gaming.IsFavorite = _favoriteIds.Contains("screen-lens");
         _now = _clock.GetLocalNow();
@@ -83,7 +88,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         };
         _softwareView = CreateSoftwareView();
         NavigateCommand = new(parameter => Page = parameter is NavigationItem item ? item.Id : parameter as string ?? "screen-lens");
-        ToggleToolCommand=new(parameter => { if (parameter is NavigationItem { Id:"screen-lens",CanToggle:true }) Gaming.IsEnabled=!Gaming.IsEnabled; });
+        ToggleToolCommand=new(parameter =>
+        {
+            if (parameter is NavigationItem { Id:"screen-lens",CanToggle:true }) Gaming.IsEnabled=!Gaming.IsEnabled;
+            else if (parameter is NavigationItem { Id:"floating-notes",CanToggle:true }) Notes.IsEnabled=!Notes.IsEnabled;
+        });
         OpenFavoritesCommand=new(_ => OpenFavorites());
         ExitFavoritesCommand=new(_ => ExitFavorites());
         OpenSettingsCommand=new(_ => OpenSettings());
@@ -96,6 +105,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             if (ShowScreenLens) Gaming.RefreshMonitors(); else _ = InitializeAsync();
         }, () => (!IsSettings || IsHome) && (ShowScreenLens ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus));
         Gaming.PropertyChanged += OnGamingChanged;
+        Notes.PropertyChanged += OnNotesChanged;
         RefreshNavigation();
         NotifyNavigation();
     }
@@ -123,10 +133,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public RelayCommand MoveDownCommand { get; }
     public ObservableCollection<NavigationItem> NavigationItems { get; } = [];
     public GamingViewModel Gaming { get; }
+    public NotesViewModel Notes { get; }
     public RelayCommand RefreshCommand { get; }
     public Task CurrentProbeTask { get; private set; } = Task.CompletedTask;
     public Task CurrentLocalStatusTask { get; private set; } = Task.CompletedTask;
-    public Task PendingWork => Task.WhenAll(CurrentProbeTask, CurrentLocalStatusTask);
+    public Task PendingWork => Task.WhenAll(CurrentProbeTask, CurrentLocalStatusTask, Notes.Ready);
     public MachineReport Report => _report;
     public ICollectionView SoftwareView => _softwareView;
 
@@ -161,15 +172,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool ShowAboutSettings => IsSettings && Page == "settings-about";
     public bool HasFavorites => _navigation.Any(item => _favoriteIds.Contains(item.Id));
     public bool ShowScreenLens => Page == "screen-lens";
+    public bool ShowFloatingNotes => Page == "floating-notes";
     public bool ShowFavoritesEmpty => IsFavorites && !HasFavorites;
     public bool ShowAllTools => !IsFavorites && !IsSettings;
-    public bool ShowRefresh => !IsSettings || IsHome;
+    public bool ShowRefresh => (!IsSettings || IsHome) && !ShowFloatingNotes;
     public string FavoritesToggleHint => IsFavorites ? "关闭收藏夹" : "打开收藏夹";
     public string SettingsToggleHint => IsSettings ? "关闭软件设置" : "打开软件设置";
     public string PageTitle => IsSettings ? _settingsNavigation.First(item => item.Id == Page).Name : ShowFavoritesEmpty ? "收藏夹" : _navigation.First(item => item.Id == Page).Name;
     public string RefreshText => ShowScreenLens ? "刷新屏幕" : "刷新";
-    public string FooterStatusText => IsHome ? StatusText : IsSettings || ShowFavoritesEmpty ? "" : !Gaming.IsEnabled ? "功能已停用" : Gaming.IsActive ? "放大运行中" : "未开启";
-    public string FooterSourceText => IsHome ? LocalSourceText : IsSettings || ShowFavoritesEmpty ? "" : "本机显示";
+    public string FooterStatusText => IsHome ? StatusText : IsSettings || ShowFavoritesEmpty ? "" : ShowFloatingNotes ? Notes.Status : !Gaming.IsEnabled ? "功能已停用" : Gaming.IsActive ? "放大运行中" : "未开启";
+    public string FooterSourceText => IsHome ? LocalSourceText : IsSettings || ShowFavoritesEmpty ? "" : ShowFloatingNotes ? "本地笔记" : "本机显示";
     public bool PageAnimationsEnabled
     {
         get => _appPreferences.PageAnimationsEnabled;
@@ -510,7 +522,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public void CancelPending() => _lifetime.Cancel();
-    public void Dispose() { _startupDisposed=true; Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { _startupDisposed=true; Notes.PropertyChanged -= OnNotesChanged; Notes.Dispose(); Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 
     private static string FormatBytes(long? bytes) => bytes is null ? "未知" :
         bytes >= 1024L * 1024 * 1024 ? $"{bytes.Value / (1024d * 1024 * 1024):0.#} GB" :

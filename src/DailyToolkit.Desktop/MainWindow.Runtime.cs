@@ -62,7 +62,7 @@ public partial class MainWindow
     {
         if (_tray?.Available != true) return false;
         if (WindowState != WindowState.Minimized) _lastVisibleState=WindowState;
-        FinishPageTransition(); FinishNavigationTransition(); _shortcuts?.Suspend(false); Hide(); return true;
+        FinishPageTransition(); FinishNavigationTransition(); _shortcuts?.Suspend(false); _notes?.Suspend(false); Hide(); return true;
     }
     internal void RequestExit() { _exitRequested=true; Close(); }
     private IntPtr RuntimeMessage(IntPtr hwnd,int message,IntPtr wParam,IntPtr lParam,ref bool handled)

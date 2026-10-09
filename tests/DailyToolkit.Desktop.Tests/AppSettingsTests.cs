@@ -30,7 +30,7 @@ internal static partial class Program
                     !model.RefreshCommand.CanExecute(null) && !model.MoveNavigationItem("settings","computer") &&
                     model.Gaming.Zoom == 4 && !model.Gaming.IsActive,"Opening settings changed tool state or kept unrelated navigation");
                 model.ExitSettingsCommand.Execute(null);
-                Require(model.ShowScreenLens && model.NavigationItems.Count == 1,"Closing settings lost the previous tool");
+                Require(model.ShowScreenLens && model.NavigationItems.Count == 2,"Closing settings lost the previous tool");
                 model.OpenFavoritesCommand.Execute(null);
                 Require(model.ShowFavoritesEmpty,"The check did not start with empty favorites");
                 model.OpenSettingsCommand.Execute(null);
@@ -66,7 +66,7 @@ internal static partial class Program
                             Require(model.IsFavorites != model.IsSettings,"Panel entry did not replace the previous panel");
                         }
                         if (model.IsSettings) model.ExitSettingsCommand.Execute(null); else model.ExitFavoritesCommand.Execute(null);
-                        Require(model.ShowScreenLens && model.ShowAllTools && !model.IsFavorites && !model.IsSettings && model.NavigationItems.Count == 1,
+                        Require(model.ShowScreenLens && model.ShowAllTools && !model.IsFavorites && !model.IsSettings && model.NavigationItems.Count == 2,
                             "Repeated peer-panel switching did not return to the main interface");
                     }
                 }

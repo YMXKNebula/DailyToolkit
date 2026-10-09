@@ -120,6 +120,9 @@ internal static partial class Program
                 "Background and independent appearance preferences did not persist");
             File.WriteAllText(path,"{\"Theme\":{\"Accent\":\"oops\",\"Text\":\"#abcdef\"},\"AnimationColor\":\"#GGGGGG\"}");
             Require(store.Load() is { AnimationColor:"#267A5D",Theme.Accent:"#267A5D",Theme.Text:"#ABCDEF" },"Invalid colors did not recover independently");
+            Require(StartupRegistration.SameExecutable(@"C:\工具\DailyToolkit.exe", @"c:\工具\DailyToolkit.exe") &&
+                !StartupRegistration.SameExecutable(@"C:\工具\0.7.0\DailyToolkit.exe", @"C:\工具\0.7.1\DailyToolkit.exe"),
+                "Administrator handoff matched a different version directory or rejected case-insensitive current path");
             var xml=XDocument.Parse(StartupRegistration.CreateTaskXml(@"C:\工具 & files\DailyToolkit.exe","S-1-5-21-123"));
             XNamespace ns="http://schemas.microsoft.com/windows/2004/02/mit/task";
             string Value(string name) => xml.Descendants(ns+name).Single().Value;

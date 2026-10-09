@@ -11,8 +11,24 @@ DailyToolkit 是 Windows 本地工具集。桌面界面使用 WPF，公共代码
 | `src/DailyToolkit.Desktop/Environment` | Windows 信息读取 |
 | `src/DailyToolkit.Desktop/Presentation` | 页面状态和操作 |
 | `src/DailyToolkit.Desktop/Gaming` | 放大运行会话、原生窗口、捕获与显卡渲染 |
+| `src/DailyToolkit.Core/Notes` | 浮笺设置、坐标恢复与拖动阈值规则 |
+| `src/DailyToolkit.Desktop/Notes` | 浮笺窗口、设置页、生命周期、焦点、热键和异步存储 |
 | `tests` | 适配、进程通信及界面生命周期检查 |
 | `scripts` | 编译和打包 |
+
+## 浮笺
+
+`NotesViewModel` 是正文和设置的状态来源。显示、输入焦点和位置模式独立；`NotesController` 串行处理唤出、隐藏及停用，持有一个可复用的 `NotesWindow`。主窗口仅接入导航、热键编辑暂停和退出刷盘；浮笺没有设置主窗口为 Owner，因此主窗口进入托盘不影响笔记。
+
+两条快捷键沿用现有 `KeyboardShortcut`、HwndSource、RegisterHotKey 和 MOD_NOREPEAT 做法，注册 ID 与放大分开。设置录入时暂停两种工具的热键，修改放大快捷键也检查浮笺冲突。浮笺不增加全局键盘或鼠标钩子。
+
+`NotesFocusManager` 在唤出、再次聚焦或 WM_MOUSEACTIVATE 时记录有效前台 HWND；自然失焦只更新状态。主动退出聚焦清除本窗口输入焦点，再合法尝试一次恢复目标。无效窗口和系统拒绝均返回提示，不重试抢占。实际聚焦判断同时检查窗口的键盘焦点与 Windows 前台句柄，后台线程的活动窗口不被当作前台编辑状态。
+
+顶部手柄同时满足 200 毫秒与系统拖动距离后调用 WPF DragMove，使用普通窗口移动及项目现有 PerMonitorV2 DPI 支持。WM_MOVING 只按当前 DPI 将原拖动点的 DIP 偏移换算成像素，保持手柄与鼠标的相对位置，不重复调用 SetWindowPos 驱动移动。位置保存为虚拟桌面物理像素，尺寸保存为 DIP。WM_DISPLAYCHANGE/WM_SETTINGCHANGE 和每次显示时检查工作区，完全在可用屏幕外的窗口回到主屏。该模块不引用捕获、GPU、镜像轴或放大输入管线。
+
+`NotesStore` 将严格 UTF-8 正文与 JSON 设置分开。后台异步写入唯一临时文件，替换时保留 `.bak`。ViewModel 使用 400 毫秒防抖与保存锁，并追踪修订号，隐藏及退出刷盘期间暂停编辑。读坏的正文禁止自动覆盖；读坏的设置临时回退，只有用户恢复默认设置后才允许覆盖。普通诊断不序列化笔记。
+
+背景和字体是独立 record，分别设置画刷 alpha，Window.Opacity 保持 1。字体列表只在打开设置页时首次读取并缓存；字体缺失按 WPF 字体回退处理。未来多笔记可按 NotesDocument.Id 建独立正文文件，增加标题、分类和附件索引；字体导入可扩展字体来源与文件引用，保持当前系统字体名称和默认回退兼容。
 
 ## 启动和检测
 

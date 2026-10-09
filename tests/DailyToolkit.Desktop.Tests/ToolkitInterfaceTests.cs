@@ -89,7 +89,7 @@ internal static partial class Program
         }
         try
         {
-            Require(model.ShowScreenLens && model.NavigationItems.Single().CanToggle && !probe.DetailsStarted.Task.IsCompleted,
+            Require(model.ShowScreenLens && model.NavigationItems.Single(item => item.Id == "screen-lens").CanToggle && !probe.DetailsStarted.Task.IsCompleted,
                 "Default tool page eagerly probed computer details");
             window.Show(); window.UpdateLayout(); TextOptions.SetTextRenderingMode(window.PreviewContent,TextRenderingMode.Grayscale);
             await window.WaitForLensPreviewAsync().WaitAsync(TimeSpan.FromSeconds(15));
@@ -123,7 +123,7 @@ internal static partial class Program
             model.Gaming.SetShortcut(new(6,0x87,"Ctrl + Shift + F24"));
             window.InitializeLensShortcuts(HwndSource.FromHwnd(new WindowInteropHelper(window).Handle));
             var nav=(ItemsControl)window.FindName("NavigationList");
-            var shared=model.NavigationItems.Single(); var feature=Descendants(nav).OfType<FeatureSwitch>().Single();
+            var shared=model.NavigationItems.Single(item => item.Id == "screen-lens"); var feature=Descendants(nav).OfType<FeatureSwitch>().Single(button => button.DataContext is NavigationItem { Id: "screen-lens" });
             Require(window.IsLensHotkeyRegistered,"An enabled tool did not register its hotkey");
             void RoundedButton(string phase)
             {
@@ -174,7 +174,7 @@ internal static partial class Program
             focusVisual.Measure(new Size(34,20)); focusVisual.Arrange(new Rect(0,0,34,20)); focusVisual.ApplyTemplate();
             Require(Descendants(focusVisual).OfType<Border>().Single() is { CornerRadius.TopLeft:8,Background:null },
                 "The switch retained a rectangular or filled focus visual");
-            var row=Descendants(nav).OfType<RadioButton>().Single();
+            var row=Descendants(nav).OfType<RadioButton>().Single(button => button.DataContext is NavigationItem { Id: "screen-lens" });
             var label=Descendants(row).OfType<TextBlock>().Single(text => text.Text == "屏幕局部放大");
             Require(label.TranslatePoint(new Point(label.ActualWidth,0),feature).X<=-3,
                 "The wider switch overlapped the navigation label");
@@ -243,10 +243,10 @@ internal static partial class Program
             await Click(feature);
             Require(window.IsLensHotkeyRegistered && model.Gaming.IsEnabled && !model.Gaming.IsActive,"Re-enabling did not restore only availability");
             model.Gaming.IsFavorite=true; model.OpenFavoritesCommand.Execute(null); window.UpdateLayout();
-            Require(ReferenceEquals(shared,model.NavigationItems.Single()),"Favorites cloned the tool state");
-            await Click(Descendants(nav).OfType<FeatureSwitch>().Single());
+            Require(ReferenceEquals(shared,model.NavigationItems.Single(item => item.Id == "screen-lens")),"Favorites cloned the tool state");
+            await Click(Descendants(nav).OfType<FeatureSwitch>().Single(button => button.DataContext is NavigationItem { Id: "screen-lens" }));
             model.ExitFavoritesCommand.Execute(null); window.UpdateLayout();
-            Require(!Descendants(nav).OfType<FeatureSwitch>().Single().IsOn && !window.IsLensHotkeyRegistered && model.ShowScreenLens,
+            Require(!Descendants(nav).OfType<FeatureSwitch>().Single(button => button.DataContext is NavigationItem { Id: "screen-lens" }).IsOn && !window.IsLensHotkeyRegistered && model.ShowScreenLens,
                 "The favorite's master switch did not update the main tool");
             model.Gaming.IsEnabled=true;
             Console.WriteLine("PASS Sliding red/green capsule switches share favorites state, persist disable, unregister hotkeys and re-enable without starting capture");
@@ -356,7 +356,7 @@ internal static partial class Program
                 Require(((Image)window.FindName("PageTransition")).IsVisible &&
                     Math.Abs(((Grid)window.FindName("PageTransitionCover")).Opacity-.5) < .01,"The footer animation ignored the selected speed");
                 window.SeekPageTransition(TimeSpan.FromMilliseconds(460/speed)); await Task.Delay(35);
-                feature=Descendants(nav).OfType<FeatureSwitch>().Single();
+                feature=Descendants(nav).OfType<FeatureSwitch>().Single(button => button.DataContext is NavigationItem { Id: "screen-lens" });
                 Require(feature.AnimationSpeed == speed,"The sliding switch ignored the selected animation speed");
                 model.OpenSettingsCommand.Execute(null); window.UpdateLayout();
             }

@@ -49,6 +49,7 @@ public partial class MainWindow : Window
             if (source is null) return;
             InitializeRuntime(source);
             InitializeLensShortcuts(source);
+            InitializeNotes(source);
         };
         _viewModel.Gaming.PropertyChanged += OnGamingStateChanged;
         _viewModel.PropertyChanged += OnAppSettingsChanged;
@@ -80,6 +81,7 @@ public partial class MainWindow : Window
             FinishPageTransition();
             FinishNavigationTransition();
             _shortcuts?.Dispose();
+            _notes?.Dispose();
             _viewModel.Gaming.PropertyChanged -= OnGamingStateChanged;
             _viewModel.PropertyChanged -= OnAppSettingsChanged;
             _viewModel.Dispose();
@@ -278,24 +280,33 @@ public partial class MainWindow : Window
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
         if (!_exitRequested && _viewModel.CloseToTray && HideToTray()) { e.Cancel=true; return; }
+        if (_exitPrepared) return;
+        e.Cancel = true;
+        if (_closing) return;
+        _closing = true;
         _shortcuts?.Suspend(true);
         _viewModel.Gaming.Stop();
-        if (_closing) { e.Cancel = true; return; }
-        var pending = _viewModel.PendingWork;
-        if (pending.IsCompleted) return;
-        e.Cancel = true;
-        _closing = true;
         _clockTimer.Stop();
+        var saved = _notes is not null ? await _notes.PrepareExitAsync() : await _viewModel.Notes.FlushAsync();
+        if (!saved)
+        {
+            _closing = false; _exitRequested = false;
+            _viewModel.Notice = "浮笺尚未保存，已取消退出。请重试保存或导出笔记。";
+            if (!IsVisible) Show();
+            RegisterLensHotkey(); UpdateLocalPolling(); return;
+        }
         _viewModel.CancelPending();
-        await pending;
+        await _viewModel.PendingWork;
+        _exitPrepared = true;
         _closing = false;
-        Close();
+        _ = Dispatcher.BeginInvoke(new Action(Close));
     }
 
     private void OnGamingStateChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is not (nameof(GamingViewModel.ToggleShortcut) or nameof(GamingViewModel.ActivationMode) or nameof(GamingViewModel.IsEnabled))) return;
         RegisterLensHotkey();
+        _notes?.Reconfigure();
     }
     private void RegisterLensHotkey()
     {
@@ -319,10 +330,12 @@ public partial class MainWindow : Window
     private void ShortcutFocus(object sender,KeyboardFocusChangedEventArgs e)
     {
         _shortcuts?.Suspend(true);
+        _notes?.Suspend(true);
     }
     private void ShortcutBlur(object sender,KeyboardFocusChangedEventArgs e)
     {
         if (_shortcuts is not null) UpdateShortcutNotice(_shortcuts.Suspend(false));
+        _notes?.Suspend(false);
     }
     private void CaptureShortcut(object sender,KeyEventArgs e)
     {
@@ -340,6 +353,8 @@ public partial class MainWindow : Window
         labels.Add(key is >= Key.D0 and <= Key.D9 ? ((int)key-(int)Key.D0).ToString() : key.ToString());
         var binding=new KeyboardShortcut((uint)modifiers,(uint)KeyInterop.VirtualKeyFromKey(key),string.Join(" + ",labels));
         if (!binding.IsValid) return;
+        if (binding.Matches(_viewModel.Notes.Preferences.ToggleShortcut) || binding.Matches(_viewModel.Notes.Preferences.FocusShortcut))
+        { _viewModel.Notice = "此快捷键与浮笺快捷键冲突，请选择其他组合。"; return; }
         _viewModel.Gaming.SetShortcut(binding);
         Keyboard.ClearFocus();
     }

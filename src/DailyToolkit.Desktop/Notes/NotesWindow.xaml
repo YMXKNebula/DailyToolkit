@@ -1,0 +1,31 @@
+<Window x:Class="DailyToolkit.Desktop.Notes.NotesWindow" x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="浮笺 · DailyToolkit" Icon="../Assets/dt.ico" WindowStyle="None" AllowsTransparency="True"
+        Background="Transparent" ShowInTaskbar="False" ShowActivated="False" ResizeMode="NoResize"
+        MinWidth="240" MinHeight="180" MaxWidth="1200" MaxHeight="1400"
+        WindowStartupLocation="Manual" TextOptions.TextRenderingMode="Grayscale">
+  <Border x:Name="NoteBackground" BorderThickness="1" Padding="10,4,10,10">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <Border x:Name="DragHandle" Background="Transparent" Cursor="Hand" Margin="0,0,40,0"
+              ToolTip="可移动模式：长按并拖动。双击此处取消聚焦。">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock x:Name="HandleLabel" Text="浮笺  ···" FontSize="12" Margin="3,0"/>
+        </StackPanel>
+      </Border>
+      <Button x:Name="HideButton" HorizontalAlignment="Right" Content="—" Width="28" Padding="0" Background="Transparent"
+              BorderThickness="0" Focusable="False" Click="HideNote" ToolTip="隐藏浮笺" AutomationProperties.Name="隐藏浮笺"/>
+      <TextBox x:Name="Editor" Grid.Row="1" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+               AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+               HorizontalScrollBarVisibility="Disabled" Background="Transparent" BorderThickness="0"
+               Padding="4,6" IsUndoEnabled="True" UndoLimit="200" AutomationProperties.Name="浮笺正文"/>
+      <TextBlock Grid.Row="2" x:Name="SaveNotice" Text="{Binding Notice}" FontSize="11" TextWrapping="Wrap"
+                 Foreground="#D53C3C" MaxHeight="84" Margin="2,3,14,0"/>
+      <Thumb x:Name="ResizeGrip" Grid.Row="1" Grid.RowSpan="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+             Width="14" Height="14" Cursor="SizeNWSE" DragDelta="ResizeNote" ToolTip="调整尺寸" AutomationProperties.Name="调整浮笺尺寸">
+        <Thumb.Template><ControlTemplate TargetType="Thumb"><TextBlock Text="◢" Foreground="#808080" FontSize="12"/></ControlTemplate></Thumb.Template>
+      </Thumb>
+    </Grid>
+  </Border>
+</Window>
