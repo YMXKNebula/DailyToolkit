@@ -105,7 +105,27 @@
       <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
       <Grid Margin="0,0,0,20">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-        <StackPanel Margin="0,0,14,0">
+        <StackPanel Margin="0,0,14,0" Orientation="Horizontal">
+          <Button x:Name="ToolFavoriteButton" Command="{Binding ToggleFavoriteCommand}" Padding="4,6" Margin="0,0,10,0"
+                  BorderThickness="0" Background="Transparent" Foreground="{DynamicResource AccentBrush}"
+                  ToolTip="{Binding FavoriteHint}" AutomationProperties.Name="{Binding FavoriteHint}">
+            <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+              <Setter Property="DataContext" Value="{Binding DataContext.Gaming, RelativeSource={RelativeSource AncestorType=Window}}"/><Setter Property="Visibility" Value="Collapsed"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding DataContext.ShowScreenLens, RelativeSource={RelativeSource AncestorType=Window}}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+                <DataTrigger Binding="{Binding DataContext.ShowFloatingNotes, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                  <Setter Property="Visibility" Value="Visible"/><Setter Property="DataContext" Value="{Binding DataContext.Notes, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style></Button.Style>
+            <Path x:Name="ToolFavoriteIcon" Width="28" Height="28" Stretch="Uniform"
+                  Data="M15.1,3.9 Q16,1.6 16.9,3.9 L19.8,10.8 L27.3,11.4 Q30,11.6 27.9,13.4 L22.1,18.4 L24,25.7 Q24.7,28.4 22.3,26.9 L16,23.1 L9.7,26.9 Q7.3,28.4 8,25.7 L9.9,18.4 L4.1,13.4 Q2,11.6 4.7,11.4 L12.2,10.8 Z"
+                  Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.8" StrokeLineJoin="Round">
+              <Path.Style><Style TargetType="Path"><Setter Property="Fill" Value="Transparent"/>
+                <Style.Triggers><DataTrigger Binding="{Binding IsFavorite}" Value="True"><Setter Property="Fill" Value="{DynamicResource AccentBrush}"/></DataTrigger></Style.Triggers>
+              </Style></Path.Style>
+            </Path>
+          </Button>
           <TextBlock Text="{Binding PageTitle}" FontSize="26" FontWeight="SemiBold" />
         </StackPanel>
         <Button x:Name="RefreshButton" Grid.Column="1" Content="{Binding RefreshText}" Command="{Binding RefreshCommand}" VerticalAlignment="Top" Margin="0,5,0,0"
@@ -214,7 +234,7 @@
               <Grid>
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="开启/关闭放大" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <TextBox Grid.Column="1" Text="{Binding ToggleShortcutText, Mode=OneWay}" IsReadOnly="True" Padding="8,6"
@@ -230,11 +250,6 @@
                 <RadioButton Content="切换" GroupName="LensMode" IsChecked="{Binding IsToggleMode}" Style="{StaticResource NavButton}"
                              Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次开启，再按一次关闭。" />
               </StackPanel>
-                <Button Grid.Column="4" Command="{Binding ToggleFavoriteCommand}"
-                        Padding="4,6" FontSize="17" BorderThickness="0" Background="Transparent"
-                        Foreground="{DynamicResource AccentBrush}" ToolTip="{Binding FavoriteHint}" AutomationProperties.Name="{Binding FavoriteHint}">
-                  <TextBlock Text="{Binding FavoriteSymbol}" FontFamily="Segoe UI Symbol" FontSize="17" />
-                </Button>
               </Grid>
               <Border x:Name="LensDetailsPanel">
                 <StackPanel Margin="0,16,0,0">

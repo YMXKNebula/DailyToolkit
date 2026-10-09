@@ -18,10 +18,10 @@ internal partial class NotesWindow : Window
     private NotesPreferences? _applied;
     private Point _pressPoint;
     private Point _dragAnchor;
-    private bool _pressed, _applying, _closing, _composing, _keyboardReleased, _dragging;
+    private double _resizeWidth, _resizeHeight;
+    private bool _pressed, _applying, _closing, _composing, _keyboardReleased, _dragging, _manualDragging;
     internal IntPtr Handle => new WindowInteropHelper(this).Handle;
     internal TextBox NoteEditor => Editor;
-    public event Action? BeforeMouseActivate;
     public event Action? UnfocusRequested;
     public event Action? HideRequested;
 
@@ -49,7 +49,11 @@ internal partial class NotesWindow : Window
     }
 
     private void Changed(object? sender, PropertyChangedEventArgs e)
-    { if (!_applying && (e.PropertyName is "" or nameof(NotesViewModel.Preferences))) ApplyPreferences(); }
+    {
+        if (_applying) return;
+        if (e.PropertyName is "" or nameof(NotesViewModel.Preferences)) ApplyPreferences();
+        if (e.PropertyName == nameof(NotesViewModel.IsFocused)) ApplyFocusAppearance();
+    }
 
     internal static SolidColorBrush Brush(string color, double opacity)
     {
@@ -64,22 +68,28 @@ internal partial class NotesWindow : Window
         try
         {
             Topmost = preferences.Topmost; Width = preferences.Width; Height = preferences.Height;
-            NoteBackground.Background = Brush(preferences.Background.Color, preferences.Background.Opacity);
             NoteBackground.CornerRadius = new(preferences.Background.Radius);
-            NoteBackground.BorderBrush = Brush(preferences.Font.Color, .2);
-            Editor.Foreground = Brush(preferences.Font.Color, preferences.Font.Opacity);
-            Editor.CaretBrush = Editor.Foreground;
-            HideButton.Foreground = Editor.Foreground;
+            ApplyFocusAppearance();
             Editor.FontFamily = new(preferences.Font.Family + ", Microsoft YaHei UI");
             Editor.FontSize = preferences.Font.Size; Editor.FontWeight = preferences.Font.Bold ? FontWeights.Bold : FontWeights.Normal;
             Editor.IsReadOnly = !_model.ContentWritable;
-            HandleLabel.Foreground = Brush(preferences.Font.Color, .7);
-            DragHandle.Cursor = _model.Movable ? Cursors.SizeAll : Cursors.Hand;
+            ResizeGrip.Visibility = preferences.AllowManualResize ? Visibility.Visible : Visibility.Collapsed;
+            DragHandle.Cursor = _model.Movable ? Cursors.SizeAll : Cursors.Arrow;
             DragHandle.ToolTip = _model.Movable ? "按住顶部区域即可拖动。" : "固定模式：窗口位置不会随拖动改变。";
             if (Handle != IntPtr.Zero && (_applied?.X != preferences.X || _applied?.Y != preferences.Y)) Place();
             _applied = preferences;
         }
         finally { _applying = false; }
+    }
+    private void ApplyFocusAppearance()
+    {
+        var preferences = _model.Preferences;
+        var opaque = _model.IsFocused && preferences.OpaqueWhenFocused;
+        NoteBackground.Background = Brush(preferences.Background.Color, opaque ? 1 : preferences.Background.Opacity);
+        NoteBackground.BorderBrush = _model.IsFocused ? Brush(preferences.FocusBorderColor, 1) : Brushes.Transparent;
+        Editor.Foreground = Brush(preferences.Font.Color, opaque ? 1 : preferences.Font.Opacity);
+        Editor.CaretBrush = Editor.Foreground;
+        HideButton.Foreground = Editor.Foreground; ResizeGrip.Foreground = Editor.Foreground;
     }
     private void Place()
     {
@@ -121,7 +131,8 @@ internal partial class NotesWindow : Window
         if (!IsActive || new NotesForeground().Current != Handle) { _model.IsFocused = false; return; }
         _keyboardReleased = false; Editor.Focus(); Keyboard.Focus(Editor);
         _model.IsFocused = IsVisible && IsActive && Editor.IsKeyboardFocusWithin;
-        if (_model.IsFocused && _model.Notice.StartsWith("Windows 未允许浮笺获得输入焦点", StringComparison.Ordinal)) _model.Notice = "";
+        if (_model.IsFocused && (_model.Notice.StartsWith("Windows 未允许浮笺获得输入焦点", StringComparison.Ordinal) ||
+            _model.Notice.StartsWith("先前窗口已关闭或 Windows 未允许切换", StringComparison.Ordinal))) _model.Notice = "";
     }
     internal void ReleaseKeyboard()
     {
@@ -149,9 +160,8 @@ internal partial class NotesWindow : Window
         }
         if (message == 0x0021) // WM_MOUSEACTIVATE arrives before the user click activates the HWND.
         {
-            if (!_model.ClickToFocus && !_model.IsFocused)
+            if (!_model.IsFocused)
             { _keyboardReleased = true; handled = true; return new IntPtr(3); } // MA_NOACTIVATE: still allow window controls.
-            BeforeMouseActivate?.Invoke(); _keyboardReleased = false;
         }
         if (message is 0x007E or 0x001A) Dispatcher.BeginInvoke(RecoverPosition, DispatcherPriority.Background);
         return IntPtr.Zero;
@@ -173,14 +183,9 @@ internal partial class NotesWindow : Window
     }
     private void OnNoteMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_model.DoubleClickUnfocus && e.ClickCount >= 2 && e.ClickCount % 2 == 0 && e.ChangedButton is MouseButton.Left or MouseButton.Right)
-        { StopPress(); e.Handled = true; UnfocusRequested?.Invoke(); return; }
-        if (!_model.IsFocused)
-        {
-            if (_model.ClickToFocus) { _keyboardReleased = false; FocusEditor(); }
-            else if (InsideEditor(e.OriginalSource as DependencyObject) && !ResizeGrip.IsMouseOver)
-            { e.Handled = true; return; } // Prevent the editor's default mouse focus when click-to-focus is disabled.
-        }
+        if (!_model.IsFocused && !HideButton.IsMouseOver && !ResizeGrip.IsMouseOver && !DragHandle.IsMouseOver)
+        { e.Handled = true; return; } // Editing starts only through an explicit keyboard action.
+        if (!_model.IsFocused && DragHandle.IsMouseOver && !_model.Movable) { e.Handled = true; return; }
         if (InsideEditor(e.OriginalSource as DependencyObject)) return;
         if (e.ChangedButton != MouseButton.Left || e.ClickCount != 1 || !_model.Movable || !DragHandle.IsMouseOver) return;
         _pressed = true; _pressPoint = e.GetPosition(DragHandle);
@@ -190,9 +195,28 @@ internal partial class NotesWindow : Window
     private void TryDrag(Point current)
     {
         if (!_pressed || Mouse.LeftButton != MouseButtonState.Pressed) return;
-        if (!NotesPosition.CanStartDrag(_model.Preferences.PositionMode,
+        if (!_manualDragging && !NotesPosition.CanStartDrag(_model.Preferences.PositionMode,
             current.X - _pressPoint.X, current.Y - _pressPoint.Y,
             SystemParameters.MinimumHorizontalDragDistance, SystemParameters.MinimumVerticalDragDistance, 1)) return;
+        if (!_model.IsFocused)
+        {
+            // The native system move loop requires activation. An unfocused note
+            // follows captured mouse events using NOACTIVATE instead.
+            _manualDragging = true;
+            try
+            {
+                var cursor = NotesPositionService.Cursor();
+                var dpi = GetDpiForWindow(Handle);
+                var scale = dpi == 0 ? VisualTreeHelper.GetDpi(this).DpiScaleX : dpi / 96d;
+                NotesPositionService.Move(Handle, cursor.X - _dragAnchor.X * scale, cursor.Y - _dragAnchor.Y * scale);
+                var nextDpi = GetDpiForWindow(Handle);
+                if (nextDpi != 0 && nextDpi != dpi)
+                    NotesPositionService.Move(Handle, cursor.X - _dragAnchor.X * nextDpi / 96d, cursor.Y - _dragAnchor.Y * nextDpi / 96d);
+                RememberPosition();
+            }
+            catch (Win32Exception) { StopPress(); _model.Notice = "浮笺拖动未完成，请重试。"; }
+            return;
+        }
         StopPress();
         try
         {
@@ -203,9 +227,16 @@ internal partial class NotesWindow : Window
         finally { _dragging = false; }
         RememberPosition();
     }
-    private void StopPress() { _pressed = false; if (DragHandle.IsMouseCaptured) DragHandle.ReleaseMouseCapture(); }
+    private void StopPress() { _pressed = _manualDragging = false; if (DragHandle.IsMouseCaptured) DragHandle.ReleaseMouseCapture(); }
+    private void BeginResize(object sender, DragStartedEventArgs e) { _resizeWidth = Width; _resizeHeight = Height; }
     private void ResizeNote(object sender, DragDeltaEventArgs e)
-    { Width = Math.Clamp(Width + e.HorizontalChange, MinWidth, MaxWidth); Height = Math.Clamp(Height + e.VerticalChange, MinHeight, MaxHeight); }
+    {
+        if (!_model.AllowManualResize) return;
+        _resizeWidth = Math.Clamp(_resizeWidth + e.HorizontalChange, MinWidth, MaxWidth);
+        _resizeHeight = Math.Clamp(_resizeHeight + e.VerticalChange, MinHeight, MaxHeight);
+        Width = Math.Round(_resizeWidth, MidpointRounding.AwayFromZero);
+        Height = Math.Round(_resizeHeight, MidpointRounding.AwayFromZero);
+    }
     private void HideNote(object sender, RoutedEventArgs e) => HideRequested?.Invoke();
     internal Point DragAnchorInDips => _dragAnchor;
     [StructLayout(LayoutKind.Sequential)] private struct MovingRect { public int Left, Top, Right, Bottom; }

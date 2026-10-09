@@ -29,6 +29,14 @@ internal static partial class Program
             Require(settings.ToggleShortcut!.IsValid && settings.FocusShortcut!.IsValid && !settings.ToggleShortcut.Matches(settings.FocusShortcut));
             Require(settings.ToggleShortcut!.Modifiers == 3 && settings.FocusShortcut!.Modifiers == 7);
         });
+        Test("Notes round legacy fractional dimensions and validate focus appearance", () =>
+        {
+            var settings = new NotesPreferences { Width = 360.5, Height = 420.4, FocusBorderColor = "bad" }.Normalize();
+            Require(settings.Width == 361 && settings.Height == 420 && settings.FocusBorderColor == "#267A5D");
+            Require(settings.AllowManualResize && settings.OpaqueWhenFocused);
+            Require((settings with { Width = 5000.7, Height = 179.6, FocusBorderColor = "#123ABC" }).Normalize() is
+                { Width: 1200, Height: 180, FocusBorderColor: "#123ABC" });
+        });
         Test("Notes keep negative and vertically arranged monitor coordinates", () =>
         {
             NotesRect[] areas = [new(0, 0, 2560, 1400), new(-1920, 0, 1920, 1040), new(0, -1440, 2560, 1400)];

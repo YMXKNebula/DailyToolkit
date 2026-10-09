@@ -28,12 +28,11 @@ internal static partial class Program
     {
         Require(NotesKeyState(1) >= 0 && NotesKeyState(2) >= 0, "Release mouse buttons before notes mouse checks");
         ReadNotesCursor(out var originalCursor);
-        var originalPreferences = model.Preferences; var originalText = model.Text;
+        var originalText = model.Text;
         var native = new NotesForeground(); var companionHandle = new WindowInteropHelper(companion).Handle;
         try
         {
             companion.Show(); companionHandle = new WindowInteropHelper(companion).Handle;
-            model.DoubleClickUnfocus = true; model.ClickToFocus = true;
             window.NoteEditor.Text = "alpha bravo\n中文鼠标操作测试"; window.UpdateLayout();
             var body = window.NoteEditor.PointToScreen(new Point(14, 16));
             var background = window.PointToScreen(new Point(5, 50));
@@ -48,37 +47,36 @@ internal static partial class Program
                 await Task.Delay(100);
             }
             Require(companion.Activate(), "Mouse fixture could not obtain foreground"); await Task.Delay(70);
-            await Click(body);
-            Require(model.IsFocused && controller.RestoreTarget == companionHandle, "Body click failed to focus and capture the previous app");
-            await Click(body, twice: true);
-            Require(model.IsVisible && !model.IsFocused && native.Current == companionHandle && !window.NoteEditor.IsKeyboardFocusWithin,
-                "Enabled body double-click failed to release keyboard focus and restore the previous app");
-            await Click(background); Require(model.IsFocused, "Clicking note padding failed to refocus");
-            await Click(background, twice: true);
-            Require(!model.IsFocused && native.Current == companionHandle, "Background double-click failed to unfocus");
-            await Click(grip); Require(model.IsFocused, "Clicking the top area failed to refocus");
-            await Click(grip, twice: true, right: true);
-            Require(!model.IsFocused && native.Current == companionHandle, "Right double-click on the top area failed to unfocus");
-            model.ClickToFocus = false;
             foreach (var point in new[] { body, background, grip })
             {
-                await Click(point);
+                await Click(point); await Click(point, twice: true);
                 Require(!model.IsFocused && !window.NoteEditor.IsKeyboardFocusWithin && native.Current == companionHandle,
-                    "Disabled click-to-focus still activated the note or editor");
+                    $"Mouse click/double click altered focus: point={point}, focused={model.IsFocused}, keyboard={window.NoteEditor.IsKeyboardFocusWithin}, foreground={native.Current}, expected={companionHandle}, note={window.Handle}");
             }
-            controller.Refocus(); await controller.Pending; await Task.Delay(80);
-            Require(model.IsFocused, "Disabling mouse focus also disabled explicit refocus");
-            model.DoubleClickUnfocus = false;
+            model.SetShortcut(true, new(7, 0x83, "Ctrl + Alt + Shift + F20"), null);
+            PressNotesTestHotkey(true); await Task.Delay(100); await controller.Pending;
+            Require(model.IsFocused && controller.RestoreTarget == companionHandle, "Explicit keyboard focus failed to capture the current app");
             await Click(body, twice: true);
-            Require(model.IsFocused && window.NoteEditor.SelectionLength > 0, "Disabling double-click unfocus did not restore normal word selection");
-            await Click(grip, twice: true);
-            Require(model.IsFocused, "Disabled double-click unfocus still released focus on the top area");
-            Console.WriteLine("PASS Notes actual body/background/top clicks, anywhere double-click, independent mouse toggles and word selection when disabled");
+            Require(model.IsFocused && window.NoteEditor.SelectionLength > 0, "Body double click did not retain ordinary word selection");
+            await Click(grip, twice: true); await Click(grip, twice: true, right: true);
+            Require(model.IsFocused, "Top double click still canceled focus");
+            PressNotesTestHotkey(true); await Task.Delay(100); await controller.Pending;
+            Require(!model.IsFocused && native.Current == companionHandle, "Focus shortcut did not release focus and restore the previous app");
+            PressNotesTestHotkey(true); await Task.Delay(100); await controller.Pending;
+            Require(model.IsFocused, "Same focus shortcut did not focus again");
+            var hide = (FrameworkElement)window.FindName("HideButton"); var resize = (FrameworkElement)window.FindName("ResizeGrip");
+            var hidePoint = hide.TranslatePoint(new(), window); var resizePoint = resize.TranslatePoint(new(), window);
+            Require(hidePoint.Y == resizePoint.Y && hide.ActualWidth == resize.ActualWidth && hide.ActualHeight == resize.ActualHeight &&
+                hidePoint.X < window.Width / 2 && resizePoint.X > window.Width / 2 && hidePoint.Y > window.Height / 2,
+                "Hide and resize controls were not symmetric bottom controls");
+            await Click(hide.PointToScreen(new Point(14, 14))); await controller.Pending;
+            Require(!model.IsVisible && native.Current == companionHandle, "Bottom hide control did not save, hide and restore focus");
+            controller.Toggle(); await controller.Pending; await Task.Delay(100);
+            Console.WriteLine("PASS Notes keyboard-only toggle focus, no mouse activation, word selection, top double clicks and bottom hide/resize symmetry");
         }
         finally
         {
             NotesMouse(4); MoveNotesCursor(originalCursor.X, originalCursor.Y);
-            model.DoubleClickUnfocus = originalPreferences.DoubleClickUnfocus; model.ClickToFocus = originalPreferences.ClickToFocus;
             model.Text = originalText;
         }
     }
@@ -101,29 +99,15 @@ internal static partial class Program
             var window = controller.NoteWindow!; Require(model.IsFocused, "Live note did not obtain focus through its registered hotkey");
             window.NoteEditor.Text = "alpha bravo\n中文编辑与跨屏测试";
             window.UpdateLayout(); await Task.Delay(80);
-            async Task Click(Point point, uint down = 2, uint up = 4, bool twice = false)
-            {
-                await Task.Delay((int)GetDoubleClickTime() + 25);
-                Require(MoveNotesCursor((int)point.X, (int)point.Y), "Could not position the test cursor");
-                NotesMouse(down); NotesMouse(up);
-                if (twice) { await Task.Delay(60); NotesMouse(down); NotesMouse(up); }
-                await Task.Delay(90);
-            }
             await CheckNotesMouseGesturesAsync(model, controller, window, companion);
             var handle = (System.Windows.Controls.Border)window.FindName("DragHandle");
             var grip = handle.PointToScreen(new Point(70, 12));
-            await Click(grip, twice: true);
-            Require(model.IsVisible && !model.IsFocused && native.Current == new WindowInteropHelper(companion).Handle,
-                "Left double click on the grip did not restore focus");
-            controller.Refocus(); await controller.Pending; await Task.Delay(60);
-            await Click(grip, 8, 16, true);
-            Require(model.IsVisible && !model.IsFocused, "Right double click on grip did not unfocus");
-            controller.Refocus(); await controller.Pending;
             var immediateDrags = new List<double>();
             async Task DragTo(Point destination, bool movable)
             {
                 model.Movable = movable; var start = handle.PointToScreen(new Point(70, 12));
                 var before = NotesPositionService.Bounds(window.Handle); var noteHandle = window.Handle;
+                Console.WriteLine($"Native note drag: movable={movable}, start={start}, destination={destination}, before={before}, focus={model.IsFocused}");
                 Require(MoveNotesCursor((int)start.X, (int)start.Y), "Could not position test drag");
                 var pressedAt = Stopwatch.GetTimestamp();
                 NotesMouse(2);
@@ -142,7 +126,7 @@ internal static partial class Program
                             {
                                 var elapsed = Stopwatch.GetElapsedTime(pressedAt).TotalMilliseconds;
                                 Require(elapsed < 200 && NotesPositionService.Bounds(noteHandle) != before,
-                                    $"Top drag did not start before the old hold delay: elapsed={elapsed}");
+                                    $"Top drag did not start before the old hold delay: elapsed={elapsed}, bounds={NotesPositionService.Bounds(noteHandle)}, start={start}, destination={destination}");
                                 immediateDrags.Add(elapsed);
                             }
                         }
@@ -170,10 +154,44 @@ internal static partial class Program
                     $"DPI crossing moved the grip away from the pointer: {anchorErrorX}, {anchorErrorY}");
                 geometry.Add(new { bounds, dpi.DpiScaleX, dpi.DpiScaleY, DipWidth = model.Width, DipHeight = model.Height, anchorErrorX, anchorErrorY });
             }
+            // Unfocused movement must remain available without bringing back keyboard focus.
+            PressNotesTestHotkey(true); await Task.Delay(100); await controller.Pending;
+            Require(!model.IsFocused, "Resize/drag fixture did not unfocus");
+            var previousApp = native.Current;
+            var unfocusedGrip = handle.PointToScreen(new Point(70, 12));
+            await DragTo(new(unfocusedGrip.X + 65, unfocusedGrip.Y + 35), true);
+            Require(!model.IsFocused && !window.NoteEditor.IsKeyboardFocusWithin && native.Current == previousApp,
+                "Dragging an unfocused note activated its editor or changed the foreground app");
+            var resizeGrip = (FrameworkElement)window.FindName("ResizeGrip");
+            async Task Resize(bool enabled)
+            {
+                model.AllowManualResize = enabled; window.UpdateLayout();
+                var before = new Size(window.Width, window.Height);
+                var start = window.PointToScreen(resizeGrip.TranslatePoint(new Point(14, 14), window));
+                Require(MoveNotesCursor((int)start.X, (int)start.Y), "Could not position resize cursor");
+                NotesMouse(2);
+                try
+                {
+                    for (var i = 1; i <= 12; i++)
+                    {
+                        MoveNotesCursor((int)start.X + i * 3, (int)start.Y + i * 2); await Task.Delay(20);
+                    }
+                }
+                finally { NotesMouse(4); }
+                await Task.Delay(100);
+                Require(model.Width == Math.Round(model.Width) && model.Height == Math.Round(model.Height) &&
+                    window.Width == model.Width && window.Height == model.Height, "Native resizing produced fractional dimensions");
+                Require(enabled ? window.Width > before.Width && window.Height > before.Height : new Size(window.Width, window.Height) == before,
+                    "Manual resize setting did not allow/block resize");
+                Require(!model.IsFocused && native.Current == previousApp, "Unfocused resizing stole foreground focus");
+            }
+            await Resize(true); await Resize(false);
+            model.AllowManualResize = true;
             Require(await controller.PrepareExitAsync(), "Live notes data did not flush");
             await File.WriteAllTextAsync(Path.GetFullPath(output), JsonSerializer.Serialize(new
             { Monitors = areas, Geometry = geometry, WordSelection = true, ManualFocusCapture = true,
-                LeftRightDoubleClick = true, FixedDragBlocked = true, AnywhereDoubleClick = true, IndependentMouseSwitches = true,
+                KeyboardFocusToggle = true, FixedDragBlocked = true, MouseDoesNotFocus = true, BottomControlsSymmetric = true,
+                IntegerResize = true, DisabledResizeBlocked = true, UnfocusedDragPreservesForeground = true,
                 ImmediateDragMilliseconds = immediateDrags }, new JsonSerializerOptions { WriteIndented = true }));
             Console.WriteLine($"PASS Live notes native body/grip clicks, manual focus capture, fixed drag and movable drag on {areas.Count} actual monitors");
         }

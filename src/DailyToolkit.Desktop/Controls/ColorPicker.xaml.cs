@@ -10,6 +10,9 @@ public partial class ColorPicker : UserControl
     public static readonly DependencyProperty ColorProperty=DependencyProperty.Register(nameof(Color),typeof(string),typeof(ColorPicker),
         new FrameworkPropertyMetadata("#267A5D",FrameworkPropertyMetadataOptions.BindsTwoWayByDefault),value => LensBorderColor.TryParse(value as string,out _));
     public string Color { get => (string)GetValue(ColorProperty); set => SetValue(ColorProperty,value); }
+    public static readonly DependencyProperty ShowHexInputProperty = DependencyProperty.Register(nameof(ShowHexInput), typeof(bool), typeof(ColorPicker),
+        new PropertyMetadata(true, (sender, args) => ((ColorPicker)sender).HexInput.Visibility = (bool)args.NewValue ? Visibility.Visible : Visibility.Collapsed));
+    public bool ShowHexInput { get => (bool)GetValue(ShowHexInputProperty); set => SetValue(ShowHexInputProperty, value); }
     public ColorPicker()
     {
         InitializeComponent();
@@ -24,6 +27,8 @@ public partial class ColorPicker : UserControl
     }
     private void ColorKeyDown(object sender,KeyEventArgs e) { if (e.Key == Key.Enter) { CommitColor(sender,e); e.Handled=true; } }
     private void ChooseCustomColor(object sender,RoutedEventArgs e)
+        => OpenColorDialog();
+    public void OpenColorDialog()
     {
         if (Window.GetWindow(this) is not { } owner) return;
         var colors=Marshal.AllocHGlobal(16*sizeof(int));

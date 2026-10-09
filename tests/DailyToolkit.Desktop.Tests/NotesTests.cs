@@ -39,7 +39,7 @@ internal static partial class Program
                 await model.Ready;
                 Require(model.IsLoaded && model.Text == "" && model.Preferences == new NotesPreferences(), "Missing notes did not initialize defaults");
                 model.Text = "第一行\n第二行 📝"; model.FontSize = 26; model.BackgroundOpacity = .4;
-                model.DoubleClickUnfocus = false; model.ClickToFocus = false;
+                model.AllowManualResize = false; model.FocusBorderColor = "#A675D1"; model.Width = 361.5; model.Height = 419.6;
                 for (var attempt = 0; attempt < 30 && !File.Exists(store.SettingsPath); attempt++) await Task.Delay(100);
                 Require(File.Exists(store.ContentPath) && await File.ReadAllTextAsync(store.ContentPath) == model.Text,
                     "Debounced autosave did not preserve Unicode multi-line notes without hiding or exiting");
@@ -51,13 +51,21 @@ internal static partial class Program
             {
                 await reopened.Ready;
                 Require(reopened.Text.Contains("隐藏前最后输入") && reopened.FontSize == 26 && reopened.BackgroundOpacity == .4 &&
-                    !reopened.DoubleClickUnfocus && !reopened.ClickToFocus,
+                    !reopened.AllowManualResize && reopened.FocusBorderColor == "#A675D1" && reopened.Width == 362 && reopened.Height == 420,
                     "Text and independent appearance did not survive a new model/version");
                 var text = reopened.Text; reopened.ResetSettings();
                 Require(await reopened.FlushAsync() && reopened.Text == text && reopened.Preferences == new NotesPreferences(), "Reset settings changed note content");
             }
             await File.WriteAllTextAsync(store.SettingsPath, "{}");
             Require((await store.LoadAsync()).Preferences == new NotesPreferences(), "Older settings missing notes fields failed");
+            await File.WriteAllTextAsync(store.SettingsPath, "{\"Width\":360.5,\"Height\":420.4,\"DoubleClickUnfocus\":true,\"ClickToFocus\":true}");
+            var migrated = (await store.LoadAsync()).Preferences;
+            Require(migrated.Width == 361 && migrated.Height == 420 && migrated.AllowManualResize && migrated.OpaqueWhenFocused,
+                "Legacy settings did not preserve rounded size and new defaults");
+            await store.SaveSettingsAsync(migrated);
+            var migratedJson = await File.ReadAllTextAsync(store.SettingsPath);
+            Require(!migratedJson.Contains("DoubleClickUnfocus", StringComparison.OrdinalIgnoreCase) && !migratedJson.Contains("ClickToFocus", StringComparison.OrdinalIgnoreCase),
+                "Removed mouse focus settings were still persisted");
             Require(!Directory.GetFiles(directory.FullName, "*.tmp").Any(), "Atomic saves leaked temporary files");
             Console.WriteLine("PASS Notes debounce, Unicode, atomic backup, final flush, version-independent restart and defaults without text loss");
 
@@ -144,6 +152,22 @@ internal static partial class Program
                 notesStore: new(Path.Combine(directory.FullName, "Notes")));
             await model.Notes.Ready; var notes = model.Notes;
             notes.Text = "private note fixture"; notes.FontSize = 30; notes.FontBold = true;
+            static double Luminance(string hex)
+            {
+                var color = (Color)ColorConverter.ConvertFromString(hex);
+                static double Linear(byte value) { var channel = value / 255d; return channel <= .04045 ? channel / 12.92 : Math.Pow((channel + .055) / 1.055, 2.4); }
+                return .2126 * Linear(color.R) + .7152 * Linear(color.G) + .0722 * Linear(color.B);
+            }
+            Require(notes.AppearancePresets.Count >= 10, "Notes offered too few complete color schemes");
+            foreach (var preset in notes.AppearancePresets)
+            {
+                var before = notes.Preferences; notes.ApplyAppearance(preset.Value);
+                var bg = Luminance(notes.BackgroundColor); var fg = Luminance(notes.FontColor);
+                Require((Math.Max(bg, fg) + .05) / (Math.Min(bg, fg) + .05) >= 7 && notes.FocusBorderColor == preset.Value.Border,
+                    $"Preset {preset.Name} lacks readable text/background contrast or its matching focus border");
+                Require(notes.FontFamily == before.Font.Family && notes.FontSize == before.Font.Size && notes.FontBold == before.Font.Bold &&
+                    notes.Text == "private note fixture" && notes.Width == before.Width, "Color preset replaced text, font styling or dimensions");
+            }
             var font = notes.Preferences.Font; notes.ApplyBackground(notes.BackgroundPresets.Last().Value);
             Require(notes.Preferences.Font == font, "Background preset replaced font settings");
             var background = notes.Preferences.Background; notes.ApplyFont(notes.FontPresets.Last().Value);
@@ -203,18 +227,30 @@ internal static partial class Program
                 Require(notes.Movable && fixedMode.IsChecked == false, "Position radios did not select movable mode");
                 fixedMode.IsChecked = true;
                 Require(!notes.Movable && movableMode.IsChecked == false, "Position radios did not select fixed mode");
-                var favorite = (Button)view.FindName("FavoriteButton");
+                var favorite = (Button)window.FindName("ToolFavoriteButton");
+                var favoriteIcon = (System.Windows.Shapes.Path)window.FindName("ToolFavoriteIcon");
+                Require(favoriteIcon.ActualHeight >= 26 && favoriteIcon.StrokeLineJoin == PenLineJoin.Round &&
+                    favoriteIcon.Fill == (System.Windows.Media.Brush)window.FindResource("AccentBrush"), "Favorite icon was too small, angular or failed to show the saved state");
                 favorite.Command.Execute(null);
                 Require(!notes.IsFavorite && notes.FavoriteSymbol == "☆" &&
                     !new FavoritesStore(Path.Combine(directory.FullName, "favorites.json")).Load().Contains("floating-notes"),
                     "Favorite star command did not update the existing navigation item");
-                var doubleClickSwitch = (DailyToolkit.Desktop.Controls.FeatureSwitch)view.FindName("DoubleClickSwitch");
-                var clickSwitch = (DailyToolkit.Desktop.Controls.FeatureSwitch)view.FindName("ClickFocusSwitch");
-                doubleClickSwitch.SetCurrentValue(DailyToolkit.Desktop.Controls.FeatureSwitch.IsOnProperty, false);
-                clickSwitch.SetCurrentValue(DailyToolkit.Desktop.Controls.FeatureSwitch.IsOnProperty, false);
-                Require(!notes.DoubleClickUnfocus && !notes.ClickToFocus, "Mouse switches did not write independent preferences");
+                Require(((SolidColorBrush)favoriteIcon.Fill).Color.A == 0, "Favorite icon did not become outlined after removing the favorite");
+                var resize = (CheckBox)view.FindName("ManualResize"); resize.IsChecked = false;
+                Require(!notes.AllowManualResize, "Resize setting did not update notes");
+                notes.Width = 362.3; notes.Height = 419.8;
+                Require(((TextBox)view.FindName("NoteWidth")).Text == "362" && ((TextBox)view.FindName("NoteHeight")).Text == "420", "Note dimensions displayed fractional values");
+                var textPicker = (DailyToolkit.Desktop.Controls.ColorPicker)view.FindName("FontColorPicker");
+                Require(!textPicker.ShowHexInput && Descendants(textPicker).OfType<TextBox>().All(box => !box.IsVisible), "Notes color picker required hex input");
+                var swatch = Descendants(textPicker).OfType<Button>().First(button => button.Tag as string == "#A675D1");
+                swatch.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Require(notes.FontColor == "#A675D1", "Clicking a color did not update the bound text color");
+                model.Page = "screen-lens"; await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                Require(favorite.IsVisible && favorite.Command == model.Gaming.ToggleFavoriteCommand, "Shared title star did not switch to the lens favorite command");
+                model.Page = "floating-notes"; await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                Require(favorite.Command == notes.ToggleFavoriteCommand, "Shared title star did not return to notes");
                 notes.FontColor = "#B02070";
-                Require(((SolidColorBrush)((Border)view.FindName("FontColorSwatch")).Background).Color == Color.FromRgb(176, 32, 112) &&
+                Require(((SolidColorBrush)((Button)view.FindName("FontColorSwatch")).Background).Color == Color.FromRgb(176, 32, 112) &&
                     ((SolidColorBrush)((TextBlock)view.FindName("PreviewText")).Foreground).Color == Color.FromRgb(176, 32, 112),
                     "Text color swatch and adjacent preview failed to update together");
                 notes.ResetFont(); notes.ResetBackground();
@@ -258,7 +294,7 @@ internal static partial class Program
                 Image("settings-light-narrow");
             }
             finally { window.Close(); await closed.Task.WaitAsync(TimeSpan.FromSeconds(10)); }
-            Console.WriteLine("PASS Notes independent presets, navigation star, mouse switches, position radios, selection-only fonts, color swatches and embedded wide/narrow appearance previews");
+            Console.WriteLine("PASS Notes independent presets, shared title star, integer sizes, clickable colors, position radios, selection-only fonts, color swatches and embedded wide/narrow appearance previews");
         }
         finally { if (!closedByWindow) model?.Dispose(); directory.Delete(true); }
     }
@@ -277,7 +313,7 @@ internal static partial class Program
             await controller.Ready;
             model.SetShortcut(false, new(3, 0x83, "Ctrl + Alt + F20"), null);
             model.SetShortcut(true, new(7, 0x83, "Ctrl + Alt + Shift + F20"), null);
-            controller.Refocus(); await controller.Pending;
+            controller.ToggleFocus(); await controller.Pending;
             Require(!model.IsVisible && controller.NoteWindow is null, "Refocus displayed a hidden note");
             companion.Show();
             // A real owned hotkey supplies legitimate last input. Posted WM_HOTKEY messages
@@ -294,7 +330,7 @@ internal static partial class Program
             controller.Unfocus(); await Task.Delay(100);
             Require(model.IsVisible && !model.IsFocused && foreground.Current == new WindowInteropHelper(companion).Handle,
                 $"Unfocus hid note or failed to restore companion editor: visible={model.IsVisible}, focused={model.IsFocused}, foreground={foreground.Current}, expected={new WindowInteropHelper(companion).Handle}, notice={model.Notice}");
-            controller.Refocus(); await controller.Pending; await Task.Delay(80);
+            controller.ToggleFocus(); await controller.Pending; await Task.Delay(80);
             Require(model.IsFocused && window.NoteEditor.SelectionStart == 3 && window.NoteEditor.SelectionLength == 4, "Refocus lost selection");
             void Escape()
             {
@@ -309,7 +345,7 @@ internal static partial class Program
             Require(model.IsFocused, "Escape canceled note focus before IME composition cancellation");
             Escape(); await Task.Delay(60);
             Require(model.IsVisible && !model.IsFocused && foreground.Current == new WindowInteropHelper(companion).Handle, "Escape did not restore previous window");
-            controller.Refocus(); await controller.Pending;
+            controller.ToggleFocus(); await controller.Pending;
             await CheckNotesMouseGesturesAsync(model, controller, window, companion);
             companion.Activate(); await Task.Delay(80);
             Require(model.IsVisible && !model.IsFocused && foreground.Current == new WindowInteropHelper(companion).Handle,
@@ -320,19 +356,31 @@ internal static partial class Program
             for (var i = 0; i < 6; i++) controller.Toggle();
             await controller.Pending; Require(!model.IsVisible && ReferenceEquals(window, controller.NoteWindow), "Rapid toggle leaked windows or lost parity");
             controller.Toggle(); await controller.Pending; await Task.Delay(80);
-            model.BackgroundOpacity = .3; model.FontOpacity = 1;
-            Require(window.Opacity == 1 && ((System.Windows.Controls.Border)window.FindName("NoteBackground")).Background is SolidColorBrush noteBrush &&
-                noteBrush.Color.A == 77 && ((SolidColorBrush)window.NoteEditor.Foreground).Color.A == 255,
-                "Background transparency also faded text");
+            model.BackgroundOpacity = .3; model.FontOpacity = .4; model.FocusBorderColor = "#4285F4";
+            var noteBackground = (Border)window.FindName("NoteBackground");
+            Require(window.Opacity == 1 && ((SolidColorBrush)noteBackground.Background).Color.A == 255 &&
+                ((SolidColorBrush)window.NoteEditor.Foreground).Color.A == 255 && ((SolidColorBrush)noteBackground.BorderBrush).Color == Color.FromRgb(66, 133, 244),
+                "Focus did not apply an opaque background/text and configured border");
+            var focusedSize = new Size(window.Width, window.Height);
+            PressNotesTestHotkey(true); await Task.Delay(100); await controller.Pending;
+            Require(!model.IsFocused && ((SolidColorBrush)noteBackground.Background).Color.A == 77 &&
+                ((SolidColorBrush)window.NoteEditor.Foreground).Color.A == 102 && ((SolidColorBrush)noteBackground.BorderBrush).Color.A == 0 &&
+                focusedSize == new Size(window.Width, window.Height), "Focus shortcut did not remove border and restore independent alpha without resizing");
+            PressNotesTestHotkey(true); await Task.Delay(100); await controller.Pending;
+            Require(model.IsFocused && ((SolidColorBrush)noteBackground.Background).Color.A == 255, "Same shortcut failed to restore focus and opacity");
+            model.OpaqueWhenFocused = false;
+            Require(((SolidColorBrush)noteBackground.Background).Color.A == 77, "Focus opacity opt-out ignored the configured background alpha");
+            model.OpaqueWhenFocused = true;
             var bounds = NotesPositionService.Bounds(window.Handle);
             Require(NotesPositionService.WorkAreas().Any(bounds.Intersects), "Note remained outside available monitors");
             model.Update(model.Preferences with { X = -50000, Y = -50000 }); window.RecoverPosition();
             bounds = NotesPositionService.Bounds(window.Handle);
             Require(NotesPositionService.WorkAreas().Any(bounds.Intersects), "Offscreen position did not recover");
-            controller.Refocus(); await controller.Pending; companion.Close(); controller.Unfocus();
+            companion.Close(); controller.Unfocus();
             Require(model.IsVisible && !model.IsFocused && !window.NoteEditor.IsKeyboardFocusWithin,
                 "Closed target kept editor keyboard focus or hid the note");
-            controller.Refocus(); await controller.Pending;
+            controller.ToggleFocus(); await controller.Pending;
+            Require(model.IsFocused && !model.Notice.StartsWith("先前窗口已关闭", StringComparison.Ordinal), "Successful focus retained a stale restore failure");
             if (images is not null)
             {
                 Directory.CreateDirectory(images); window.UpdateLayout();
@@ -360,11 +408,11 @@ internal static partial class Program
     { public uint Type; public NotesInputUnion Data; }
     [DllImport("user32.dll", EntryPoint = "SendInput", SetLastError = true)]
     private static extern uint SendNotesInput(uint count, NotesTestInput[] inputs, int size);
-    private static void PressNotesTestHotkey()
+    private static void PressNotesTestHotkey(bool focus = false)
     {
         var sequence = new List<NotesTestInput>();
-        foreach (var key in new ushort[] { 0x11, 0x12, 0x83 }) sequence.Add(new() { Type = 1, Data = new() { Keyboard = new() { Key = key } } });
-        foreach (var key in new ushort[] { 0x83, 0x12, 0x11 }) sequence.Add(new() { Type = 1, Data = new() { Keyboard = new() { Key = key, Flags = 2 } } });
+        foreach (var key in focus ? new ushort[] { 0x11, 0x12, 0x10, 0x83 } : new ushort[] { 0x11, 0x12, 0x83 }) sequence.Add(new() { Type = 1, Data = new() { Keyboard = new() { Key = key } } });
+        foreach (var key in focus ? new ushort[] { 0x83, 0x10, 0x12, 0x11 } : new ushort[] { 0x83, 0x12, 0x11 }) sequence.Add(new() { Type = 1, Data = new() { Keyboard = new() { Key = key, Flags = 2 } } });
         Require(SendNotesInput((uint)sequence.Count, sequence.ToArray(), Marshal.SizeOf<NotesTestInput>()) == sequence.Count,
             "Windows did not accept the isolated registered test hotkey");
     }

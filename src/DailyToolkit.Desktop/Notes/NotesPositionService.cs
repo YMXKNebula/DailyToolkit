@@ -42,7 +42,7 @@ internal static class NotesPositionService
         var bounds = Bounds(handle); var recovered = NotesPosition.Recover(bounds, WorkAreas());
         if (bounds != recovered) Move(handle, recovered.X, recovered.Y);
     }
-    private static void Move(IntPtr handle, double x, double y)
+    public static void Move(IntPtr handle, double x, double y)
     {
         if (!SetWindowPos(handle, IntPtr.Zero, (int)Math.Round(x), (int)Math.Round(y), 0, 0, 0x0015))
             throw new Win32Exception(Marshal.GetLastWin32Error(), "无法调整浮笺位置。"); // NOACTIVATE | NOSIZE | NOZORDER

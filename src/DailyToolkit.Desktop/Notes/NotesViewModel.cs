@@ -7,6 +7,7 @@ using DailyToolkit.Desktop.Presentation;
 namespace DailyToolkit.Desktop.Notes;
 
 public sealed record NotesPreset<T>(string Name, T Value);
+public sealed record NotesColors(string Background, string Text, string Border);
 
 public sealed class NotesViewModel : ObservableObject, IDisposable
 {
@@ -21,11 +22,22 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
     public bool ContentWritable { get; private set; } = true;
     public bool IsLoaded => _loaded;
     public NotesPreferences Preferences => _preferences;
+    public IReadOnlyList<NotesPreset<NotesColors>> AppearancePresets { get; } =
+    [new("纸白", new("#FAFAF7", "#28313D", "#267A5D")),
+     new("暖黄", new("#FFF0AA", "#493510", "#9C6600")),
+     new("浅蓝", new("#DCEEFF", "#173C63", "#246DB5")),
+     new("薄荷", new("#DDF1DF", "#19432D", "#267A5D")),
+     new("淡粉", new("#FFE3EC", "#65213A", "#AE3D6C")),
+     new("淡紫", new("#EDE3FF", "#3E245D", "#7950B6")),
+     new("沙色", new("#EDE2D0", "#463625", "#8C642E")),
+     new("石墨", new("#30343C", "#F3F5F7", "#91B8FF")),
+     new("夜蓝", new("#142B43", "#E2F2FF", "#69C6FF")),
+     new("墨绿", new("#183A30", "#ECF8E8", "#83D9A4"))];
     public IReadOnlyList<NotesPreset<NotesBackground>> BackgroundPresets { get; } =
     [new("默认浅色", new()), new("便签黄", new("#FFF0AA")), new("浅蓝", new("#DCEEFF")),
         new("浅绿", new("#DDF1DF")), new("深灰", new("#30343C")), new("半透明黑", new("#101216", .65))];
     public IReadOnlyList<NotesPreset<NotesFont>> FontPresets { get; } =
-    [new("默认正文", new()), new("大字", new(Size: 24)), new("白色文字", new(Color: "#FFFFFF")),
+    [new("默认正文", new()), new("大字", new(Size: 24)), new("粗体", new(Bold: true)),
         new("等宽文字", new("Consolas", Size: 18))];
     private static readonly Lazy<IReadOnlyList<string>> SystemFonts = new(() => Fonts.SystemFontFamilies.Select(font => font.Source)
         .Order(StringComparer.CurrentCultureIgnoreCase).ToArray());
@@ -65,8 +77,10 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
     public string Status => !IsEnabled ? "已停用" : !IsVisible ? "已隐藏" : IsFocused ? "正在编辑" : "显示中 · 未聚焦";
     public bool IsEnabled { get => _preferences.IsEnabled; set => Update(_preferences with { IsEnabled = value }); }
     public bool Topmost { get => _preferences.Topmost; set => Update(_preferences with { Topmost = value }); }
-    public bool DoubleClickUnfocus { get => _preferences.DoubleClickUnfocus; set => Update(_preferences with { DoubleClickUnfocus = value }); }
-    public bool ClickToFocus { get => _preferences.ClickToFocus; set => Update(_preferences with { ClickToFocus = value }); }
+    public bool AllowManualResize { get => _preferences.AllowManualResize; set => Update(_preferences with { AllowManualResize = value }); }
+    public bool OpaqueWhenFocused { get => _preferences.OpaqueWhenFocused; set => Update(_preferences with { OpaqueWhenFocused = value }); }
+    public string FocusBorderColor { get => _preferences.FocusBorderColor;
+        set { if (NotesPreferences.ValidColor(value)) Update(_preferences with { FocusBorderColor = value }); } }
     public bool Movable { get => _preferences.PositionMode == NotesPositionMode.Movable;
         set => Update(_preferences with { PositionMode = value ? NotesPositionMode.Movable : NotesPositionMode.Fixed }); }
     public bool IsFixedMode { get => !Movable; set { if (value) Movable = false; } }
@@ -100,9 +114,14 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
         _preferences = preferences; _settingsDirty = true; _settingsRevision++; Notify(""); ScheduleSave();
     }
     public void ApplyBackground(NotesBackground background) => Update(_preferences with { Background = background });
-    public void ApplyFont(NotesFont font) => Update(_preferences with { Font = font });
+    public void ApplyAppearance(NotesColors colors) => Update(_preferences with
+    {
+        Background = _preferences.Background with { Color = colors.Background },
+        Font = _preferences.Font with { Color = colors.Text }, FocusBorderColor = colors.Border
+    });
+    public void ApplyFont(NotesFont font) => Update(_preferences with { Font = font with { Color = FontColor, Opacity = FontOpacity } });
     public void ResetBackground() => ApplyBackground(new());
-    public void ResetFont() => ApplyFont(new());
+    public void ResetFont() => Update(_preferences with { Font = new() });
     public void ResetPosition() => Update(_preferences with { X = null, Y = null });
     public void ResetSettings()
     {

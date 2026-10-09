@@ -16,7 +16,6 @@ public partial class NotesSettingsView : UserControl
     internal Func<KeyboardShortcut?>? LensShortcut { get; set; }
     internal Action<bool>? ShortcutEditing { get; set; }
     internal Action? ToggleRequested { get; set; }
-    internal Action? FocusRequested { get; set; }
     public NotesSettingsView()
     {
         InitializeComponent();
@@ -66,14 +65,16 @@ public partial class NotesSettingsView : UserControl
     {
         if (_model is null) return;
         var preferences = _model.Preferences;
-        AppearancePreview.Background = NotesWindow.Brush(preferences.Background.Color, preferences.Background.Opacity);
+        var focused = PreviewFocused.IsChecked == true;
+        var opaque = focused && preferences.OpaqueWhenFocused;
+        AppearancePreview.Background = NotesWindow.Brush(preferences.Background.Color, opaque ? 1 : preferences.Background.Opacity);
         AppearancePreview.CornerRadius = new(preferences.Background.Radius);
-        AppearancePreview.BorderBrush = NotesWindow.Brush(preferences.Font.Color, .2);
+        AppearancePreview.BorderBrush = focused ? NotesWindow.Brush(preferences.FocusBorderColor, 1) : System.Windows.Media.Brushes.Transparent;
         BackgroundColorSwatch.Background = NotesWindow.Brush(preferences.Background.Color, 1);
         FontColorSwatch.Background = NotesWindow.Brush(preferences.Font.Color, 1);
-        PreviewHandle.Foreground = NotesWindow.Brush(preferences.Font.Color, .7);
-        PreviewHide.Foreground = NotesWindow.Brush(preferences.Font.Color, preferences.Font.Opacity);
-        PreviewText.Foreground = NotesWindow.Brush(preferences.Font.Color, preferences.Font.Opacity);
+        FocusColorSwatch.Background = NotesWindow.Brush(preferences.FocusBorderColor, 1);
+        PreviewHide.Foreground = PreviewResize.Foreground = PreviewText.Foreground = NotesWindow.Brush(preferences.Font.Color, opaque ? 1 : preferences.Font.Opacity);
+        PreviewResize.Visibility = preferences.AllowManualResize ? Visibility.Visible : Visibility.Collapsed;
         PreviewText.FontSize = preferences.Font.Size; PreviewText.FontFamily = new(preferences.Font.Family + ", Microsoft YaHei UI");
         PreviewText.FontWeight = preferences.Font.Bold ? FontWeights.Bold : FontWeights.Normal;
         UpdatePreviewDimensions();
@@ -100,17 +101,28 @@ public partial class NotesSettingsView : UserControl
     private void ClearShortcut(object sender, RoutedEventArgs e) => _model?.SetShortcut(((FrameworkElement)sender).Tag as string == "focus", null, LensShortcut?.Invoke());
     private void ResetShortcuts(object sender, RoutedEventArgs e) => _model?.ResetShortcuts(LensShortcut?.Invoke());
     private void ToggleNote(object sender, RoutedEventArgs e) => ToggleRequested?.Invoke();
-    private void FocusNote(object sender, RoutedEventArgs e) => FocusRequested?.Invoke();
     private void ResetPosition(object sender, RoutedEventArgs e) => _model?.ResetPosition();
     private void ResetBackground(object sender, RoutedEventArgs e) => _model?.ResetBackground();
     private void ResetFont(object sender, RoutedEventArgs e) => _model?.ResetFont();
     private void ResetSettings(object sender, RoutedEventArgs e) => _model?.ResetSettings();
     private void ApplyBackground(object sender, RoutedEventArgs e) { if (((FrameworkElement)sender).Tag is NotesBackground background) _model?.ApplyBackground(background); }
     private void ApplyFont(object sender, RoutedEventArgs e) { if (((FrameworkElement)sender).Tag is NotesFont font) _model?.ApplyFont(font); }
-    private void ValidateColor(object sender, RoutedEventArgs e)
+    private void PreviewFocusChanged(object sender, RoutedEventArgs e) { if (IsInitialized) UpdatePreview(); }
+    private void ApplyAppearance(object sender, RoutedEventArgs e) { if (((FrameworkElement)sender).Tag is NotesColors colors) _model?.ApplyAppearance(colors); }
+    private void ChooseColor(object sender, RoutedEventArgs e)
     {
-        if (sender is TextBox box && !NotesPreferences.ValidColor(box.Text) && _model is not null)
-        { _model.Notice = "颜色请使用 #RRGGBB 格式，例如 #FFF0AA。"; box.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget(); }
+        var picker = (((FrameworkElement)sender).Tag as string) switch { "font" => FontColorPicker, "focus" => FocusColorPicker, _ => BackgroundColorPicker };
+        picker.OpenColorDialog();
+    }
+    private static bool Digits(string text) => text.Length > 0 && text.All(character => character is >= '0' and <= '9');
+    private void SizeInput(object sender, TextCompositionEventArgs e) => e.Handled = !Digits(e.Text);
+    private void PasteSize(object sender, DataObjectPastingEventArgs e)
+    { if (!e.DataObject.GetDataPresent(DataFormats.UnicodeText) || e.DataObject.GetData(DataFormats.UnicodeText) is not string text || !Digits(text)) e.CancelCommand(); }
+    private void CommitSize(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        var box = (TextBox)sender;
+        var binding = box.GetBindingExpression(TextBox.TextProperty);
+        binding?.UpdateSource(); binding?.UpdateTarget();
     }
     private async void SaveNow(object sender, RoutedEventArgs e) { if (_model is not null && await _model.FlushAsync()) _model.Notice = "已保存。"; }
     private async void ExportText(object sender, RoutedEventArgs e)

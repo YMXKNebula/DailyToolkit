@@ -25,7 +25,7 @@ internal sealed class NotesController : IDisposable
         _model = model; _lensShortcut = lensShortcut; _shortcuts = new(source);
         _focus = new(foreground ?? new NotesForeground(), () => _window?.Handle ?? IntPtr.Zero);
         _shortcuts.ToggleRequested += Toggle;
-        _shortcuts.FocusRequested += Refocus;
+        _shortcuts.FocusRequested += ToggleFocus;
         _model.PropertyChanged += Changed;
         Ready = InitializeAsync();
     }
@@ -67,10 +67,13 @@ internal sealed class NotesController : IDisposable
         if (!_model.IsEnabled) return;
         if (_model.IsVisible) await HideAsync(); else Show();
     });
-    public void Refocus() => Queue(() =>
+    public void ToggleFocus() => Queue(() =>
     {
-        if (_model.IsEnabled && _model.IsVisible && !_model.IsFocused)
-        { _focus.Capture(); Activate(); }
+        if (_model.IsEnabled && _model.IsVisible)
+        {
+            if (_model.IsFocused) Unfocus();
+            else { _focus.Capture(); Activate(); }
+        }
         return Task.CompletedTask;
     });
     private void Queue(Func<Task> operation)
@@ -92,7 +95,6 @@ internal sealed class NotesController : IDisposable
         if (_window is null)
         {
             _window = new(_model);
-            _window.BeforeMouseActivate += _focus.Capture;
             _window.UnfocusRequested += Unfocus;
             _window.HideRequested += () => Queue(HideAsync);
         }
@@ -102,7 +104,7 @@ internal sealed class NotesController : IDisposable
     private void Activate()
     {
         if (_window?.ActivateEditor() != true)
-            _model.Notice = "Windows 未允许浮笺获得输入焦点，请直接点击浮笺正文。";
+            _model.Notice = "Windows 未允许浮笺获得输入焦点，请再按一次聚焦快捷键。";
     }
     public void Unfocus()
     {

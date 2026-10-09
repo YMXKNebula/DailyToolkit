@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
-    <Version>0.7.4</Version>
+    <Version>0.7.5</Version>
     <Authors>YMXKNebula</Authors>
     <Description>Windows 本地工具集，提供屏幕局部放大、浮笺和电脑信息查看。</Description>
     <RepositoryUrl>https://github.com/YMXKNebula/DailyToolkit</RepositoryUrl>

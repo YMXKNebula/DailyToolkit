@@ -16,8 +16,9 @@ public sealed record NotesPreferences
     public KeyboardShortcut? FocusShortcut { get; init; } = new(7, 0x4E, "Ctrl + Alt + Shift + N");
     public NotesPositionMode PositionMode { get; init; } = NotesPositionMode.Fixed;
     public bool Topmost { get; init; } = true;
-    public bool DoubleClickUnfocus { get; init; } = true;
-    public bool ClickToFocus { get; init; } = true;
+    public bool AllowManualResize { get; init; } = true;
+    public bool OpaqueWhenFocused { get; init; } = true;
+    public string FocusBorderColor { get; init; } = "#267A5D";
     // Position is in virtual-desktop physical pixels; dimensions are in WPF DIPs.
     public double? X { get; init; }
     public double? Y { get; init; }
@@ -34,7 +35,9 @@ public sealed record NotesPreferences
         PositionMode = Enum.IsDefined(PositionMode) ? PositionMode : NotesPositionMode.Fixed,
         X = X is { } x && double.IsFinite(x) && Math.Abs(x) < 1_000_000 ? x : null,
         Y = Y is { } y && double.IsFinite(y) && Math.Abs(y) < 1_000_000 ? y : null,
-        Width = Clamp(Width, 240, 1200, 360), Height = Clamp(Height, 180, 1400, 420),
+        Width = Math.Round(Clamp(Width, 240, 1200, 360), MidpointRounding.AwayFromZero),
+        Height = Math.Round(Clamp(Height, 180, 1400, 420), MidpointRounding.AwayFromZero),
+        FocusBorderColor = ValidColor(FocusBorderColor) ? FocusBorderColor : "#267A5D",
         Background = (Background ?? new()) with
         {
             Color = ValidColor(Background?.Color) ? Background!.Color : "#FFF8E8",
