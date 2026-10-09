@@ -20,11 +20,13 @@ DailyToolkit 是 Windows 本地工具集。桌面界面使用 WPF，公共代码
 
 `NotesViewModel` 是正文和设置的状态来源。显示、输入焦点和位置模式独立；`NotesController` 串行处理唤出、隐藏及停用，持有一个可复用的 `NotesWindow`。主窗口仅接入导航、热键编辑暂停和退出刷盘；浮笺没有设置主窗口为 Owner，因此主窗口进入托盘不影响笔记。
 
-两条快捷键沿用现有 `KeyboardShortcut`、HwndSource、RegisterHotKey 和 MOD_NOREPEAT 做法，注册 ID 与放大分开。设置录入时暂停两种工具的热键，修改放大快捷键也检查浮笺冲突。浮笺不增加全局键盘或鼠标钩子。
+两条快捷键沿用现有 `KeyboardShortcut`、HwndSource、RegisterHotKey 和 MOD_NOREPEAT 做法，注册 ID 与放大分开。设置录入时暂停两种工具的热键，修改放大快捷键也检查浮笺冲突。浮笺不增加全局键盘钩子。
 
 `NotesFocusManager` 在唤出或通过快捷键进入聚焦时记录有效前台 HWND；自然失焦只更新状态。主动退出聚焦清除本窗口输入焦点，再合法尝试一次恢复目标。无效窗口和系统拒绝均返回提示，不重试抢占。实际聚焦判断同时检查窗口的键盘焦点与 Windows 前台句柄，后台线程的活动窗口不被当作前台编辑状态。
 
-空白顶部移过系统拖动距离即开始移动。聚焦时使用 WPF DragMove 与 WM_MOVING；失焦时通过捕获的鼠标移动事件及 SetWindowPos(NOACTIVATE) 移动，保持此前程序的输入焦点。两种路径都按当前 DPI 换算原拖动点的 DIP 偏移，使用现有 PerMonitorV2 支持。位置保存为虚拟桌面物理像素，尺寸保存为整数 DIP；旧版小数尺寸在归一化时四舍五入，缩放累计小数位移后再取整。WM_DISPLAYCHANGE/WM_SETTINGCHANGE 和每次显示时检查工作区，完全在可用屏幕外的窗口回到主屏。该模块不引用捕获、GPU、镜像轴或放大输入管线。
+聚焦且可移动时，空白顶部移过系统拖动距离即开始移动，使用 WPF DragMove 与 WM_MOVING，按当前 DPI 换算原拖动点的 DIP 偏移，使用现有 PerMonitorV2 支持。失焦时，`NotesMousePassThrough` 为层叠窗口设置 WS_EX_TRANSPARENT 和 WS_EX_NOACTIVATE，鼠标输入到达下方进程；移动、缩放及文本交互关闭。仅在窗口可见、失焦且开启点击聚焦时安装 WH_MOUSE_LL；只处理浮笺实际可见区域内的左键按下和对应抬起，记录此前前台窗口后排队聚焦，不同时拖动或选词。覆盖浮笺的窗口和透明圆角通过临时原生命中检测排除，其它鼠标输入继续传递；聚焦、隐藏、停用和退出释放监听。位置保存为虚拟桌面物理像素，尺寸保存为整数 DIP；旧版小数尺寸在归一化时四舍五入，缩放累计小数位移后再取整。WM_DISPLAYCHANGE/WM_SETTINGCHANGE 和每次显示时检查工作区，完全在可用屏幕外的窗口回到主屏。该模块不引用捕获、GPU、镜像轴或放大输入管线。
+
+`NotesTextFade` 与 `NotesDisplayArea` 同时用于实际正文和外观预览。字符锚定保留失焦扩展前的排版与滚动位置；聚焦后只在仍有被遮挡内容的上下端，为 ScrollContentPresenter 添加 18 DIP 的静态透明度蒙版。蒙版使用绝对视口坐标，避免被全文高度拉长；滚动、文本及尺寸变化更新，失焦或无溢出时移除，不使用动画或轮询。
 
 `NotesStore` 将严格 UTF-8 正文与 JSON 设置分开。后台异步写入唯一临时文件，替换时保留 `.bak`。ViewModel 使用 400 毫秒防抖与保存锁，并追踪修订号，隐藏及退出刷盘期间暂停编辑。读坏的正文禁止自动覆盖；读坏的设置临时回退，只有用户恢复默认设置后才允许覆盖。普通诊断不序列化笔记。
 

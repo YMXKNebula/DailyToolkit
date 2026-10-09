@@ -30,14 +30,14 @@
   <Style x:Key="NotesHideButton" TargetType="Button">
     <Setter Property="Focusable" Value="False"/>
     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-      <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8">
+      <Border Background="{TemplateBinding Background}" CornerRadius="8">
         <Path Data="M0,0 L12,0" Stroke="{TemplateBinding Foreground}" StrokeThickness="2.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" HorizontalAlignment="Center" VerticalAlignment="Center"/>
       </Border>
       <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Cursor" Value="Hand"/></Trigger></ControlTemplate.Triggers>
     </ControlTemplate></Setter.Value></Setter>
   </Style>
   <ControlTemplate x:Key="NotesResizeGrip" TargetType="Thumb">
-    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8">
+    <Border Background="{TemplateBinding Background}" CornerRadius="8">
       <Path Data="M1,11 L11,1 M7,12 L12,7" Stroke="{TemplateBinding Foreground}" StrokeThickness="2.3"
             StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" HorizontalAlignment="Center" VerticalAlignment="Center"/>
     </Border>

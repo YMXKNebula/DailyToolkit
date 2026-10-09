@@ -29,6 +29,8 @@ internal static partial class Program
         {
             try
             {
+                if (args is ["--notes-input-backdrop", var readyFile])
+                { await RunNotesInputBackdropAsync(readyFile); exitCode = 0; return; }
                 if (args is ["--lens-image-checks"])
                 { LensDiagnostics.CheckShader();CheckLensUpgrade();exitCode=0;return; }
                 if (args is ["--notes-checks", var notesImages])

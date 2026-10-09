@@ -7,11 +7,12 @@ internal sealed class NotesDisplayArea(Border surface, TextBox editor)
 {
     private bool? _focused;
     private bool _visibleLayout;
+    private readonly NotesTextFade _fade = new(editor);
 
     internal void Apply(bool focused)
     {
         var visible = editor.IsVisible && editor.ActualWidth > 0 && editor.ActualHeight > 0 && PresentationSource.FromVisual(editor) is not null;
-        if (_focused == focused) { _visibleLayout |= visible; return; }
+        if (_focused == focused) { _visibleLayout |= visible; _fade.Apply(focused); return; }
         var preserve = _visibleLayout && visible;
         _focused = focused;
         editor.ApplyTemplate(); editor.UpdateLayout();
@@ -34,7 +35,7 @@ internal sealed class NotesDisplayArea(Border surface, TextBox editor)
         editor.UpdateLayout();
         _visibleLayout = visible;
         var after = anchor >= 0 ? editor.GetRectFromCharacterIndex(anchor) : Rect.Empty;
-        if (before.IsEmpty || after.IsEmpty) return;
+        if (before.IsEmpty || after.IsEmpty) { _fade.Apply(focused); return; }
         var offset = editor.VerticalOffset + editor.TranslatePoint(after.TopLeft, surface).Y - origin.Y;
         if (!focused)
         {
@@ -47,5 +48,6 @@ internal sealed class NotesDisplayArea(Border surface, TextBox editor)
             editor.UpdateLayout();
         }
         editor.ScrollToVerticalOffset(Math.Max(0, offset));
+        _fade.Apply(focused);
     }
 }

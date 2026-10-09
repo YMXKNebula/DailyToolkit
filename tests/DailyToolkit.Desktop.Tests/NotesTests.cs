@@ -405,6 +405,18 @@ internal static partial class Program
             }
             var scrollbar = NoteDescendants(window.NoteEditor).OfType<System.Windows.Controls.Primitives.ScrollBar>()
                 .Single(bar => bar.Orientation == Orientation.Vertical);
+            var textViewport = NoteDescendants(window.NoteEditor).OfType<ScrollContentPresenter>().Single();
+            await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+            void CheckFade(bool top, bool bottom)
+            {
+                if (!top && !bottom) { Require(textViewport.OpacityMask is null, "Unclipped or inactive text retained a fade"); return; }
+                Require(textViewport.OpacityMask is LinearGradientBrush fade && fade.IsFrozen &&
+                    fade.GradientStops[0].Color.A == (top ? 0 : 255) && fade.GradientStops[^1].Color.A == (bottom ? 0 : 255) &&
+                    fade.GradientStops[1].Color.A == 255 && fade.GradientStops[2].Color.A == 255 &&
+                    window.NoteEditor.OpacityMask is null && writingFrame.OpacityMask is null && scrollbar.OpacityMask is null,
+                    "Text edge fade affected the wrong edges, full editor, frame or scrollbar");
+            }
+            CheckFade(false, true);
             Require(window.Opacity == 1 && ((SolidColorBrush)noteBackground.Background).Color.A == 255 &&
                 ((SolidColorBrush)window.NoteEditor.Foreground).Color.A == 255 && ((SolidColorBrush)noteBackground.BorderBrush).Color == Color.FromRgb(66, 133, 244) &&
                 writingFrame.BorderBrush == noteBackground.BorderBrush && scrollbar.IsVisible && scrollbar.IsEnabled && scrollbar.Opacity == 1 &&
@@ -422,6 +434,7 @@ internal static partial class Program
                 !hideButton.IsVisible && !resizeGrip.IsVisible && scrollbar.Opacity == 0 && !scrollbar.IsHitTestVisible,
                 "Focus shortcut did not hide chrome and restore independent alpha without resizing");
             window.UpdateLayout();
+            CheckFade(false, false);
             Require(window.NoteEditor.ActualHeight >= focusedEditorSize.Height + 20 && window.NoteEditor.ActualWidth == focusedEditorSize.Width,
                 "Unfocused text did not expand into the hidden controls' space or changed its wrapping width");
             var unfocusedCharacter = window.NoteEditor.GetRectFromCharacterIndex(0);
@@ -442,8 +455,28 @@ internal static partial class Program
                 var character = window.NoteEditor.GetRectFromCharacterIndex(visibleIndex);
                 var position = window.NoteEditor.TranslatePoint(character.TopLeft, window);
                 var originalOffset = window.NoteEditor.VerticalOffset;
+                CheckFade(true, offset != double.MaxValue);
+                if (offset != double.MaxValue)
+                {
+                    var dpi = VisualTreeHelper.GetDpi(window.NoteEditor);
+                    var width = (int)Math.Ceiling(window.NoteEditor.ActualWidth * dpi.DpiScaleX);
+                    var height = (int)Math.Ceiling(window.NoteEditor.ActualHeight * dpi.DpiScaleY);
+                    byte[] Pixels()
+                    {
+                        var bitmap = new RenderTargetBitmap(width, height, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+                        bitmap.Render(window.NoteEditor); var pixels = new byte[width * height * 4];
+                        bitmap.CopyPixels(pixels, width * 4, 0); return pixels;
+                    }
+                    var faded = Pixels(); var mask = textViewport.OpacityMask;
+                    textViewport.OpacityMask = null;
+                    var plain = Pixels(); textViewport.OpacityMask = mask;
+                    var changed = Enumerable.Range(0, faded.Length).Count(index => faded[index] != plain[index]);
+                    Require(changed > 30, "Static edge mask did not visibly fade rendered text");
+                    Console.WriteLine($"PASS Static text fade changes {changed} rendered pixel channels");
+                }
                 WindowImage(offset == double.MaxValue ? "floating-notes-end-focused" : "floating-notes-middle-focused");
                 controller.Unfocus(); await Task.Delay(100); window.UpdateLayout();
+                CheckFade(false, false);
                 var expanded = window.NoteEditor.GetRectFromCharacterIndex(visibleIndex);
                 var top = writingFrame.TranslatePoint(new(), window);
                 Require(Math.Abs(top.X - top.Y) < .1 && Math.Abs(top.X - (window.Height - top.Y - writingFrame.ActualHeight)) < .1,
@@ -452,6 +485,7 @@ internal static partial class Program
                     $"Expanding a scrolled note moved or stretched visible text: offset={originalOffset}");
                 WindowImage(offset == double.MaxValue ? "floating-notes-end-unfocused" : "floating-notes-middle-unfocused");
                 controller.ToggleFocus(); await controller.Pending; await Task.Delay(100); window.UpdateLayout();
+                CheckFade(true, offset != double.MaxValue);
                 Require(Math.Abs(window.NoteEditor.VerticalOffset - originalOffset) < .1 &&
                     (window.NoteEditor.TranslatePoint(window.NoteEditor.GetRectFromCharacterIndex(visibleIndex).TopLeft, window) - position).Length < .1,
                     "Refocusing a scrolled note lost its scroll offset or text position");
