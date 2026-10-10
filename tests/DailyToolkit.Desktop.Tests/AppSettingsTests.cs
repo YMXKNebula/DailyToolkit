@@ -19,7 +19,7 @@ internal static partial class Program
             MainViewModel Create() => new(new ControlledProbe(display),display,new LocalProbe(),
                 favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
                 gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),
-                navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),appPreferencesStore:store);
+                navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),appPreferencesStore:store,notesStore:IsolatedNotes());
             using (var model=Create())
             {
                 model.Page="screen-lens"; model.Gaming.Zoom=4; model.Gaming.WheelZoomEnabled=false;

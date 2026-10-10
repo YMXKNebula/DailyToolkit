@@ -17,7 +17,7 @@ internal static partial class Program
             var display=new DisplayInfo(1920,1080,1,1920,1040,false);
             MainViewModel Create() => new(new ControlledProbe(display),display,new LocalProbe(),
                 favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
-                gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),navigationStore:store);
+                gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),navigationStore:store,notesStore:IsolatedNotes());
             using (var model=Create())
             {
                 Require(model.Page == "screen-lens" && model.NavigationItems.Select(item => item.Id).SequenceEqual(["screen-lens","floating-notes"]) &&

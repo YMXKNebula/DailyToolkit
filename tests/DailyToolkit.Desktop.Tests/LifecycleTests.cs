@@ -25,7 +25,7 @@ internal static partial class Program
         System.Diagnostics.Trace.Listeners.Add(listener);
         try
         {
-            using var model=new MainViewModel(new FailingProbe(probe.Basic),display,new LocalProbe());
+            using var model=new MainViewModel(new FailingProbe(probe.Basic),display,new LocalProbe(),notesStore:IsolatedNotes());
             await model.InitializeAsync();
             listener.Flush();
             Require(model.Report.Stage == ProbeStage.Partial && model.HasIssues && !model.IsRefreshing,
@@ -44,7 +44,7 @@ internal static partial class Program
         var probe = new ControlledProbe(display);
         var clock = new ManualClock();
         var status = new LocalProbe();
-        using var model = new MainViewModel(probe, display, status, clock);
+        using var model = new MainViewModel(probe, display, status, clock, notesStore:IsolatedNotes());
         model.Page="settings-computer";
         var refresh = model.InitializeAsync();
         await probe.DetailsStarted.Task;
@@ -86,7 +86,7 @@ internal static partial class Program
         {
             Location = "测试城", UpdatedAt = cachedClock.UtcNow.AddHours(-1), FromCache = true
         };
-        using var cachedModel = new MainViewModel(probe, display, new LocalProbe { WeatherResult = cachedWeather }, cachedClock);
+        using var cachedModel = new MainViewModel(probe, display, new LocalProbe { WeatherResult = cachedWeather }, cachedClock, notesStore:IsolatedNotes());
         await cachedModel.InitializeAsync();
         Require(cachedModel.WeatherNote == "测试城 · Windows 小组件缓存" &&
             cachedModel.WeatherUpdatedText == "10月5日 22:59 更新", "Cached weather source or local timestamp is incorrect");
@@ -95,13 +95,13 @@ internal static partial class Program
         Require(cachedModel.WeatherUpdatedText.StartsWith("缓存较旧"), "Older cached weather was presented as fresh");
         Console.WriteLine("PASS Cached weather displays its source, city, observation time, and age");
 
-        using var failedModel = new MainViewModel(new FailingProbe(probe.Basic), display, new LocalProbe());
+        using var failedModel = new MainViewModel(new FailingProbe(probe.Basic), display, new LocalProbe(), notesStore:IsolatedNotes());
         await failedModel.InitializeAsync();
         Require(failedModel.Report.Stage == ProbeStage.Partial && failedModel.HasIssues && !failedModel.IsRefreshing,
             "A failed detector did not leave a usable partial report");
         Console.WriteLine("PASS Detector failure preserves the basic report");
 
-        using var partialStatus = new MainViewModel(probe, display, new LocalProbe { FailWeather = true });
+        using var partialStatus = new MainViewModel(probe, display, new LocalProbe { FailWeather = true }, notesStore:IsolatedNotes());
         await partialStatus.InitializeAsync();
         Require(partialStatus.Network.State == NetworkState.Internet && !partialStatus.Weather.Available,
             "Weather failure discarded valid network data or showed invented weather");
@@ -109,7 +109,7 @@ internal static partial class Program
 
         var closingProbe = new ControlledProbe(display);
         var closingStatus = new LocalProbe { WaitForCancel = true };
-        var closingModel = new MainViewModel(closingProbe, display, closingStatus);
+        var closingModel = new MainViewModel(closingProbe, display, closingStatus, notesStore:IsolatedNotes());
         closingModel.Page="settings-computer";
         var window = new MainWindow(closingModel, enableShortcuts: false)
         {

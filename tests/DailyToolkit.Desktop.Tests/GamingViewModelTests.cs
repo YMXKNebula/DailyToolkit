@@ -82,7 +82,7 @@ internal static partial class Program
             var store=new FavoritesStore(path);
             Require(store.Load().Count==0 && store.Save(["future-tool"]),"Missing favorites did not start empty");
             var display=new DisplayInfo(1920,1080,1,1920,1040,false);
-            using(var model=new MainViewModel(new ControlledProbe(display),display,favoritesStore:store))
+            using(var model=new MainViewModel(new ControlledProbe(display),display,favoritesStore:store,notesStore:IsolatedNotes()))
             {
                 model.NavigateCommand.Execute("favorites");
                 Require(model.IsFavorites && model.ShowFavoritesEmpty && !model.ShowScreenLens,"Favorites empty state was missing");
@@ -90,7 +90,7 @@ internal static partial class Program
                 Require(model.HasFavorites && model.ShowScreenLens && !model.ShowFavoritesEmpty && !model.Gaming.IsActive,
                     "Starring a tool did not show it in favorites, or started capture");
             }
-            using(var reopened=new MainViewModel(new ControlledProbe(display),display,favoritesStore:store))
+            using(var reopened=new MainViewModel(new ControlledProbe(display),display,favoritesStore:store,notesStore:IsolatedNotes()))
             {
                 reopened.NavigateCommand.Execute("favorites");
                 Require(reopened.Gaming.IsFavorite && reopened.ShowScreenLens,"Favorites did not survive restart");

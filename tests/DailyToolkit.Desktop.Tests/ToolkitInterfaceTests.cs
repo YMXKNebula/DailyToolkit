@@ -27,7 +27,7 @@ internal static partial class Program
         var probe=new ControlledProbe(display); probe.Finish.TrySetResult();
         var model=new MainViewModel(probe,display,new LocalProbe(),gamingPreferencesStore:gamingStore,appPreferencesStore:appStore,
             favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
-            navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),startupRegistration:new StartupFake());
+            navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),startupRegistration:new StartupFake(),notesStore:IsolatedNotes());
         var window=new MainWindow(model,enableShortcuts:false) { ShowActivated=false,ShowInTaskbar=false,
             WindowStartupLocation=WindowStartupLocation.Manual,Left=-20000,Top=-20000 };
         IEnumerable<DependencyObject> Descendants(DependencyObject root)

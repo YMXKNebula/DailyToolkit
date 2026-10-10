@@ -200,7 +200,12 @@ internal static partial class Program
             }
             Console.WriteLine("PASS Update controls avoid background requests, serialize clicks and recover after cancellation");
         }
-        finally { Directory.Delete(root, recursive: true); }
+        finally
+        {
+            var temporaryRoot = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (Path.GetFullPath(root).StartsWith(temporaryRoot, StringComparison.OrdinalIgnoreCase) &&
+                Path.GetFileName(root).StartsWith("DailyToolkit-update-check-", StringComparison.Ordinal)) Directory.Delete(root, recursive: true);
+        }
     }
 
     private static async Task CheckLiveAppUpdatesAsync(string directory)

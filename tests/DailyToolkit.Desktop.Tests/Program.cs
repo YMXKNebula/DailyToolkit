@@ -16,6 +16,8 @@ namespace DailyToolkit.Desktop.Tests;
 
 internal static partial class Program
 {
+    private static readonly DirectoryInfo NotesFixtures = Directory.CreateTempSubdirectory("DailyToolkit-desktop-notes-fixtures-");
+    private static DailyToolkit.Desktop.Notes.NotesStore IsolatedNotes() => new(Path.Combine(NotesFixtures.FullName, Guid.NewGuid().ToString("N")));
     [STAThread]
     public static int Main(string[] args)
     {
@@ -72,7 +74,13 @@ internal static partial class Program
             catch (Exception exception) { Console.WriteLine($"FAIL {exception}"); }
             finally { app.Shutdown(); }
         };
-        app.Run();
+        try { app.Run(); }
+        finally
+        {
+            var temporaryRoot = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (Path.GetFullPath(NotesFixtures.FullName).StartsWith(temporaryRoot, StringComparison.OrdinalIgnoreCase) &&
+                NotesFixtures.Name.StartsWith("DailyToolkit-desktop-notes-fixtures-", StringComparison.Ordinal)) NotesFixtures.Delete(recursive: true);
+        }
         return exitCode;
     }
 

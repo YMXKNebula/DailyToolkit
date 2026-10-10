@@ -27,7 +27,7 @@ internal static partial class Program
                     favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
                     navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),
                     appPreferencesStore:new AppPreferencesStore(Path.Combine(directory.FullName,"settings.json")),
-                    startupRegistration:new StartupFake());
+                    startupRegistration:new StartupFake(),notesStore:IsolatedNotes());
                 if (dark) model.DarkThemeCommand.Execute(null); else model.LightThemeCommand.Execute(null);
                 model.Page="screen-lens";
                 var window=new MainWindow(model,enableShortcuts:false) { Width=width,Height=650,

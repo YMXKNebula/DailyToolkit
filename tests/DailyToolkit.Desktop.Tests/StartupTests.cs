@@ -47,7 +47,7 @@ internal static partial class Program
             using var model=new MainViewModel(new ControlledProbe(display),display,new LocalProbe(),
                 favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
                 gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),
-                navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),appPreferencesStore:store,startupRegistration:startup);
+                navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),appPreferencesStore:store,startupRegistration:startup,notesStore:IsolatedNotes());
             Require(!model.StartAtLogin && !model.AdminStartup && !model.SilentStartup && !model.CloseToTray && !model.MinimizeToTray,
                 "New runtime options changed defaults or enabled autostart without user action");
             Require(startup.ApplyCalls == 0,"Loading startup settings changed Windows registration");
@@ -117,7 +117,7 @@ internal static partial class Program
                 favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites-blocked.json")),
                 gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming-blocked.json")),
                 navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation-blocked.json")),
-                appPreferencesStore:new AppPreferencesStore(Path.Combine(blocked,"settings.json")),startupRegistration:blockedStartup))
+                appPreferencesStore:new AppPreferencesStore(Path.Combine(blocked,"settings.json")),startupRegistration:blockedStartup,notesStore:IsolatedNotes()))
             {
                 blockedModel.StartAtLogin=true; await blockedModel.PendingStartupChange;
                 Require(!blockedModel.StartAtLogin && blockedStartup.ApplyCalls == 0 && blockedModel.HasStartupStatus && blockedModel.CanEditStartup,
@@ -206,7 +206,7 @@ internal static partial class Program
                 favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
                 gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),
                 navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),
-                appPreferencesStore:new AppPreferencesStore(Path.Combine(directory.FullName,"settings.json")),startupRegistration:new StartupFake());
+                appPreferencesStore:new AppPreferencesStore(Path.Combine(directory.FullName,"settings.json")),startupRegistration:new StartupFake(),notesStore:IsolatedNotes());
             window=new(model,enableShortcuts:false) { ShowActivated=false,ShowInTaskbar=false,
                 WindowStartupLocation=WindowStartupLocation.Manual,Left=-20000,Top=-20000 };
             var handle=new WindowInteropHelper(window).EnsureHandle();
