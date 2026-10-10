@@ -192,7 +192,13 @@ try {
     $testPrincipal = [Security.Principal.WindowsPrincipal]::new($testIdentity)
     if ($testPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         & (Join-Path $hostDirectory 'DailyToolkit.InstallerHost.exe') --admin-check $newer (Join-Path $work 'admin-installed') $portableExe (Join-Path $work 'admin-result.json')
-        if ($LASTEXITCODE -ne 0) { throw 'Administrator installer checks failed; inspect admin-result.json.error.txt.' }
+        if ($LASTEXITCODE -ne 0) {
+            foreach ($diagnostic in @('admin-result.json.error.txt','admin-result.json.install.log','admin-result.json.migrate.log','admin-result.json.uninstall.log')) {
+                $diagnosticPath = Join-Path $work $diagnostic
+                if (Test-Path -LiteralPath $diagnosticPath) { Get-Content -LiteralPath $diagnosticPath -Tail 24 }
+            }
+            throw 'Administrator installer checks failed; inspect admin-result.json.error.txt.'
+        }
         Write-Output 'PASS highest-level task migration and cleanup; task fields and SDDL retained'
     } else {
         Write-Output 'NOT RUN administrator checks: caller is not elevated.'

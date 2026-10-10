@@ -21,6 +21,7 @@ internal static class AdminInstallerChecks
         object? scheduler = null;
         dynamic? folder = null;
         var taskCreated = false;
+        var installationAttempted = false;
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\.."));
         var expectedRoot = Path.Combine(root, ".local") + Path.DirectorySeparatorChar;
         directory = Path.GetFullPath(directory);
@@ -36,6 +37,8 @@ internal static class AdminInstallerChecks
             scheduler = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service")!)!;
             ((dynamic)scheduler).Connect(); folder = ((dynamic)scheduler).GetFolder(@"\");
             Require(!TaskExists(folder, taskName), "Another test task is still registered.");
+            Console.WriteLine("Administrator check: installing isolated fixture.");
+            installationAttempted = true;
             Require(RunProcess(setup, ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/TASKS=", "/DIR=" + directory,
                 "/LOG=" + report + ".install.log"]) == 0, "Isolated installation failed.");
             dynamic definition = ((dynamic)scheduler).NewTask(0);
@@ -59,8 +62,12 @@ internal static class AdminInstallerChecks
             dynamic beforeTask = folder.GetTask(taskName);
             var beforeXml = (string)beforeTask.Xml;
             var beforeSecurity = (string)beforeTask.GetSecurityDescriptor(7);
-            Require(RunProcess(setup, ["/MIGRATEONLY=1", "/OWNER=" + sid, "/TARGET=" + directory,
-                "/LOG=" + report + ".migrate.log"]) == 0, "Administrator maintenance helper failed.");
+            File.WriteAllText(report + ".task-before.xml", beforeXml);
+            Console.WriteLine("Administrator check: migrating highest-level task.");
+            var migrationCode = RunProcess(setup, ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/MIGRATEONLY=1", "/OWNER=" + sid, "/TARGET=" + directory,
+                "/LOG=" + report + ".migrate.log"]);
+            File.WriteAllText(report + ".task-after.xml", (string)folder.GetTask(taskName).Xml);
+            Require(migrationCode == 0, "Administrator maintenance helper failed.");
             dynamic afterTask = folder.GetTask(taskName);
             Require((string)afterTask.Definition.Actions[1].Path == Path.Combine(directory, "DailyToolkit.exe") &&
                 (string)afterTask.Definition.Actions[1].WorkingDirectory == directory, "Administrator task did not move to the installation.");
@@ -80,6 +87,7 @@ internal static class AdminInstallerChecks
         }
         catch (Exception error)
         {
+            Console.Error.WriteLine(error);
             if (report.StartsWith(expectedRoot, StringComparison.OrdinalIgnoreCase))
                 File.WriteAllText(report + ".error.txt", error.ToString());
             return 1;
@@ -92,10 +100,12 @@ internal static class AdminInstallerChecks
             }
             try
             {
-                if (directory.StartsWith(expectedRoot, StringComparison.OrdinalIgnoreCase) && ReadUninstaller(directory) is { } uninstall)
+                using var cleanupRegistration = Registry.CurrentUser.OpenSubKey(UninstallKey);
+                if (installationAttempted && cleanupRegistration is not null &&
+                    directory.StartsWith(expectedRoot, StringComparison.OrdinalIgnoreCase) && ReadUninstaller(directory) is { } uninstall)
                     _ = RunProcess(uninstall, ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]);
             }
-            catch (Exception error) { Trace.WriteLine(error); }
+            catch (Exception error) { Console.Error.WriteLine("Test cleanup: " + error); }
             if (scheduler is not null) Marshal.FinalReleaseComObject(scheduler);
         }
     }
@@ -113,7 +123,9 @@ internal static class AdminInstallerChecks
     {
         using var key = Registry.CurrentUser.OpenSubKey(UninstallKey);
         var command = (string?)key?.GetValue("UninstallString") ?? throw new InvalidOperationException("Test uninstall registration is absent.");
-        var executable = command.Trim('"');
+        var match = System.Text.RegularExpressions.Regex.Match(command, "^\"([^\"]+)\"(?:\\s|$)");
+        Require(match.Success, "Unexpected test uninstall command.");
+        var executable = match.Groups[1].Value;
         Require(Path.GetDirectoryName(executable)?.TrimEnd('\\') == directory.TrimEnd('\\') &&
             Path.GetFileName(executable).StartsWith("unins", StringComparison.OrdinalIgnoreCase), "Uninstall escaped the test directory.");
         return executable;

@@ -82,8 +82,8 @@ chinesesimplified.MigrateStartup=将已有的开机自启改为安装版（管�
 english.MigrateStartup=Move existing startup to this installation (administrator startup requires permission)
 chinesesimplified.CloseFailed=DailyToolkit 尚未退出，可能有笔记未能保存。请先保存笔记并从托盘退出，再重试。
 english.CloseFailed=DailyToolkit is still running. Save your note and exit from the tray, then retry.
-chinesesimplified.StartupFailed=软件已经安装，但自启迁移未完成，原自启入口已保留。请在安装版设置中关闭并重新启用开机自启；管理员自启需要 Windows 授权。
-english.StartupFailed=Installation completed, but startup could not be moved. The original entry was kept. Disable and re-enable startup in this installation; administrator startup requires Windows permission.
+chinesesimplified.StartupFailed=软件已经安装，但自启迁移未完成。请在安装版设置中关闭并重新启用开机自启；管理员自启需要 Windows 授权。
+english.StartupFailed=Installation completed, but startup migration did not finish. Disable and re-enable startup in this installation; administrator startup requires Windows permission.
 chinesesimplified.CleanupFailed=未能清理本安装目录的自启入口，卸载已停止。请在软件设置中关闭开机自启后重试。
 english.CleanupFailed=Startup for this installation could not be removed. Uninstall has stopped. Disable startup in the application settings and retry.
 chinesesimplified.Downgrade=已安装的版本较新。请使用同版或更新版本的安装包。
@@ -141,6 +141,8 @@ function QueryFullProcessImageName(Process: LongWord; Flags: LongWord; Buffer: S
   external 'QueryFullProcessImageNameW@kernel32.dll stdcall';
 function CreateFile(Name: String; Access, Share, Security, Disposition, Flags, Template: LongWord): LongWord;
   external 'CreateFileW@kernel32.dll stdcall';
+function WriteFile(Handle: LongWord; Buffer: String; Size: LongWord; var Written: LongWord; Overlapped: LongWord): Boolean;
+  external 'WriteFile@kernel32.dll stdcall';
 procedure ExitProcess(Code: LongWord);
   external 'ExitProcess@kernel32.dll stdcall';
 
@@ -306,8 +308,21 @@ begin
   except Log('Startup inspection failed: ' + GetExceptionMessage); end;
 end;
 
+procedure SaveTaskXml(FileName, Xml: String);
+var Handle, Size, Written: LongWord; Buffer: String;
+begin
+  { schtasks expects UTF-16 task XML, including the existing UTF-16 declaration. }
+  Buffer := #$FEFF + Xml; Size := Length(Buffer) * 2;
+  Handle := CreateFile(FileName, $40000000, 0, 0, 2, $80, 0);
+  if Handle = $FFFFFFFF then RaiseException('Cannot create startup definition.');
+  try
+    if not WriteFile(Handle, Buffer, Size, Written, 0) or (Written <> Size) then
+      RaiseException('Cannot write startup definition.');
+  finally CloseHandle(Handle); end;
+end;
+
 function MigrateStartup(TargetDirectory: String): Boolean;
-var Folder, Task, Definition: Variant; Run, Security, RegisteredDir: String; Code: Integer;
+var Folder, Task, Definition, Action, Registered: Variant; Run, Security, RegisteredDir, XmlFile: String; Code, Index: Integer; Output: TExecOutput; Executed: Boolean;
 begin
   Result := False;
   if not RegQueryStringValue(HKCU64, UninstallKey, 'InstallLocation', RegisteredDir) then Exit;
@@ -319,14 +334,31 @@ begin
     if not SamePath(Task.Definition.Actions.Item(1).Path, AddBackslash(TargetDirectory) + 'DailyToolkit.exe') then begin
       if not IsAdmin then begin
         Result := ShellExec('runas', ExpandConstant('{srcexe}'),
-          '/MIGRATEONLY=1 /OWNER=' + OwnerSid + ' /TARGET="' + TargetDirectory + '"',
+          '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /MIGRATEONLY=1 /OWNER=' + OwnerSid + ' /TARGET="' + TargetDirectory + '"',
           '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
         Exit;
       end;
+      Log('Reading startup task definition and security.');
       Definition := Task.Definition; Security := Task.GetSecurityDescriptor(7);
-      Definition.Actions.Item(1).Path := AddBackslash(TargetDirectory) + 'DailyToolkit.exe';
-      Definition.Actions.Item(1).WorkingDirectory := TargetDirectory;
-      Folder.RegisterTask('{#StartupName}-' + OwnerSid, Definition.XmlText, 6, OwnerSid, Null, 3, Security);
+      Log('Updating startup action paths.');
+      Action := Definition.Actions.Item(1);
+      Action.Path := AddBackslash(TargetDirectory) + 'DailyToolkit.exe';
+      Action.WorkingDirectory := TargetDirectory;
+      Log('Registering updated startup task.');
+      XmlFile := ExpandConstant('{tmp}\DailyToolkit-startup.xml');
+      try
+        SaveTaskXml(XmlFile, Definition.XmlText);
+        Executed := ExecAndCaptureOutput(ExpandConstant('{sys}\schtasks.exe'), '/Create /TN "{#StartupName}-' + OwnerSid + '" /XML "' + XmlFile + '" /F',
+          '', SW_HIDE, ewWaitUntilTerminated, Code, Output);
+        for Index := 0 to GetArrayLength(Output.StdOut) - 1 do Log(Output.StdOut[Index]);
+        for Index := 0 to GetArrayLength(Output.StdErr) - 1 do Log(Output.StdErr[Index]);
+        if not Executed or (Code <> 0) then
+          RaiseException('Startup registration failed: ' + IntToStr(Code));
+      finally DeleteFile(XmlFile); end;
+      Registered := FindStartupTask(Folder);
+      if Registered.GetSecurityDescriptor(7) <> Security then Registered.SetSecurityDescriptor(Security, 0);
+      if Registered.GetSecurityDescriptor(7) <> Security then RaiseException('Startup security was not retained.');
+      Log('Startup task migration completed.');
     end;
   end;
   Run := ReadRunExecutable;
