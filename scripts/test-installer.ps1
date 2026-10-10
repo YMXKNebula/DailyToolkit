@@ -92,6 +92,10 @@ function Register-TestTask([string]$description, [string]$path) {
 function Test-TaskExists {
     @($folder.GetTasks(1) | Where-Object Name -eq $taskName).Count -ne 0
 }
+function Set-TestRunEntry([string]$executable) {
+    if (-not (Test-Path -LiteralPath $runKey)) { New-Item -Path $runKey -Force | Out-Null }
+    New-ItemProperty -LiteralPath $runKey -Name $testName -Value ('"' + $executable + '" --startup') -PropertyType String -Force | Out-Null
+}
 try {
     $env:DOTNET_CLI_HOME = Join-Path $root '.local\dotnet'
     $env:NUGET_PACKAGES = Join-Path $root '.local\nuget'
@@ -137,7 +141,7 @@ try {
     Assert-Installer ((Get-FileHash -LiteralPath $installedExe).Hash -eq (Get-FileHash -LiteralPath (Join-Path $PayloadDirectory 'DailyToolkit.exe')).Hash) 'Upgrade or blocked downgrade damaged the payload.'
     $checks.Add('last edit saved before upgrade; automatic restart requested; installation location reused; downgrade blocked')
 
-    New-ItemProperty -LiteralPath $runKey -Name $testName -Value ('"' + $installedExe + '" --startup') -PropertyType String -Force | Out-Null
+    Set-TestRunEntry $installedExe
     $ready = Start-TestHost 'refuse' 'refused-uninstall'
     Assert-Installer ((Invoke-TestSetup (Get-TestUninstaller) 'refused-uninstall') -ne 0) 'Uninstall ignored a refused exit.'
     Assert-Installer ((Test-Path -LiteralPath $installedExe) -and (Test-Path -LiteralPath $uninstallKey) -and
@@ -158,7 +162,7 @@ try {
 
     Assert-Installer ((Invoke-TestSetup $newer 'reinstall' $installArguments) -eq 0) 'Reinstallation failed.'
     $portableExe = Join-Path $PayloadDirectory 'DailyToolkit.exe'
-    New-ItemProperty -LiteralPath $runKey -Name $testName -Value ('"' + $portableExe + '" --startup') -PropertyType String -Force | Out-Null
+    Set-TestRunEntry $portableExe
     Register-TestTask ('DailyToolkit automatic startup. Owner: ' + $sid) $portableExe
     Assert-Installer ((Invoke-TestSetup (Get-TestUninstaller) 'portable-startup-preserved') -eq 0) 'Uninstall with portable startup failed.'
     Assert-Installer ((Get-ItemProperty -LiteralPath $runKey -Name $testName).$testName -eq ('"' + $portableExe + '" --startup') -and (Test-TaskExists)) 'Uninstall removed startup belonging to the portable directory.'
