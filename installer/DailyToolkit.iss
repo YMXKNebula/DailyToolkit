@@ -17,6 +17,9 @@
 #ifndef StartupName
   #define StartupName "DailyToolkit"
 #endif
+#ifndef UpdateLaunchExe
+  #define UpdateLaunchExe "{app}\DailyToolkit.exe"
+#endif
 
 [Setup]
 AppId={#InstallerId}
@@ -74,6 +77,7 @@ Name: "{autodesktop}\{#ProductName}"; Filename: "{app}\DailyToolkit.exe"; Parame
 
 [Run]
 Filename: "{app}\DailyToolkit.exe"; Parameters: "--show"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,{#ProductName}}"; Flags: nowait postinstall skipifsilent runasoriginaluser; Check: StartupMigrationSucceeded
+Filename: "{#UpdateLaunchExe}"; Parameters: "--show"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser; Check: RestartAfterUpdate
 
 [CustomMessages]
 chinesesimplified.DesktopIcon=创建桌面快捷方式
@@ -369,6 +373,9 @@ end;
 
 function StartupMigrationSucceeded: Boolean;
 begin Result := MigrationSucceeded; end;
+
+function RestartAfterUpdate: Boolean;
+begin Result := (ExpandConstant('{param:UPDATE|0}') = '1') and WizardSilent and MigrationSucceeded; end;
 
 function InitializeSetup: Boolean;
 begin

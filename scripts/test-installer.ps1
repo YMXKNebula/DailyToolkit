@@ -98,7 +98,7 @@ try {
     & dotnet build (Join-Path $root 'tests\DailyToolkit.InstallerHost\DailyToolkit.InstallerHost.csproj') -c Release --disable-build-servers -m:1 --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Installer test host build failed.' }
     foreach ($version in @($olderVersion, $newerVersion)) {
-        & $Compiler /Qp "/DAppVersion=$version" "/DInstallerId=$testName" '/DProductName=DailyToolkit Installer Tests' "/DStartupName=$testName" "/DPayloadDir=$PayloadDirectory" "/DOutputDir=$work\$version" (Join-Path $root 'installer\DailyToolkit.iss')
+        & $Compiler /Qp "/DAppVersion=$version" "/DInstallerId=$testName" '/DProductName=DailyToolkit Installer Tests' "/DStartupName=$testName" "/DUpdateLaunchExe=$hostDirectory\DailyToolkit.InstallerHost.exe" "/DPayloadDir=$PayloadDirectory" "/DOutputDir=$work\$version" (Join-Path $root 'installer\DailyToolkit.iss')
         if ($LASTEXITCODE -ne 0) { throw 'Installer fixture compilation failed.' }
     }
     $older = Join-Path $work "$olderVersion\DailyToolkit-$olderVersion-win-x64-setup.exe"
@@ -122,15 +122,20 @@ try {
     $checks.Add('refused exit stops upgrade before changing files; no forced termination')
     Stop-TestHost
 
+    $restartMarker = Join-Path $destination 'update-restarted.txt'
+    if (Test-Path -LiteralPath $restartMarker) { Remove-Item -LiteralPath $restartMarker }
     $ready = Start-TestHost 'save' 'saved-upgrade'
-    Assert-Installer ((Invoke-TestSetup $newer 'saved-upgrade' @('/TASKS=')) -eq 0) 'Upgrade after normal save failed.'
+    Assert-Installer ((Invoke-TestSetup $newer 'saved-upgrade' @('/TASKS=','/UPDATE=1')) -eq 0) 'Upgrade after normal save failed.'
     Assert-Installer ($hostProcess.WaitForExit(3000)) 'Application did not exit before replacement.'
+    $restartDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    while (-not (Test-Path -LiteralPath $restartMarker) -and [DateTime]::UtcNow -lt $restartDeadline) { Start-Sleep -Milliseconds 100 }
+    Assert-Installer ((Test-Path -LiteralPath $restartMarker) -and [IO.File]::ReadAllText($restartMarker) -eq '--show') 'Update did not request an automatic restart.'
     Assert-Installer ([IO.File]::ReadAllText((Join-Path $work 'saved-note.txt')) -eq "最后一次修改`nlast edit") 'Upgrade lost the simulated last edit.'
     Assert-Installer ((Get-ItemProperty -LiteralPath $uninstallKey).DisplayVersion -eq "$newerVersion") 'Upgrade did not update Windows version.'
     Assert-Installer ([IO.Path]::GetFullPath((Get-ItemProperty -LiteralPath $uninstallKey).InstallLocation).TrimEnd('\') -eq $destination) 'Upgrade did not reuse the previous installation directory.'
     Assert-Installer ((Invoke-TestSetup $older 'downgrade' $installArguments) -ne 0) 'Downgrade was accepted.'
     Assert-Installer ((Get-FileHash -LiteralPath $installedExe).Hash -eq (Get-FileHash -LiteralPath (Join-Path $PayloadDirectory 'DailyToolkit.exe')).Hash) 'Upgrade or blocked downgrade damaged the payload.'
-    $checks.Add('last edit saved before upgrade; installation location reused; downgrade blocked')
+    $checks.Add('last edit saved before upgrade; automatic restart requested; installation location reused; downgrade blocked')
 
     New-ItemProperty -LiteralPath $runKey -Name $testName -Value ('"' + $installedExe + '" --startup') -PropertyType String -Force | Out-Null
     $ready = Start-TestHost 'refuse' 'refused-uninstall'

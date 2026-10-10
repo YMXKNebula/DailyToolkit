@@ -451,6 +451,7 @@
                   <TextBlock x:Name="ProductVersion" Text="{Binding VersionText}" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
                 </StackPanel>
               </StackPanel>
+              <controls:AppUpdateControl Margin="0,0,0,18" />
               <TextBlock Text="Windows 本地工具集" Margin="0,0,0,14" />
               <TextBlock Text="作者：YMXKNebula" Style="{StaticResource MutedText}" Margin="0,0,0,8" />
               <TextBlock Text="代码许可证：MIT" Style="{StaticResource MutedText}" />

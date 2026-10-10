@@ -29,6 +29,10 @@ internal static partial class Program
         {
             try
             {
+                if (args is ["--update-checks"])
+                { await CheckAppUpdatesAsync(); exitCode = 0; return; }
+                if (args is ["--update-live", var updateDirectory])
+                { await CheckLiveAppUpdatesAsync(updateDirectory); exitCode = 0; return; }
                 if (args is ["--notes-input-backdrop", var readyFile])
                 { await RunNotesInputBackdropAsync(readyFile); exitCode = 0; return; }
                 if (args is ["--lens-image-checks"])
@@ -80,6 +84,7 @@ internal static partial class Program
     private static async Task CheckAsync()
     {
         await CheckWeatherCacheAsync();
+        await CheckAppUpdatesAsync();
         CheckShortcutPersistence();
         CheckRenamedSettingsCompatibility();
         CheckFavorites();
@@ -108,6 +113,6 @@ internal static partial class Program
         await CheckToolkitInterfaceAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("41/41 desktop checks passed");
+        Console.WriteLine("47/47 desktop checks passed");
     }
 }

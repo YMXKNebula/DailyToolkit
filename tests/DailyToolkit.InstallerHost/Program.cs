@@ -16,6 +16,14 @@ internal static class Program
     {
         if (args is ["--admin-check", var setup, var directory, var portable, var report])
             return AdminInstallerChecks.Run(setup, directory, portable, report);
+        if (args is ["--show"])
+        {
+            var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\.local\installer-tests")) + "\\";
+            var destination = Path.GetFullPath(System.Environment.CurrentDirectory);
+            if (!destination.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return 2;
+            File.WriteAllText(Path.Combine(destination, "update-restarted.txt"), "--show");
+            return 0;
+        }
         if (args is not [var ready, var savedNote, var stop, var mode]) return 2;
         using var identity = WindowsIdentity.GetCurrent();
         var sid = identity.User!.Value;
