@@ -2,9 +2,9 @@
 
 Windows 本地工具集，提供屏幕局部放大、浮笺和电脑信息查看，使用 C#、.NET 10 和 WPF。
 
-当前版本为 **0.7.9**，改动见 [更新说明](docs/RELEASE_079.md)。下载地址：[Releases](https://github.com/YMXKNebula/DailyToolkit/releases)。目前提供 Windows x64 便携 ZIP，解压后运行 `DailyToolkit.exe`，无需另装 .NET。已在 Windows 11 x64 上测试。
+当前版本为 **0.7.9**，改动见 [更新说明](docs/RELEASE_079.md)。下载地址：[Releases](https://github.com/YMXKNebula/DailyToolkit/releases)。同一个版本同时提供 Windows x64 安装版 EXE 和便携版 ZIP，均包含 .NET 运行环境。已在 Windows 11 x64 上测试。
 
-程序没有安装器或自动更新功能。更新时先退出 DailyToolkit，再用新包替换程序目录中的文件。笔记和个人设置保存在用户数据目录，不随程序替换而删除。2026-10-09 重打包仍使用 0.7.9 版号，包含捕获启动和资源释放修复。
+安装版运行安装包即可安装或升级，在 Windows“已安装的应用”中卸载；便携版解压后运行 `DailyToolkit.exe`，更新前先退出软件，再替换程序文件。笔记和个人设置保存在用户数据目录，升级和卸载都保留这些数据。软件没有自动检查或下载更新的功能。两种包的使用和迁移步骤见 [安装说明](docs/INSTALLATION.md)。2026-10-09 重打包仍使用 0.7.9 版号，包含捕获启动和资源释放修复。
 
 ## 屏幕局部放大
 
@@ -67,7 +67,15 @@ Windows 本地工具集，提供屏幕局部放大、浮笺和电脑信息查看
 .\scripts\publish.ps1
 ```
 
-输出为 `artifacts/DailyToolkit-<版本>-win-x64/` 和对应 ZIP。首次打包会下载 .NET 运行时；GitHub Actions 也会构建、检查和打包。
+输出为 `artifacts/DailyToolkit-<版本>-win-x64/` 和 `DailyToolkit-<版本>-win-x64-portable.zip`。首次打包会下载 .NET 运行时。
+
+打包安装版：
+
+```powershell
+.\scripts\package-installer.ps1
+```
+
+先从 [Inno Setup 官方网站](https://jrsoftware.org/isdl.php)安装编译器，支持 6.5 及更新版本；不在项目脚本中下载和执行安装工具。也可以用 `-Compiler` 指定本地 `ISCC.exe`。输出为 `DailyToolkit-<版本>-win-x64-setup.exe`，两种包共用程序文件，摘要写入 `SHA256SUMS.txt`。GitHub Actions 使用运行环境已有的编译器，同时构建、检查并打包这两个版本。
 
 ## 参与开发
 

@@ -27,9 +27,18 @@ jobs:
       - name: Package portable app
         shell: pwsh
         run: ./scripts/publish.ps1
+      - name: Package installer
+        shell: pwsh
+        run: ./scripts/package-installer.ps1 -Compiler (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
+      - name: Check installer lifecycle
+        shell: pwsh
+        run: ./scripts/test-installer.ps1 -Compiler (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
       - uses: actions/upload-artifact@v7
         with:
           name: DailyToolkit-win-x64
-          path: artifacts/DailyToolkit-*-win-x64.zip
+          path: |
+            artifacts/DailyToolkit-*-win-x64-portable.zip
+            artifacts/DailyToolkit-*-win-x64-setup.exe
+            artifacts/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14

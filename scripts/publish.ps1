@@ -36,7 +36,7 @@ try {
             }
         }
     }
-    $zipPath = Join-Path $projectRoot ('artifacts\' + $packageName + '.zip')
+    $zipPath = Join-Path $projectRoot ('artifacts\' + $packageName + '-portable.zip')
     Compress-Archive -Path (Join-Path $outputDirectory '*') -DestinationPath $zipPath -Force
     & (Join-Path $PSScriptRoot 'refresh-explorer-icon.ps1') -Executable (Join-Path $outputDirectory 'DailyToolkit.exe') | Out-Null
     Write-Output $zipPath

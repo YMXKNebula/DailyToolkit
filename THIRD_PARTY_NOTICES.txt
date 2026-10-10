@@ -1,6 +1,6 @@
 DailyToolkit - third-party components
 
-The portable package includes the following components under the MIT License:
+The application packages include the following components under the MIT License:
 
 AMD FidelityFX Contrast Adaptive Sharpening (adapted CAS filter weights)
 https://github.com/GPUOpen-Effects/FidelityFX-CAS
@@ -55,5 +55,14 @@ Windows SDK license: https://aka.ms/WinSDKLicenseURL
 The original license is included as licenses/Windows-SDK-License.rtf.
 
 .NET and Windows Desktop runtime notices are included separately in the
-portable package (microsoft.netcore.app.runtime* and
+application packages (microsoft.netcore.app.runtime* and
 microsoft.windowsdesktop.app.runtime*).
+
+The Windows setup and uninstaller use Inno Setup.
+https://jrsoftware.org/
+Copyright (C) 1997-2026 Jordan Russell. All rights reserved.
+Portions Copyright (C) 2000-2026 Martijn Laan. All rights reserved.
+Inno Setup uses its own license; it is not covered by the application's MIT
+license. The original setup/uninstaller copyright and About notices are retained.
+The repository also retains the original Chinese Simplified setup translation;
+its license is included under installer/Languages/LICENSE-InnoSetup.txt.
