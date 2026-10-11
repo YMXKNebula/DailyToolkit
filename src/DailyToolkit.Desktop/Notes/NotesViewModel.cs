@@ -133,7 +133,7 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
     {
         if (shortcut is { IsValid: false }) { Notice = "请选择有效的快捷键。"; return false; }
         if (shortcut is not null && (shortcut.Matches(focus ? _preferences.ToggleShortcut : _preferences.FocusShortcut) || shortcut.Matches(lensShortcut)))
-        { Notice = "此快捷键与浮笺的另一快捷键或屏幕局部放大冲突。"; return false; }
+        { Notice = "此快捷键与浮笺的另一快捷键或放大镜冲突。"; return false; }
         Update(focus ? _preferences with { FocusShortcut = shortcut } : _preferences with { ToggleShortcut = shortcut });
         Notice = ""; return true;
     }
@@ -141,7 +141,7 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
     {
         var defaults = new NotesPreferences();
         if (defaults.ToggleShortcut!.Matches(lensShortcut) || defaults.FocusShortcut!.Matches(lensShortcut))
-        { Notice = "默认浮笺快捷键与屏幕局部放大冲突，请先修改该快捷键。"; return false; }
+        { Notice = "默认浮笺快捷键与放大镜冲突，请先修改该快捷键。"; return false; }
         Update(_preferences with { ToggleShortcut = defaults.ToggleShortcut, FocusShortcut = defaults.FocusShortcut }); return true;
     }
 

@@ -24,9 +24,9 @@ public sealed class ThemePreview : FrameworkElement
         Box(112,25,368,215,p.AccentSoft);
         draw.DrawLine(new Pen(B(p.Border),1),new(112,25),new(112,240));
         Text("DailyToolkit",12,5,p.Muted,10); Text("—   □   ×",419,5,p.Muted,10);
-        Box(12,41,100,31,p.AccentSoft,5); Box(102,41,10,31,p.AccentSoft); Text("屏幕局部放大",19,51,p.Accent,10);
+        Box(12,41,100,31,p.AccentSoft,5); Box(102,41,10,31,p.AccentSoft); Text("放大镜",19,51,p.Accent,10);
         Box(12,81,88,28,p.Hover,5); Text("工具",24,90,p.Muted);
-        Text("屏幕局部放大",130,43,p.Text,18);
+        Text("放大镜",130,43,p.Text,18);
         Box(130,95,330,110,p.Border,8); Box(131,96,328,108,p.Surface,8);
         Text("快捷键   Ctrl + Shift + F8",145,111,p.Text); Box(360,107,84,27,p.Accent,5); Text("开启放大框",373,114,p.AccentForeground,10);
         Text("放大倍率",145,151,p.Muted,10); Box(214,157,194,4,p.SliderTrack,2); Box(214,157,72,4,p.SliderThumb,2);

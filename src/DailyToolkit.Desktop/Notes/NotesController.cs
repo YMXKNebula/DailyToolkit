@@ -48,7 +48,7 @@ internal sealed class NotesController : IDisposable
             if (next.Item4.Matches(toggle)) toggle = null;
             if (next.Item4.Matches(focus)) focus = null;
             if (toggle != preferences.ToggleShortcut || focus != preferences.FocusShortcut)
-                _model.Notice = "浮笺快捷键与屏幕局部放大冲突，请修改浮笺快捷键。";
+                _model.Notice = "浮笺快捷键与放大镜冲突，请修改浮笺快捷键。";
         }
         var success = _shortcuts.Configure(preferences.IsEnabled ? toggle : null, preferences.IsEnabled ? focus : null);
         if (!success) _model.Notice = _shortcuts.Error;

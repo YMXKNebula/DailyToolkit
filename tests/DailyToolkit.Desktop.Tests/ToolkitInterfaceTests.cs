@@ -175,7 +175,7 @@ internal static partial class Program
             Require(Descendants(focusVisual).OfType<Border>().Single() is { CornerRadius.TopLeft:8,Background:null },
                 "The switch retained a rectangular or filled focus visual");
             var row=Descendants(nav).OfType<RadioButton>().Single(button => button.DataContext is NavigationItem { Id: "screen-lens" });
-            var label=Descendants(row).OfType<TextBlock>().Single(text => text.Text == "屏幕局部放大");
+            var label=Descendants(row).OfType<TextBlock>().Single(text => text.Text == "放大镜");
             Require(label.TranslatePoint(new Point(label.ActualWidth,0),feature).X<=-3,
                 "The wider switch overlapped the navigation label");
             var rowFocus=new Control { Style=row.FocusVisualStyle };

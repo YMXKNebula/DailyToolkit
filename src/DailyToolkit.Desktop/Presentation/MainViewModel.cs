@@ -41,7 +41,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly NavigationOrderStore _navigationStore;
     private readonly List<string> _navigationOrder;
     // Each installed tool gets one entry here; favorites reuse the same entries and tool state.
-    private readonly NavigationItem[] _navigation=[new("screen-lens","屏幕局部放大","\uE71E",canToggle:true),
+    private readonly NavigationItem[] _navigation=[new("screen-lens","放大镜","\uE71E",canToggle:true),
         new("floating-notes","浮笺","\uE70B",canToggle:true)];
     private string _softwareSearch = "";
     private string _notice = "";

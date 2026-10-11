@@ -60,7 +60,7 @@ internal static partial class Program
         model.NavigateCommand.Execute("tools");
         Require(model.IsHome && model.IsSettings && model.PageTitle == "电脑详情", "Legacy category navigation did not resolve to computer details");
         model.NavigateCommand.Execute("gaming");
-        Require(model.ShowScreenLens && model.PageTitle == "屏幕局部放大" && !model.Gaming.IsActive, "Direct tool navigation was not ready");
+        Require(model.ShowScreenLens && model.PageTitle == "放大镜" && !model.Gaming.IsActive, "Direct tool navigation was not ready");
         Console.WriteLine("PASS Game navigation keeps screen capture off until explicitly enabled");
         model.NavigateCommand.Execute("computer");
         Require(model.IsHome, "The former computer page did not resolve to the merged home");
