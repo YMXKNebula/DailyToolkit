@@ -24,6 +24,14 @@ jobs:
       - name: Build and check
         shell: pwsh
         run: ./scripts/build.ps1
+      - name: Check clipboard media and native events
+        shell: pwsh
+        run: |
+          $checks = './tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyToolkit.Desktop.Tests.exe'
+          & $checks --clipboard-media-checks
+          if ($LASTEXITCODE -ne 0) { throw 'Clipboard media checks failed.' }
+          & $checks --clipboard-native-checks
+          if ($LASTEXITCODE -ne 0) { throw 'Isolated clipboard event checks failed.' }
       - name: Package portable app
         shell: pwsh
         run: ./scripts/publish.ps1

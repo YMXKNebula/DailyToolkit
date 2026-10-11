@@ -149,7 +149,7 @@ internal static partial class Program
             model = new MainViewModel(new ControlledProbe(display), display, new LocalProbe(),
                 favoritesStore: new(Path.Combine(directory.FullName, "favorites.json")), gamingPreferencesStore: new(Path.Combine(directory.FullName, "gaming.json")),
                 appPreferencesStore: new(Path.Combine(directory.FullName, "app.json")), navigationStore: new(Path.Combine(directory.FullName, "order.json")),
-                notesStore: new(Path.Combine(directory.FullName, "Notes")));
+                notesStore: new(Path.Combine(directory.FullName, "Notes")), clipboardSettingsStore: IsolatedClipboard());
             await model.Notes.Ready; var notes = model.Notes;
             notes.Text = "private note fixture"; notes.FontSize = 30; notes.FontBold = true;
             static double Luminance(string hex)

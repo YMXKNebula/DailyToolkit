@@ -79,7 +79,7 @@ internal static partial class Program
             gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),
             favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
             navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),
-            appPreferencesStore:new AppPreferencesStore(Path.Combine(directory.FullName,"settings.json")),notesStore:IsolatedNotes());
+            appPreferencesStore:new AppPreferencesStore(Path.Combine(directory.FullName,"settings.json")),notesStore:IsolatedNotes(),clipboardSettingsStore:IsolatedClipboard());
         model.Page="gaming";
         var window=new MainWindow(model,enableShortcuts:false)
         {

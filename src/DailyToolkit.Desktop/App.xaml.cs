@@ -132,7 +132,8 @@ public partial class App : Application
             preferencesStore.Save(localPreferences);
         }
         var viewModel = new MainViewModel(new WindowsEnvironmentProbe(), NativeWindowsInfo.ReadDisplay(),appPreferencesStore:preferencesStore,
-            notesStore: previewDirectory is null ? null : new Notes.NotesStore(Path.Combine(previewDirectory.FullName,"Notes")));
+            notesStore: previewDirectory is null ? null : new Notes.NotesStore(Path.Combine(previewDirectory.FullName,"Notes")),
+            clipboardSettingsStore: previewDirectory is null ? null : new ClipRecall.ClipboardSettingsStore(Path.Combine(previewDirectory.FullName,"ClipboardHistory")));
         if (startupRecoveryNotice is not null) viewModel.Page="settings";
         try
         {

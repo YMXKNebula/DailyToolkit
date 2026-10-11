@@ -50,6 +50,7 @@ public partial class MainWindow : Window
             InitializeRuntime(source);
             InitializeLensShortcuts(source);
             InitializeNotes(source);
+            InitializeClipRecall(source);
         };
         _viewModel.Gaming.PropertyChanged += OnGamingStateChanged;
         _viewModel.PropertyChanged += OnAppSettingsChanged;
@@ -82,6 +83,7 @@ public partial class MainWindow : Window
             FinishNavigationTransition();
             _shortcuts?.Dispose();
             _notes?.Dispose();
+            _clipRecall?.Dispose();
             _viewModel.Gaming.PropertyChanged -= OnGamingStateChanged;
             _viewModel.PropertyChanged -= OnAppSettingsChanged;
             _viewModel.Dispose();
@@ -295,6 +297,15 @@ public partial class MainWindow : Window
             if (!IsVisible) Show();
             RegisterLensHotkey(); UpdateLocalPolling(); return;
         }
+        if (_clipRecall is not null && !await _clipRecall.PrepareExitAsync() ||
+            _clipRecall is null && !await _viewModel.ClipRecall.FlushSettingsAsync())
+        {
+            _closing = false; _exitRequested = false;
+            _notes?.CancelExitPreparation();
+            _viewModel.Notice = "剪贴回溯尚未保存完成，请完成当前编辑或重试保存后退出。";
+            if (!IsVisible) Show();
+            RegisterLensHotkey(); UpdateLocalPolling(); return;
+        }
         _viewModel.CancelPending();
         await _viewModel.PendingWork;
         _exitPrepared = true;
@@ -329,13 +340,11 @@ public partial class MainWindow : Window
     }
     private void ShortcutFocus(object sender,KeyboardFocusChangedEventArgs e)
     {
-        _shortcuts?.Suspend(true);
-        _notes?.Suspend(true);
+        SuspendToolShortcuts(true);
     }
     private void ShortcutBlur(object sender,KeyboardFocusChangedEventArgs e)
     {
-        if (_shortcuts is not null) UpdateShortcutNotice(_shortcuts.Suspend(false));
-        _notes?.Suspend(false);
+        SuspendToolShortcuts(false);
     }
     private void CaptureShortcut(object sender,KeyEventArgs e)
     {
@@ -355,6 +364,8 @@ public partial class MainWindow : Window
         if (!binding.IsValid) return;
         if (binding.Matches(_viewModel.Notes.Preferences.ToggleShortcut) || binding.Matches(_viewModel.Notes.Preferences.FocusShortcut))
         { _viewModel.Notice = "此快捷键与浮笺快捷键冲突，请选择其他组合。"; return; }
+        if (_viewModel.ClipRecall.IsEnabled && binding.Matches(_viewModel.ClipRecall.Settings.ToggleShortcut))
+        { _viewModel.Notice = "此快捷键与剪贴回溯快捷键冲突，请选择其他组合。"; return; }
         _viewModel.Gaming.SetShortcut(binding);
         Keyboard.ClearFocus();
     }

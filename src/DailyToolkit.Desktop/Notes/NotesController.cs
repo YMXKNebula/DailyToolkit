@@ -135,6 +135,12 @@ internal sealed class NotesController : IDisposable
         }
         return true;
     }
+    internal void CancelExitPreparation()
+    {
+        if (_disposed) return;
+        _stopping = false; _shortcuts.Suspend(false);
+        if (_window is not null) _window.NoteEditor.IsReadOnly = !_model.ContentWritable;
+    }
     public void Dispose()
     {
         if (_disposed) return;

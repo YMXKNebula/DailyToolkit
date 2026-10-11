@@ -1,8 +1,8 @@
 # DailyToolkit
 
-Windows 桌面工具集，提供放大镜、浮笺和电脑信息查看。
+Windows 桌面工具集，提供放大镜、浮笺、剪贴回溯和电脑信息查看。
 
-[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [0.7.9 更新说明](docs/RELEASE_079.md)
+[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [0.7.10 更新说明](docs/RELEASE_0710.md)
 
 ## 下载和运行
 
@@ -53,6 +53,14 @@ Windows 桌面工具集，提供放大镜、浮笺和电脑信息查看。
 编辑时按住空白顶部可拖动笔记，左下角按钮用于隐藏，右下角用于调整大小。长笔记的上下遮挡边缘会渐隐，结束编辑后可多显示几行正文。固定模式也能使用缩放角。
 
 保存、导出和恢复方法见 [浮笺说明](docs/FLOATING_NOTES.md)。
+
+## 剪贴回溯
+
+找回之前复制的文本、链接、图片和文件。打开工具开关后开始记录，默认按 `Ctrl + Alt + V` 呼出历史面板，支持搜索、重新复制、永久保存、备注、置顶、手动记录和批量管理。
+
+文件默认只记路径；开启“文件夹缓存”后，会保存大小限制内的新文件副本。成功缓存后，即使原文件删除，也能重新复制。历史面板有独立配色预设，也可以自定义颜色。
+
+功能默认关闭，记录在本机加密保存。复制密码等敏感内容前，可以暂停记录或排除来源应用。详细操作与容量设置见 [剪贴回溯说明](docs/CLIPRECALL.md)。
 
 ## 主题、收藏与后台运行
 

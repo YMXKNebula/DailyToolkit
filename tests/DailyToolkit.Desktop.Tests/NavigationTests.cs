@@ -17,10 +17,10 @@ internal static partial class Program
             var display=new DisplayInfo(1920,1080,1,1920,1040,false);
             MainViewModel Create() => new(new ControlledProbe(display),display,new LocalProbe(),
                 favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
-                gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),navigationStore:store,notesStore:IsolatedNotes());
+                gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),navigationStore:store,notesStore:IsolatedNotes(),clipboardSettingsStore:IsolatedClipboard());
             using (var model=Create())
             {
-                Require(model.Page == "screen-lens" && model.NavigationItems.Select(item => item.Id).SequenceEqual(["screen-lens","floating-notes"]) &&
+                Require(model.Page == "screen-lens" && model.NavigationItems.Select(item => item.Id).SequenceEqual(["screen-lens","floating-notes","clip-recall"]) &&
                     model.NavigationItems[0].IsSelected,"Default direct navigation was wrong");
                 Require(!model.MoveNavigationItem("screen-lens","computer"),"Moved computer details remained in the tool list");
                 Require(model.NavigationItems[0].Id == "screen-lens" && model.Page == "screen-lens","Rejected sorting changed selection");
@@ -34,7 +34,7 @@ internal static partial class Program
                 model.MoveDownCommand.Execute(model.NavigationItems[0]);
                 Require(model.NavigationItems[0].Id == "screen-lens" && !model.MoveDownCommand.CanExecute(null),"A single favorite enabled invalid reordering");
                 model.ExitFavoritesCommand.Execute(null);
-                Require(!model.IsFavorites && model.ShowScreenLens && model.NavigationItems.Count == 2 && model.Gaming.Zoom == 4,
+                Require(!model.IsFavorites && model.ShowScreenLens && model.NavigationItems.Count == 3 && model.Gaming.Zoom == 4,
                     "Exiting favorites did not restore normal navigation and selection");
                 model.MoveDownCommand.Execute(model.NavigationItems[0]);
                 Require(model.NavigationItems[0].Id == "floating-notes" && model.ShowScreenLens && model.MoveDownCommand.CanExecute(null),"Tool sorting changed selection or failed with two tools");
@@ -44,7 +44,7 @@ internal static partial class Program
             }
             using (var reopened=Create())
             {
-                Require(reopened.NavigationItems.Select(item => item.Id).SequenceEqual(["floating-notes","screen-lens"]),"Saved tool order was lost or removed computer route returned after reopening");
+                Require(reopened.NavigationItems.Select(item => item.Id).SequenceEqual(["floating-notes","screen-lens","clip-recall"]),"Saved tool order was lost or removed computer route returned after reopening");
                 reopened.Page="screen-lens";
                 reopened.OpenFavoritesCommand.Execute(null);
                 reopened.Gaming.IsFavorite=false;

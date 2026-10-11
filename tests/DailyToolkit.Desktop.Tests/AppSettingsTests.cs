@@ -19,7 +19,7 @@ internal static partial class Program
             MainViewModel Create() => new(new ControlledProbe(display),display,new LocalProbe(),
                 favoritesStore:new FavoritesStore(Path.Combine(directory.FullName,"favorites.json")),
                 gamingPreferencesStore:new GamingPreferencesStore(Path.Combine(directory.FullName,"gaming.json")),
-                navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),appPreferencesStore:store,notesStore:IsolatedNotes());
+                navigationStore:new NavigationOrderStore(Path.Combine(directory.FullName,"navigation.json")),appPreferencesStore:store,notesStore:IsolatedNotes(),clipboardSettingsStore:IsolatedClipboard());
             using (var model=Create())
             {
                 model.Page="screen-lens"; model.Gaming.Zoom=4; model.Gaming.WheelZoomEnabled=false;
@@ -30,7 +30,7 @@ internal static partial class Program
                     !model.RefreshCommand.CanExecute(null) && !model.MoveNavigationItem("settings","computer") &&
                     model.Gaming.Zoom == 4 && !model.Gaming.IsActive,"Opening settings changed tool state or kept unrelated navigation");
                 model.ExitSettingsCommand.Execute(null);
-                Require(model.ShowScreenLens && model.NavigationItems.Count == 2,"Closing settings lost the previous tool");
+                Require(model.ShowScreenLens && model.NavigationItems.Count == 3,"Closing settings lost the previous tool");
                 model.OpenFavoritesCommand.Execute(null);
                 Require(model.ShowFavoritesEmpty,"The check did not start with empty favorites");
                 model.OpenSettingsCommand.Execute(null);
@@ -66,7 +66,7 @@ internal static partial class Program
                             Require(model.IsFavorites != model.IsSettings,"Panel entry did not replace the previous panel");
                         }
                         if (model.IsSettings) model.ExitSettingsCommand.Execute(null); else model.ExitFavoritesCommand.Execute(null);
-                        Require(model.ShowScreenLens && model.ShowAllTools && !model.IsFavorites && !model.IsSettings && model.NavigationItems.Count == 2,
+                        Require(model.ShowScreenLens && model.ShowAllTools && !model.IsFavorites && !model.IsSettings && model.NavigationItems.Count == 3,
                             "Repeated peer-panel switching did not return to the main interface");
                     }
                 }

@@ -9,15 +9,17 @@ internal sealed class LensShortcutController : IDisposable
 {
     internal const int HotkeyId = 0xB011;
     private readonly HwndSource _source;
+    private readonly int _hotkeyId;
     private readonly Func<uint, bool> _keyDown;
     private readonly DispatcherTimer _releaseTimer;
     private KeyboardShortcut? _shortcut;
     private LensActivationMode _mode;
     private bool _holding, _suspended, _disposed;
 
-    public LensShortcutController(HwndSource source, Func<uint, bool>? keyDown = null)
+    public LensShortcutController(HwndSource source, Func<uint, bool>? keyDown = null, int hotkeyId = HotkeyId)
     {
         _source = source;
+        _hotkeyId = hotkeyId;
         _keyDown = keyDown ?? (key => GetAsyncKeyState((int)key) < 0);
         _releaseTimer = new DispatcherTimer(DispatcherPriority.Input, source.Dispatcher)
         {
@@ -55,19 +57,19 @@ internal sealed class LensShortcutController : IDisposable
     {
         if (_suspended || _shortcut is null) return true;
         if (!_shortcut.IsValid || _mode is not (LensActivationMode.Toggle or LensActivationMode.Hold)) return false;
-        IsRegistered = RegisterHotKey(_source.Handle, HotkeyId, _shortcut.Modifiers | 0x4000, _shortcut.VirtualKey);
+        IsRegistered = RegisterHotKey(_source.Handle, _hotkeyId, _shortcut.Modifiers | 0x4000, _shortcut.VirtualKey);
         return IsRegistered;
     }
 
     private void Unregister()
     {
-        if (IsRegistered) UnregisterHotKey(_source.Handle, HotkeyId);
+        if (IsRegistered) UnregisterHotKey(_source.Handle, _hotkeyId);
         IsRegistered = false;
     }
 
     private IntPtr WindowMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message != 0x0312 || wParam.ToInt32() != HotkeyId) return IntPtr.Zero;
+        if (message != 0x0312 || wParam.ToInt32() != _hotkeyId) return IntPtr.Zero;
         handled = true;
         var value = unchecked((ulong)lParam.ToInt64());
         if (!IsRegistered || _suspended || _disposed || _shortcut is null ||

@@ -18,8 +18,33 @@ internal static partial class Program
 {
     private static readonly DirectoryInfo NotesFixtures = Directory.CreateTempSubdirectory("DailyToolkit-desktop-notes-fixtures-");
     private static DailyToolkit.Desktop.Notes.NotesStore IsolatedNotes() => new(Path.Combine(NotesFixtures.FullName, Guid.NewGuid().ToString("N")));
+    private static DailyToolkit.Desktop.ClipRecall.ClipboardSettingsStore IsolatedClipboard() => new(Path.Combine(NotesFixtures.FullName, "clipboard-" + Guid.NewGuid().ToString("N")));
     [STAThread]
     public static int Main(string[] args)
+    {
+        try
+        {
+            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _]) ClipboardTestStation.Connect();
+            else if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer") ClipboardTestStation.Connect(args[1], args[2]);
+        }
+        catch (Exception exception) { Console.WriteLine("FAIL Clipboard test isolation: " + exception); return 1; }
+        if (args.Length > 0 && args[0].StartsWith("--clipboard-native-", StringComparison.Ordinal))
+        {
+            var result = 1;
+            var isolatedThread = new Thread(() =>
+            {
+                try { ClipboardTestStation.ConnectThread(); result = RunDesktopChecks(args); }
+                catch (Exception exception) { Console.WriteLine("FAIL Clipboard test desktop isolation: " + exception); }
+            });
+            isolatedThread.SetApartmentState(ApartmentState.STA); isolatedThread.Start(); isolatedThread.Join(); return result;
+        }
+        return RunDesktopChecks(args);
+    }
+
+    // Keep WPF initialization out of the entry method's JIT path so isolated
+    // clipboard tests connect their station before any hidden WPF HWND exists.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static int RunDesktopChecks(string[] args)
     {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Resources.MergedDictionaries.Add(new ResourceDictionary
@@ -31,6 +56,24 @@ internal static partial class Program
         {
             try
             {
+                if (args is ["--clipboard-native-checks"])
+                { await CheckClipboardNativeAsync(); await CheckClipboardNativeMediaAsync(); exitCode = 0; return; }
+                if (args is ["--clipboard-shortcut-checks"])
+                { await CheckClipboardNativeShortcutsAsync(); exitCode = 0; return; }
+                if (args is ["--clipboard-native-visuals", var clipboardImages])
+                { await CheckClipboardVisualsAsync(clipboardImages); exitCode = 0; return; }
+                if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer")
+                { await RunClipboardWriterAsync(args[3], args.Length == 5 ? args[4] : null); exitCode = 0; return; }
+                if (args is ["--clipboard-checks"])
+                { await CheckClipboardRepositoryAsync(); await CheckClipboardProcessorAsync(); await CheckClipboardViewModelAsync(); exitCode = 0; return; }
+                if (args is ["--clipboard-media-checks"])
+                { await CheckClipboardMediaAsync(); exitCode = 0; return; }
+                if (args is ["--safe-regression-checks"])
+                {
+                    CheckShortcutPersistence(); CheckRenamedSettingsCompatibility(); CheckFavorites(); CheckNavigation(); CheckAppSettings();
+                    await CheckNotesPersistenceAsync(); await CheckNotesStabilityAsync(); CheckNotesFocus();
+                    await CheckLensStartupTimingAsync(); CheckRendererRepeatedDispose(); exitCode = 0; return;
+                }
                 if (args is ["--update-checks"])
                 { await CheckAppUpdatesAsync(); exitCode = 0; return; }
                 if (args is ["--update-live", var updateDirectory])
@@ -93,6 +136,7 @@ internal static partial class Program
     {
         await CheckWeatherCacheAsync();
         await CheckAppUpdatesAsync();
+        await CheckClipboardRepositoryAsync(); await CheckClipboardProcessorAsync(); await CheckClipboardViewModelAsync();
         CheckShortcutPersistence();
         CheckRenamedSettingsCompatibility();
         CheckFavorites();
@@ -121,6 +165,6 @@ internal static partial class Program
         await CheckToolkitInterfaceAsync();
         await CheckLifecycleAsync();
         await CheckDetectorDiagnosticsAsync();
-        Console.WriteLine("47/47 desktop checks passed");
+        Console.WriteLine("Desktop checks passed");
     }
 }
