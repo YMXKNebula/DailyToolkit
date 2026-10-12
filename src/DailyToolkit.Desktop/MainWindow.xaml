@@ -329,7 +329,7 @@
                              Visibility="{Binding IsDisabled, Converter={StaticResource VisibleWhen}}" />
                   <Separator Margin="0,18,0,14" />
                   <Button Content="恢复默认" Command="{Binding ResetDefaultsCommand}" HorizontalAlignment="Left"
-                          ToolTip="关闭放大框，恢复默认画面、居中位置和固定模式；保留快捷键、按住／切换模式和收藏。" />
+                          ToolTip="恢复默认画面和位置，保留快捷键与收藏。" />
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -389,7 +389,7 @@
               <Expander x:Name="ThemeDetails" Grid.Column="1" Header="颜色详细配置" Foreground="{DynamicResource TextBrush}" FontSize="14">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="300" Margin="0,14,0,0">
                 <StackPanel Margin="0,0,8,0">
-                  <TextBlock Text="修改仅更新预览，保存后应用。" Style="{StaticResource MutedText}" Margin="0,0,0,14" />
+                  <TextBlock Text="保存后应用。" Style="{StaticResource MutedText}" Margin="0,0,0,14" />
               <ItemsControl x:Name="ThemeColorDetails" ItemsSource="{Binding ThemeColors}">
                 <ItemsControl.ItemTemplate><DataTemplate>
                   <Grid Margin="0,0,0,10">

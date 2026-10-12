@@ -133,7 +133,7 @@ internal sealed class ClipboardCaptureProcessor : IAsyncDisposable
             if (!attempt.Result.Success) return attempt.Result with { Message = message };
             try { await _repository.MarkUsedAsync(record.Id).ConfigureAwait(false); }
             catch (Exception exception) when (IsExpectedError(exception)) { message += " 内容已复制，但最近使用时间未能保存。"; }
-            return new(true, message.Length > 0 ? message.Trim() : "已复制；历史顺序保持不变。");
+            return new(true, message.Trim());
         }
         catch (Exception exception) when (IsExpectedError(exception)) { return new(false, "剪贴板恢复未完成，请重试。"); }
         finally { _operation.Release(); }

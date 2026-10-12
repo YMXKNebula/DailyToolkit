@@ -383,7 +383,7 @@ public partial class MainWindow : Window
         try
         {
             await File.WriteAllTextAsync(dialog.FileName, _viewModel.ExportJson(), new UTF8Encoding(false));
-            _viewModel.Notice = "报告已保存。";
+            _viewModel.Notice = "";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -409,7 +409,7 @@ public partial class MainWindow : Window
                 $"处理器：{_viewModel.CpuName}（{_viewModel.CpuDetail}）\n" +
                 $"内存：{_viewModel.MemoryTotal}\n显卡：{_viewModel.GraphicsText}\n" +
                 $"架构：{_viewModel.Architecture}\n显示：{_viewModel.DisplayDetail}");
-            _viewModel.Notice = "摘要已复制。";
+            _viewModel.Notice = "";
         }
         catch (ExternalException exception) { Trace.WriteLine(exception); _viewModel.Notice = "剪贴板正忙，请稍后再试。"; }
     }

@@ -12,7 +12,6 @@ public partial class MainWindow
     private void InitializeClipRecall(HwndSource source)
     {
         _clipRecall = new(_viewModel, source, ReservedClipboardShortcuts);
-        _clipRecall.SettingsRequested = () => { ShowFromTray(); _viewModel.Page = "clip-recall"; };
         ClipRecallSettings.ReservedShortcuts = ReservedClipboardShortcuts;
         ClipRecallSettings.ShortcutEditing = SuspendToolShortcuts;
         NotesSettings.ClipRecallShortcut = () => _viewModel.ClipRecall.IsEnabled ? _viewModel.ClipRecall.Settings.ToggleShortcut : null;

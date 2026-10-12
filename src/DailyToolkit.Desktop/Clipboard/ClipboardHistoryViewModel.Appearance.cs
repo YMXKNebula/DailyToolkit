@@ -77,7 +77,7 @@ public sealed partial class ClipboardHistoryViewModel
         var colors = AppearanceColors.ToDictionary(option => option.Key, option => option.Value, StringComparer.Ordinal);
         if (!ChangeSettings(_settings with { PanelColors = colors })) return false;
         var saved = await FlushSettingsAsync();
-        if (saved) Notice = "剪贴回溯配色已保存，不随软件主题改变。";
+        if (saved) Notice = "";
         return saved;
     }
     internal void ApplyAppearance(ResourceDictionary resources, bool draft = false)

@@ -28,7 +28,6 @@ internal sealed class ClipboardHistoryController : IDisposable
     internal ClipboardHistoryPanel? Panel => _panel;
     internal bool IsListening => _monitor.IsListening;
     internal bool IsHotkeyRegistered => _shortcut.IsRegistered;
-    internal Action? SettingsRequested { get; set; }
     public ClipboardHistoryController(MainViewModel host, HwndSource source, Func<IEnumerable<KeyboardShortcut?>> reserved,
         INotesForeground? foreground = null, IClipboardAccess? access = null)
     {
@@ -98,7 +97,7 @@ internal sealed class ClipboardHistoryController : IDisposable
     {
         if (_disposed || _stopping) return;
         if (_openingPanel) { _cancelShow = !_cancelShow; return; }
-        if (_panel?.IsVisible == true) { Hide(restoreFocus: true); return; }
+        if (_panel?.IsVisible == true && _panel.WindowState != WindowState.Minimized) { Hide(restoreFocus: true); return; }
         _openingPanel = true; _cancelShow = false;
         try
         {
@@ -109,11 +108,10 @@ internal sealed class ClipboardHistoryController : IDisposable
             {
                 _panel = new(_model); _model.ApplyAppearance(_panel.Resources);
                 _panel.HideRequested += () => Hide(restoreFocus: true);
-                _panel.SettingsRequested += () => { if (Hide(restoreFocus: false)) SettingsRequested?.Invoke(); };
             }
             _model.IsVisible = true;
             _panel.ShowNearCursor();
-            if (!_panel.ActivateSearch()) _model.Notice = "Windows 未允许面板获得焦点，请点击搜索框。";
+            _panel.ActivatePanel();
         }
         catch (Exception exception) when (ClipboardCaptureProcessor.IsExpectedError(exception))
         { _model.Notice = "历史面板未能打开，原数据保留。请检查数据目录。"; }

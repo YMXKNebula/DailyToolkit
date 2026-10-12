@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Runtime.InteropServices;
 using DailyToolkit.Core.Clipboard;
 using DailyToolkit.Desktop.ClipRecall;
 using DailyToolkit.Desktop.Notes;
@@ -35,8 +36,11 @@ internal static partial class Program
             await model.Repository.CaptureAsync(ClipboardContent.FromFiles(["D:\\工作资料\\项目说明.docx", "D:\\工作资料\\参考图片"]), now.AddSeconds(2), "Explorer", model.Settings);
             for (var index = 0; index < 16; index++) await model.Repository.CaptureAsync(ClipboardContent.FromText($"演示记录 {index + 1}：待办事项与临时文字"), now.AddSeconds(index + 3), null, model.Settings);
             var image = await model.Repository.CaptureAsync(SyntheticClipboardImage(alpha: false), now.AddSeconds(20), "图像编辑器", model.Settings);
+            await model.Repository.CaptureAsync(ClipboardContent.FromText("https://example.com/docs"), now.AddSeconds(21), "Browser", model.Settings);
+            await model.Repository.CaptureAsync(ClipboardContent.FromFiles(["D:\\工作资料\\项目说明.docx", "D:\\工作资料\\参考图片"]), now.AddSeconds(22), "Explorer", model.Settings);
             model.IsVisible = true; await WaitClipboardAsync(() => Task.FromResult(model.Entries.Count == 20 && model.HasSelection));
-            panel = new(model) { ShowActivated = false }; model.ApplyAppearance(panel.Resources);
+            panel = new(model); model.ApplyAppearance(panel.Resources);
+            var searchFocusCount = 0; panel.SearchInput.GotKeyboardFocus += (_, _) => searchFocusCount++;
             var areas = NotesPositionService.WorkAreas();
             foreach (var area in areas)
             {
@@ -47,7 +51,33 @@ internal static partial class Program
                 Console.WriteLine($"INFO Clipboard monitor work area={area.X},{area.Y},{area.Width},{area.Height}, window DPI={dpi.PixelsPerInchX:0}/{dpi.PixelsPerInchY:0}");
                 Require(bounds.X >= area.X && bounds.Y >= area.Y && bounds.X + bounds.Width <= area.X + area.Width + 1 &&
                     bounds.Y + bounds.Height <= area.Y + area.Height + 1, "Clipboard panel escaped monitor work area");
+                CheckClipboardChrome(panel);
             }
+            panel.ActivatePanel();
+            Require(!panel.SearchInput.IsKeyboardFocusWithin && searchFocusCount == 0, "Opening panel activated search input");
+            var clearSearch = (Button)panel.FindName("ClearSearchButton");
+            Require(clearSearch.Visibility == Visibility.Collapsed, "Empty search exposed clear button");
+            model.Search = "采购";
+            await panel.Dispatcher.InvokeAsync(panel.UpdateLayout, DispatcherPriority.ContextIdle);
+            Require(clearSearch.Visibility == Visibility.Visible && clearSearch.BorderThickness == new Thickness(0), "Nonempty search did not expose borderless clear action");
+            SaveClipboardVisual((FrameworkElement)panel.Content, images, "panel-search");
+            clearSearch.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(model.Search == "", "Search clear did not clear its bound filter");
+            await panel.Dispatcher.InvokeAsync(panel.UpdateLayout, DispatcherPriority.ContextIdle);
+            Require(clearSearch.Visibility == Visibility.Collapsed, "Clear action remained visible after clearing search");
+            var previousSearchFocus = searchFocusCount;
+            panel.Hide(); panel.ShowNearPoint(((int)areas[0].X + 100, (int)areas[0].Y + 100)); panel.ActivatePanel();
+            Require(!panel.SearchInput.IsKeyboardFocusWithin && searchFocusCount == previousSearchFocus, "Reopening panel restored search focus");
+            var beforeWidth = panel.Width; panel.Width = 610; panel.Height = 650;
+            ((Button)panel.FindName("MinimizeButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(panel.WindowState == WindowState.Minimized && !model.IsVisible, "Minimize did not hide view-model work");
+            panel.ShowNearPoint(((int)areas[0].X + 100, (int)areas[0].Y + 100));
+            Require(panel.WindowState == WindowState.Normal && Math.Abs(panel.Width - 610) < 1 && Math.Abs(panel.Height - 650) < 1, "Restore lost resized dimensions");
+            model.IsVisible = true; panel.Width = beforeWidth; panel.Height = 720;
+            await WaitClipboardAsync(() => Task.FromResult(model.Entries.Count == 20 && model.HasSelection));
+            panel.UpdateLayout();
+            var restore = (Button)panel.FindName("RestoreButton"); var undo = (Button)panel.FindName("UndoDeleteButton");
+            Require(Math.Abs(restore.TranslatePoint(new Point(), panel).Y - undo.TranslatePoint(new Point(), panel).Y) < 1, "Copy and undo controls are not aligned");
             SaveClipboardVisual((FrameworkElement)panel.Content, images, "panel-light");
             model.Selected = model.Entries.Single(entry => entry.Id == image.Id);
             await WaitClipboardAsync(() => Task.FromResult(model.HasImage));
@@ -80,4 +110,29 @@ internal static partial class Program
         }
         finally { panel?.CloseRuntime(); settingsWindow?.Close(); await model.DisposeAsync(); DeleteClipboardFixture(directory); }
     }
+    private static void CheckClipboardChrome(ClipboardHistoryPanel panel)
+    {
+        var width = panel.ActualWidth; var height = panel.ActualHeight;
+        foreach (var (point, expected) in new[]
+        {
+            (new Point(2, height / 2), 10), (new Point(width - 2, height / 2), 11),
+            (new Point(width / 2, 2), 12), (new Point(width / 2, height - 2), 15),
+            (new Point(4, 4), 13), (new Point(width - 4, 4), 14),
+            (new Point(4, height - 4), 16), (new Point(width - 4, height - 4), 17),
+            (new Point(12, height / 2), 2), (new Point(width - 12, height / 2), 2),
+            (new Point(width / 2, height - 10), 2), (new Point(width / 2, 25), 2)
+        })
+        {
+            var screen = panel.PointToScreen(point);
+            var packed = ((uint)(int)screen.X & 0xFFFF) | (((uint)(int)screen.Y & 0xFFFF) << 16);
+            var actual = ClipboardChromeHit(panel.Handle, 0x0084, IntPtr.Zero, new IntPtr(unchecked((int)packed))).ToInt32();
+            Require(actual == expected, $"Native clipboard frame hit at {point}: expected={expected}, actual={actual}");
+        }
+        var search = panel.SearchInput.PointToScreen(new Point(20, panel.SearchInput.ActualHeight / 2));
+        var searchPacked = ((uint)(int)search.X & 0xFFFF) | (((uint)(int)search.Y & 0xFFFF) << 16);
+        Require(ClipboardChromeHit(panel.Handle, 0x0084, IntPtr.Zero, new IntPtr(unchecked((int)searchPacked))).ToInt32() == 1,
+            "Search textbox became a non-client drag area");
+    }
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr ClipboardChromeHit(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
 }

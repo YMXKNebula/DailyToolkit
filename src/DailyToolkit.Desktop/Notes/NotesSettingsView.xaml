@@ -27,7 +27,7 @@
       <Button Grid.Column="2" Tag="toggle" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12" Margin="0,0,0,8"/>
       <TextBlock Grid.Row="1" Text="聚焦" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
       <TextBox Grid.Row="1" Grid.Column="1" Tag="focus" Text="{Binding FocusShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="12,0,4,0" Padding="8,6" MinWidth="62" VerticalContentAlignment="Center"
-       PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="按一次聚焦，按一次取消聚焦；不会显示已隐藏的浮笺。" AutomationProperties.Name="浮笺聚焦快捷键"/>
+       PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="切换已显示浮笺的编辑状态。" AutomationProperties.Name="浮笺聚焦快捷键"/>
       <Button Grid.Row="1" Grid.Column="2" Tag="focus" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12"/>
      </Grid>
      <Button Content="恢复默认快捷键" Click="ResetShortcuts" HorizontalAlignment="Left" Margin="0,12,0,12"/>
@@ -48,7 +48,7 @@
       <TextBlock Text="高度" VerticalAlignment="Center"/><TextBox x:Name="NoteHeight" Text="{Binding Height, StringFormat=0, UpdateSourceTrigger=LostFocus}" PreviewTextInput="SizeInput" DataObject.Pasting="PasteSize" LostKeyboardFocus="CommitSize" Width="70" Margin="8,0,0,8" Padding="6"/></WrapPanel>
      <CheckBox x:Name="ManualResize" Content="允许拖动右下角调整大小" IsChecked="{Binding AllowManualResize}" Margin="0,4,0,12"/>
      <Button Content="重置位置" Click="ResetPosition" HorizontalAlignment="Left"/>
-     <TextBlock Text="宽高只填整数。按聚焦快捷键开始或结束编辑，Esc 取消聚焦。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
+     <TextBlock Text="宽高填写整数，Esc 结束编辑。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
     </StackPanel></Border>
     <Border x:Name="AppearanceCard" Style="{StaticResource Card}" Margin="0,0,0,12">
      <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
@@ -63,7 +63,6 @@
           <ItemsControl.ItemTemplate><DataTemplate><Button Tag="{Binding Value}" Click="ApplyAppearance" Margin="0,0,8,8" Padding="10,7">
            <StackPanel Orientation="Horizontal"><Border Background="{Binding Value.Background}" BorderBrush="{Binding Value.Border}" BorderThickness="2" CornerRadius="3" Width="24" Height="20" Margin="0,0,6,0"><TextBlock Text="Aa" Foreground="{Binding Value.Text}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="{Binding Name}"/></StackPanel>
           </Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-         <TextBlock Text="同时应用背景、文字和聚焦边框颜色。" Style="{StaticResource MutedText}" Margin="0,0,0,18"/>
          <StackPanel x:Name="BackgroundSettings">
           <TextBlock Text="背景" FontWeight="SemiBold" Margin="0,0,0,12"/>
           <WrapPanel Margin="0,4,0,8"><TextBlock Text="背景颜色" VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -95,7 +94,6 @@
           </WrapPanel>
           <controls:ColorPicker x:Name="FocusColorPicker" Color="{Binding FocusBorderColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
           <CheckBox Content="聚焦时完全不透明" IsChecked="{Binding OpaqueWhenFocused}" Margin="0,0,0,12"/>
-          <TextBlock Text="失焦后边框消失，并使用设置的透明度。" Style="{StaticResource MutedText}"/>
          </StackPanel>
         </StackPanel>
        </ScrollViewer>

@@ -77,7 +77,7 @@ internal sealed class AppUpdateViewModel : ObservableObject, IDisposable
                 if (UpdateInstallation.CurrentDirectory() != _installation)
                     throw new InvalidOperationException("安装位置已改变，请重新打开软件后更新。");
                 operation.Token.ThrowIfCancellationRequested();
-                _installing = true; NotifyState(); Status = "正在安装更新，完成后会重新打开软件。";
+                _installing = true; NotifyState(); Status = "正在安装更新…";
                 using var installer = Process.Start(UpdateInstallation.InstallerStart(destination, _installation)) ??
                     throw new InvalidOperationException("没有启动更新程序，请重试。");
                 await installer.WaitForExitAsync(operation.Token);

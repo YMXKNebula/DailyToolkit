@@ -106,15 +106,13 @@ public partial class LensPreview : UserControl
             ScreenInfo.Text=$"{settings.ScreenWidth} × {settings.ScreenHeight} · 显示器比例";
             FrameInfo.Text=$"{result.Layout.Output.Width} × {result.Layout.Output.Height} 像素 · {settings.Zoom:0.##}×";
             var clamped=result.Layout.Output.Width != settings.Width || result.Layout.Output.Height != settings.Height;
-            PreviewNote.Text=(clamped ? "放大框已缩小到屏幕范围内。" : "") +
-                (_model.IsFixedMode ? "选择“可移动”可试拖动。" : "拖动照片中的放大框可试位置。") +
-                "预览位置与屏幕上的位置互不影响。";
+            PreviewNote.Text=clamped ? "尺寸已按屏幕范围调整。" : "";
             PositionFrame();
         }
         catch (Exception exception)
         {
             System.Diagnostics.Trace.WriteLine(exception);
-            if (generation == _generation) PreviewNote.Text="暂时无法生成预览，可以继续调整设置和使用放大框。";
+            if (generation == _generation) PreviewNote.Text="预览暂不可用。";
         }
         finally
         {

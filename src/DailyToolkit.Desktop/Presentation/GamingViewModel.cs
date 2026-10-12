@@ -192,7 +192,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     }
     public bool IsFixedMode { get => MovementMode == LensMovementMode.Fixed; set { if (value) MovementMode=LensMovementMode.Fixed; } }
     public bool IsMovableMode { get => MovementMode == LensMovementMode.Movable; set { if (value) MovementMode=LensMovementMode.Movable; } }
-    public string MovementHint => IsFixedMode ? "位置固定，鼠标操作作用于下方窗口。" : "拖动画面移动，接近屏幕中心时自动吸附；鼠标操作仅作用于放大框。";
+    public string MovementHint => IsFixedMode ? "固定位置，鼠标可穿透。" : "拖动画面移动，靠近屏幕中心时吸附。";
     public bool IsFavorite
     {
         get => _favorite;
@@ -249,7 +249,6 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         _session.ResetPosition(SelectedMonitor);
         _positionResetVersion++;
         Notify(nameof(PositionResetVersion));
-        Status="已恢复默认。快捷键、按键模式和收藏已保留。";
     }
 
     public void Toggle()

@@ -51,7 +51,7 @@ public partial class ClipboardSettingsView : UserControl
     }
     private void ClearShortcut(object sender, RoutedEventArgs e) => Model?.SetShortcut(null, ReservedShortcuts?.Invoke() ?? []);
     private void ResetShortcut(object sender, RoutedEventArgs e) => Model?.SetShortcut(new(3, 0x56, "Ctrl + Alt + V"), ReservedShortcuts?.Invoke() ?? []);
-    private async void SaveSettings(object sender, RoutedEventArgs e) { if (Model is { } model && await model.FlushSettingsAsync()) model.Notice = "设置已保存。"; }
+    private async void SaveSettings(object sender, RoutedEventArgs e) { if (Model is { } model && await model.FlushSettingsAsync()) model.Notice = ""; }
     private async void ResetSettings(object sender, RoutedEventArgs e)
     {
         if (Model is { } model && MessageBox.Show("恢复默认设置并关闭监听？历史记录会保留。", "恢复默认设置", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)

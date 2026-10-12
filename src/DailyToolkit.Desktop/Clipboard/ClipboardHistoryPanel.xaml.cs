@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Shell;
 using DailyToolkit.Core.Clipboard;
 using DailyToolkit.Desktop.Notes;
 
@@ -17,7 +18,6 @@ public partial class ClipboardHistoryPanel : Window
     private Guid? _editing;
     private HwndSource? _source;
     public event Action? HideRequested;
-    public event Action? SettingsRequested;
     internal IntPtr Handle => new WindowInteropHelper(this).Handle;
     internal ListBox RecordsList => HistoryList;
     internal TextBox SearchInput => SearchBox;
@@ -25,12 +25,16 @@ public partial class ClipboardHistoryPanel : Window
     {
         InitializeComponent(); _model = model; DataContext = model;
         SourceInitialized += (_, _) => { _source = HwndSource.FromHwnd(Handle); _source?.AddHook(Message); };
+        SizeChanged += (_, _) => UpdateChrome();
+        StateChanged += (_, _) => _model.IsVisible = IsVisible && WindowState != WindowState.Minimized;
         Closing += (_, e) => { if (!_closingRuntime) { e.Cancel = true; HideRequested?.Invoke(); } };
         Closed += (_, _) => { _source?.RemoveHook(Message); _source = null; };
     }
     internal void ShowNearCursor() => ShowNearPoint(NotesPositionService.Cursor());
     internal void ShowNearPoint((int X, int Y) cursor)
     {
+        FocusManager.SetFocusedElement(this, WindowFrame);
+        WindowState = WindowState.Normal;
         new WindowInteropHelper(this).EnsureHandle();
         var areas = NotesPositionService.WorkAreas();
         var area = areas.Where(value => cursor.X >= value.X && cursor.X < value.X + value.Width && cursor.Y >= value.Y && cursor.Y < value.Y + value.Height).Select(value => (DailyToolkit.Core.Notes.NotesRect?)value).FirstOrDefault()
@@ -40,20 +44,33 @@ public partial class ClipboardHistoryPanel : Window
         // handles WM_DPICHANGED, then GetDpiForWindow reports the target DPI.
         NotesPositionService.Move(Handle, area.X + 8, area.Y + 8);
         var dpi = Math.Max(1, GetDpiForWindow(Handle)) / 96d;
-        Width = Math.Min(660, Math.Max(1, area.Width / dpi - 16));
-        Height = Math.Min(720, Math.Max(1, area.Height / dpi - 16));
+        var availableWidth = Math.Max(1, area.Width / dpi - 16);
+        var availableHeight = Math.Max(1, area.Height / dpi - 16);
+        MinWidth = Math.Min(520, availableWidth); MinHeight = Math.Min(480, availableHeight);
+        Width = Math.Min(Width, availableWidth);
+        Height = Math.Min(Height, availableHeight);
         Show(); UpdateLayout();
         var bounds = NotesPositionService.Bounds(Handle);
         var x = Math.Clamp(cursor.X + 12d, area.X, Math.Max(area.X, area.X + area.Width - bounds.Width));
         var y = Math.Clamp(cursor.Y + 12d, area.Y, Math.Max(area.Y, area.Y + area.Height - bounds.Height));
         NotesPositionService.Move(Handle, x, y);
     }
-    internal bool ActivateSearch() { var activated = Activate(); SearchBox.Focus(); Keyboard.Focus(SearchBox); return activated && SearchBox.IsKeyboardFocusWithin; }
+    private void UpdateChrome()
+    {
+        var chrome = WindowChrome.GetWindowChrome(this);
+        // Keep the outer resize band; the remaining frame is a native drag area.
+        chrome.CaptionHeight = Math.Max(0, ActualHeight - chrome.ResizeBorderThickness.Top - chrome.ResizeBorderThickness.Bottom);
+    }
+    internal void ActivatePanel()
+    {
+        Activate(); FocusManager.SetFocusedElement(this, WindowFrame);
+        Keyboard.Focus(WindowFrame);
+    }
     internal void CloseRuntime() { _closingRuntime = true; Close(); }
     private IntPtr Message(IntPtr window, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (IsVisible && message is 0x007E or 0x001A)
-            Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) NotesPositionService.Recover(Handle); }));
+        if (IsVisible && WindowState != WindowState.Minimized && message is 0x007E or 0x001A)
+            Dispatcher.BeginInvoke(new Action(() => { if (IsVisible && WindowState != WindowState.Minimized) NotesPositionService.Recover(Handle); }));
         return IntPtr.Zero;
     }
     internal bool ConfirmHide()
@@ -68,12 +85,8 @@ public partial class ClipboardHistoryPanel : Window
         ManualEditor.Visibility = Visibility.Collapsed; _model.EditorText = ""; return true;
     }
     private void ClosePanel(object sender, RoutedEventArgs e) => HideRequested?.Invoke();
-    private void OpenSettings(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
-    private void DragHeader(object sender, MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is DependencyObject origin && FindParent<Button>(origin) is not null) return;
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
-    }
+    private void MinimizePanel(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void ClearSearch(object sender, RoutedEventArgs e) { _model.Search = ""; SearchBox.Focus(); }
     private static T? FindParent<T>(DependencyObject? value) where T : DependencyObject
     {
         while (value is not null) { if (value is T match) return match; value = value is Visual ? VisualTreeHelper.GetParent(value) : LogicalTreeHelper.GetParent(value); }
@@ -180,9 +193,9 @@ public partial class ClipboardHistoryPanel : Window
         ManualEditor.Visibility = Visibility.Visible; ManualText.Focus();
     }
     private async void CommitManual(object sender, RoutedEventArgs e)
-    { if (await _model.CreateManualAsync(_editing)) { ManualEditor.Visibility = Visibility.Collapsed; SearchBox.Focus(); } }
+    { if (await _model.CreateManualAsync(_editing)) { ManualEditor.Visibility = Visibility.Collapsed; Keyboard.Focus(WindowFrame); } }
     private void CancelManual(object sender, RoutedEventArgs e)
-    { _model.EditorText = ""; ManualEditor.Visibility = Visibility.Collapsed; SearchBox.Focus(); }
+    { _model.EditorText = ""; ManualEditor.Visibility = Visibility.Collapsed; Keyboard.Focus(WindowFrame); }
     private void PreviousPage(object sender, RoutedEventArgs e) => _model.PreviousPage();
     private void NextPage(object sender, RoutedEventArgs e) => _model.NextPage();
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr window);

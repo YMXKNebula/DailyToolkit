@@ -125,13 +125,13 @@ public partial class NotesSettingsView : UserControl
         var binding = box.GetBindingExpression(TextBox.TextProperty);
         binding?.UpdateSource(); binding?.UpdateTarget();
     }
-    private async void SaveNow(object sender, RoutedEventArgs e) { if (_model is not null && await _model.FlushAsync()) _model.Notice = "已保存。"; }
+    private async void SaveNow(object sender, RoutedEventArgs e) { if (_model is not null && await _model.FlushAsync()) _model.Notice = ""; }
     private async void ExportText(object sender, RoutedEventArgs e)
     {
         if (_model is null || !_model.ContentWritable) return;
         var dialog = new SaveFileDialog { Title = "导出浮笺", Filter = "文本文件|*.txt", FileName = "浮笺.txt", DefaultExt = ".txt" };
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
-        try { await NotesStore.AtomicWriteAsync(dialog.FileName, _model.Text); _model.Notice = "笔记已导出。"; }
+        try { await NotesStore.AtomicWriteAsync(dialog.FileName, _model.Text); _model.Notice = ""; }
         catch (Exception exception) when (NotesStore.IsStorageError(exception)) { _model.Notice = "导出失败，请检查所选文件夹是否可写。"; }
     }
     private async void OpenDirectory(object sender, RoutedEventArgs e)

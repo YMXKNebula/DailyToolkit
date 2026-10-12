@@ -267,7 +267,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     }
     private async Task<bool> ActionCoreAsync(Func<Task> action, bool initialize)
     {
-        IsBusy = true;
+        IsBusy = true; Notice = "";
         try
         {
             if (initialize) await EnsureRepositoryAsync();
@@ -295,7 +295,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
             await Repository.UpdateNoteAsync(id, note, Settings);
             if (_noteDrafts.TryGetValue(id, out var draft) && draft == note) _noteDrafts.Remove(id);
             if (_detail?.Id == id) _detail = _detail with { Note = note };
-            Notify(nameof(HasNoteChanges)); Notice = "备注已保存。";
+            Notify(nameof(HasNoteChanges));
         });
     }
     public Task<bool> CreateManualAsync(Guid? editing = null)
@@ -307,7 +307,6 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
             if (editing is { } id) await Repository.EditManualAsync(id, content, Settings);
             else await Repository.CaptureAsync(content, DateTimeOffset.UtcNow, null, Settings, manual: true);
             if (EditorText == text) EditorText = "";
-            Notice = "记录已保存，未写入系统剪贴板。";
         });
     }
     public Task<bool> DeleteAsync(IEnumerable<Guid> ids)
@@ -320,14 +319,14 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
             foreach (var id in selected) _noteDrafts.Remove(id);
             if (_detail is not null && selected.Contains(_detail.Id)) SetLoadedNote(_detail.Note);
             Notify(nameof(HasNoteChanges));
-            Notice = $"已删除 {_undo.Count} 条，可在 12 秒内撤销。"; QueueMaintenance();
+            QueueMaintenance();
         });
     }
     public Task<bool> UndoAsync() => ActionAsync(async () =>
     {
         if (_undo is null) return;
         var count = await Repository.UndoAsync(_undo, Settings); _undo = null; Notify(nameof(CanUndo));
-        Notice = count > 0 ? $"已撤销 {count} 条删除。" : "撤销期限已过。";
+        if (count == 0) Notice = "撤销期限已过。";
     });
     public Task<bool> ClearAsync(bool includeSaved) => ActionAsync(async () =>
     {
@@ -336,13 +335,12 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
         foreach (var id in _noteDrafts.Keys.ToArray())
             if (includeSaved || await Repository.GetAsync(id) is null) _noteDrafts.Remove(id);
         Notify(nameof(HasNoteChanges));
-        Notice = includeSaved ? "历史与缓存已清空；已复制的临时文件路径会失效。" : "普通历史已清空；系统剪贴板内容保持不变。";
     });
-    public Task<bool> BackupAsync() => ActionAsync(async () => { await Repository.BackupAsync(); Notice = "加密备份已保存到历史数据目录。"; });
+    public Task<bool> BackupAsync() => ActionAsync(async () => { await Repository.BackupAsync(); Notice = "备份已保存。"; });
     public Task<bool> RestoreBackupAsync() => ActionAsync(async () =>
     {
         await Repository.RestoreBackupAsync(); _opening = Task.CompletedTask; RequestRefresh();
-        Notice = "已恢复最近备份；此前数据库保留在 recovery 目录。"; QueueMaintenance();
+        Notice = "已恢复备份。"; QueueMaintenance();
     }, initialize: false);
     public async Task<bool> RestoreSelectedAsync()
     {
@@ -355,7 +353,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
             if (RestoreRequested is null) { Notice = "剪贴板恢复服务尚未就绪。"; return; }
             var prepared = await PrepareFileRestoreAsync(record);
             var fallback = UseCachedFiles && record.Content.Type == ClipboardContentType.Files && prepared == record;
-            var result = await RestoreRequested(prepared); Notice = (fallback && result.Success ? "尚无缓存，已从原路径复制。 " : "") + result.Message; success = result.Success;
+            var result = await RestoreRequested(prepared); Notice = (fallback && result.Success ? "未缓存，使用原文件。 " : "") + result.Message; success = result.Success;
             if (result.Success && Selected?.Id == record.Id) { _detail = await Repository.GetSummaryAsync(record.Id); NotifyDetail(); }
         });
         return handled && success;
