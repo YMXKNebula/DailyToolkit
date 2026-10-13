@@ -68,7 +68,7 @@
           <WrapPanel Margin="0,4,0,8"><TextBlock Text="背景颜色" VerticalAlignment="Center" Margin="0,0,10,0"/>
            <Button x:Name="BackgroundColorSwatch" Tag="background" Click="ChooseColor" Width="30" Height="28" Padding="0" BorderThickness="1" ToolTip="点击选择背景颜色" AutomationProperties.Name="选择背景颜色"/>
           </WrapPanel>
-          <controls:ColorPicker x:Name="BackgroundColorPicker" Color="{Binding BackgroundColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
+          <controls:ColorPicker x:Name="BackgroundColorPicker" Color="{Binding PreviewBackgroundColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
           <Button Content="恢复默认背景" Click="ResetBackground" HorizontalAlignment="Left" Margin="0,0,0,14"/>
           <TextBlock Text="背景透明度"/><Slider Value="{Binding BackgroundOpacity}" Minimum="0.05" Maximum="1" Margin="0,8,0,14" AutomationProperties.Name="浮笺背景透明度"/>
           <TextBlock Text="圆角"/><Slider Value="{Binding Radius}" Minimum="0" Maximum="40" Margin="0,8,0,0" AutomationProperties.Name="浮笺圆角"/>
@@ -81,7 +81,7 @@
           <WrapPanel Margin="0,0,0,12"><TextBlock Text="文字颜色" VerticalAlignment="Center"/>
            <Button x:Name="FontColorSwatch" Tag="font" Click="ChooseColor" Width="30" Height="28" Margin="10,0,0,0" Padding="0" BorderThickness="1" ToolTip="点击选择文字颜色" AutomationProperties.Name="选择文字颜色"/>
           </WrapPanel>
-          <controls:ColorPicker x:Name="FontColorPicker" Color="{Binding FontColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
+          <controls:ColorPicker x:Name="FontColorPicker" Color="{Binding PreviewFontColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
           <WrapPanel Margin="0,0,0,14"><CheckBox Content="粗体" IsChecked="{Binding FontBold}" VerticalAlignment="Center" Margin="0,0,12,0"/>
            <Button Content="恢复默认字体" Click="ResetFont"/></WrapPanel>
           <TextBlock Text="字号（10–72）"/><Slider Value="{Binding FontSize}" Minimum="10" Maximum="72" TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,8,0,14" AutomationProperties.Name="浮笺字号"/>
@@ -92,7 +92,7 @@
           <WrapPanel Margin="0,0,0,8"><TextBlock Text="边框颜色" VerticalAlignment="Center" Margin="0,0,10,0"/>
            <Button x:Name="FocusColorSwatch" Tag="focus" Click="ChooseColor" Width="30" Height="28" Padding="0" BorderThickness="1" ToolTip="点击选择聚焦边框颜色" AutomationProperties.Name="选择聚焦边框颜色"/>
           </WrapPanel>
-          <controls:ColorPicker x:Name="FocusColorPicker" Color="{Binding FocusBorderColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
+          <controls:ColorPicker x:Name="FocusColorPicker" Color="{Binding PreviewFocusBorderColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
           <CheckBox Content="聚焦时完全不透明" IsChecked="{Binding OpaqueWhenFocused}" Margin="0,0,0,12"/>
          </StackPanel>
         </StackPanel>

@@ -289,7 +289,7 @@ public partial class MainWindow : Window
         _shortcuts?.Suspend(true);
         _viewModel.Gaming.Stop();
         _clockTimer.Stop();
-        var saved = _notes is not null ? await _notes.PrepareExitAsync() : await _viewModel.Notes.FlushAsync();
+        var saved = _notes is not null ? await _notes.PrepareExitAsync() : await _viewModel.Notes.FlushAsync(exiting: true);
         if (!saved)
         {
             _closing = false; _exitRequested = false;

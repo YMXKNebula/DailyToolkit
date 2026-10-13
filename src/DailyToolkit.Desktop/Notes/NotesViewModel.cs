@@ -9,7 +9,7 @@ namespace DailyToolkit.Desktop.Notes;
 public sealed record NotesPreset<T>(string Name, T Value);
 public sealed record NotesColors(string Background, string Text, string Border);
 
-public sealed class NotesViewModel : ObservableObject, IDisposable
+public sealed partial class NotesViewModel : ObservableObject, IDisposable
 {
     private readonly DispatcherTimer _saveTimer;
     private readonly SemaphoreSlim _saving = new(1, 1);
@@ -49,6 +49,8 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
     {
         Store = store ?? new();
         ToggleFavoriteCommand = new(_ => IsFavorite = !IsFavorite);
+        SaveColorCommand = new(_ => _ = SaveColorDraftAsync(), () => HasColorChanges);
+        DiscardColorCommand = new(_ => DiscardColorDraft(), () => HasColorChanges);
         _saveTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(400) };
         _saveTimer.Tick += SaveTick;
         Ready = LoadAsync();
@@ -112,7 +114,17 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
         if (_disposed || !_loaded) return;
         preferences = preferences.Normalize();
         if (preferences == _preferences) return;
-        _preferences = preferences; _settingsDirty = true; _settingsRevision++; Notify(""); ScheduleSave();
+        var beforeColors = ReadColors(_preferences); var nextColors = ReadColors(preferences);
+        if (beforeColors.Background != nextColors.Background) _backgroundColorRevision++;
+        if (beforeColors.Text != nextColors.Text) _textColorRevision++;
+        if (beforeColors.Border != nextColors.Border) _borderColorRevision++;
+        if (_colorDraft is { } draft) _colorDraft = new(
+            beforeColors.Background != nextColors.Background ? nextColors.Background : draft.Background,
+            beforeColors.Text != nextColors.Text ? nextColors.Text : draft.Text,
+            beforeColors.Border != nextColors.Border ? nextColors.Border : draft.Border);
+        _preferences = preferences; _settingsDirty = true; _settingsRevision++;
+        if (beforeColors != nextColors) NotifyColorDraft();
+        Notify(""); ScheduleSave();
     }
     public void ApplyBackground(NotesBackground background) => Update(_preferences with { Background = background });
     public void ApplyAppearance(NotesColors colors) => Update(_preferences with
@@ -121,11 +133,15 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
         Font = _preferences.Font with { Color = colors.Text }, FocusBorderColor = colors.Border
     });
     public void ApplyFont(NotesFont font) => Update(_preferences with { Font = font with { Color = FontColor, Opacity = FontOpacity } });
-    public void ResetBackground() => ApplyBackground(new());
-    public void ResetFont() => Update(_preferences with { Font = new() });
+    public void ResetBackground()
+    { _backgroundColorRevision++; ChangeColorDraft(PreviewColors with { Background = new NotesBackground().Color }); ApplyBackground(new()); }
+    public void ResetFont()
+    { _textColorRevision++; ChangeColorDraft(PreviewColors with { Text = new NotesFont().Color }); Update(_preferences with { Font = new() }); }
     public void ResetPosition() => Update(_preferences with { X = null, Y = null });
     public void ResetSettings()
     {
+        _backgroundColorRevision++; _textColorRevision++; _borderColorRevision++;
+        DiscardColorDraft();
         _settingsWritable = true; _settingsDirty = true; _settingsRevision++;
         Update(new()); ScheduleSave();
     }
@@ -147,9 +163,12 @@ public sealed class NotesViewModel : ObservableObject, IDisposable
 
     private void ScheduleSave() { if (!_disposed) { _saveTimer.Stop(); _saveTimer.Start(); } }
     private async void SaveTick(object? sender, EventArgs e) { _saveTimer.Stop(); await FlushAsync(); }
-    public async Task<bool> FlushAsync()
+    public async Task<bool> FlushAsync(bool exiting = false)
     {
-        await Ready; _saveTimer.Stop();
+        var pendingColor = PendingColorSave; var waitingForColor = exiting && !pendingColor.IsCompleted;
+        await Ready; var colorSaved = await pendingColor;
+        if (waitingForColor && !colorSaved) return false;
+        _saveTimer.Stop();
         await _saving.WaitAsync();
         try
         {

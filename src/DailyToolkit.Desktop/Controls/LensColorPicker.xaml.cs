@@ -38,6 +38,11 @@ public partial class LensColorPicker : UserControl
     private void SelectSwatch(object sender,RoutedEventArgs e)
     { if (_model is not null && ((Button)sender).Tag is string color) _model.BorderColor=color; }
 
+    private void ChooseOrSaveCustomColor(object sender, RoutedEventArgs e)
+    {
+        if (_model?.HasBorderColorChanges == true) _model.SaveBorderColorCommand.Execute(null);
+        else ChooseCustomColor(sender, e);
+    }
     private void ChooseCustomColor(object sender,RoutedEventArgs e)
     {
         if (_model is null || Window.GetWindow(this) is not { } owner) return;
@@ -45,13 +50,13 @@ public partial class LensColorPicker : UserControl
         try
         {
             for (var i=0;i<16;i++) Marshal.WriteInt32(colors,i*sizeof(int),0xFFFFFF);
-            var rgb=_model.BorderColorRgb;
+            var rgb=_model.PreviewBorderColorRgb;
             var dialog=new ChooseColorOptions
             {
                 Size=(uint)Marshal.SizeOf<ChooseColorOptions>(),Owner=new WindowInteropHelper(owner).Handle,
                 Result=ToColorRef(rgb),CustomColors=colors,Flags=3 // RGBINIT | FULLOPEN
             };
-            if (ChooseColor(ref dialog)) _model.BorderColor=$"#{ToColorRef(dialog.Result):X6}";
+            if (ChooseColor(ref dialog)) _model.PreviewBorderColor=$"#{ToColorRef(dialog.Result):X6}";
         }
         finally { Marshal.FreeHGlobal(colors); }
     }

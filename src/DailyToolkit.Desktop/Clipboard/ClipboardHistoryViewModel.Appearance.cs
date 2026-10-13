@@ -11,6 +11,9 @@ public sealed partial class ClipboardHistoryViewModel
     // the applied values and editing draft belong ONLY to this tool's settings.
     private ThemePalette _appearance = new(), _appearanceDraft = new();
     private bool _updatingAppearance;
+    private long _appearanceResetVersion;
+    private Task<bool> _appearanceSave = Task.FromResult(true);
+    internal Task<bool> PendingAppearanceSave => _appearanceSave;
     public ThemePalette Appearance => _appearance;
     public ThemePalette AppearanceDraft => _appearanceDraft;
     public ObservableCollection<ThemeColorOption> AppearanceColors { get; } = [];
@@ -35,10 +38,11 @@ public sealed partial class ClipboardHistoryViewModel
             };
             AppearanceColors.Add(option);
         }
-        SelectAppearancePresetCommand = new(value => { if (value is ThemePreset preset) SetAppearanceDraft(preset.Palette); });
+        SelectAppearancePresetCommand = new(value =>
+        { if (value is ThemePreset preset && AppearancePresets.Contains(preset)) _ = SaveAppearancePaletteAsync(preset.Palette, preset: true); });
         SaveAppearanceCommand = new(_ => _ = SaveAppearanceAsync(), () => HasAppearanceChanges);
         DiscardAppearanceCommand = new(_ => SetAppearanceDraft(Appearance), () => HasAppearanceChanges);
-        ResetAppearanceCommand = new(_ => SetAppearanceDraft(new()));
+        ResetAppearanceCommand = new(_ => _ = SaveAppearancePaletteAsync(new(), preset: true));
     }
     private ThemePalette ReadAppearance(Dictionary<string, string> colors)
     {
@@ -70,15 +74,46 @@ public sealed partial class ClipboardHistoryViewModel
     {
         Notify(nameof(AppearanceDraft)); Notify(nameof(HasAppearanceChanges)); SaveAppearanceCommand.Refresh(); DiscardAppearanceCommand.Refresh();
         foreach (var preset in AppearancePresets) preset.IsSelected = AppearanceColors.All(option =>
-            option.Value == (string)typeof(ThemePalette).GetProperty(option.Key)!.GetValue(preset.Palette)!);
+            (string)typeof(ThemePalette).GetProperty(option.Key)!.GetValue(Appearance)! ==
+            (string)typeof(ThemePalette).GetProperty(option.Key)!.GetValue(preset.Palette)!);
     }
-    internal async Task<bool> SaveAppearanceAsync()
+    internal Task<bool> SaveAppearanceAsync() => SaveAppearancePaletteAsync(AppearanceDraft, preset: false);
+    private Task<bool> SaveAppearancePaletteAsync(ThemePalette palette, bool preset)
     {
-        var colors = AppearanceColors.ToDictionary(option => option.Key, option => option.Value, StringComparer.Ordinal);
-        if (!ChangeSettings(_settings with { PanelColors = colors })) return false;
-        var saved = await FlushSettingsAsync();
-        if (saved) Notice = "";
-        return saved;
+        if (_disposed || _stopping) return Task.FromResult(false);
+        var operation = CommitAppearanceAsync(_appearanceSave, palette.Normalize(), preset, AppearanceDraft, _appearanceResetVersion);
+        _appearanceSave = operation;
+        return operation;
+    }
+    private async Task<bool> CommitAppearanceAsync(Task<bool> previous, ThemePalette palette, bool preset, ThemePalette requestedDraft, long resetVersion)
+    {
+        await previous; await Ready;
+        await _settingsGate.WaitAsync();
+        try
+        {
+            if (_disposed) return false;
+            if (resetVersion != _appearanceResetVersion) return true;
+            if (!_writable) { Notice = "配色未能保存，请检查原设置或恢复默认设置。"; return false; }
+            var colors = AppearanceColors.ToDictionary(option => option.Key,
+                option => (string)typeof(ThemePalette).GetProperty(option.Key)!.GetValue(palette)!, StringComparer.Ordinal);
+            var before = _settings;
+            var next = (before with { PanelColors = colors }).Normalize();
+            await Store.SaveAsync(next);
+            if (resetVersion != _appearanceResetVersion) { _settingsDirty = true; return true; }
+            // Keep settings edited during the write; their existing flush will
+            // persist them after this palette commit releases the same gate.
+            if (_settings == before) { _settings = next; _settingsDirty = false; }
+            else _settings = (_settings with { PanelColors = colors }).Normalize();
+            var followingApplied = !HasAppearanceChanges;
+            CommitAppearance(colors);
+            if ((preset && (followingApplied || AppearanceDraft == requestedDraft)) || AppearanceDraft == palette) SetAppearanceDraft(Appearance);
+            Notify(nameof(Settings)); Notice = "";
+            SettingsCommitted?.Invoke(); QueueMaintenance();
+            return true;
+        }
+        catch (Exception exception) when (ClipboardCaptureProcessor.IsExpectedError(exception))
+        { Notice = "配色未能保存，请检查空间或权限。"; return false; }
+        finally { _settingsGate.Release(); }
     }
     internal void ApplyAppearance(ResourceDictionary resources, bool draft = false)
     {

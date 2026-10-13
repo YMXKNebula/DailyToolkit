@@ -27,14 +27,30 @@
       </ItemsControl.ItemTemplate>
     </ItemsControl>
     <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-      <Button x:Name="CustomColorButton" Click="ChooseCustomColor" Padding="8,5" ToolTip="自选颜色" AutomationProperties.Name="自选框体颜色">
+      <Button x:Name="CustomColorButton" Click="ChooseOrSaveCustomColor" Padding="8,5">
+        <Button.Style>
+          <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="ToolTip" Value="自选颜色"/>
+            <Setter Property="AutomationProperties.Name" Value="自选框体颜色"/>
+            <Style.Triggers><DataTrigger Binding="{Binding HasBorderColorChanges}" Value="True">
+              <Setter Property="ToolTip" Value="保存颜色"/><Setter Property="AutomationProperties.Name" Value="保存框体颜色"/>
+            </DataTrigger></Style.Triggers>
+          </Style>
+        </Button.Style>
+        <Button.ContextMenu><ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+          <MenuItem Header="撤销修改" Command="{Binding DiscardBorderColorCommand}"/>
+        </ContextMenu></Button.ContextMenu>
         <StackPanel Orientation="Horizontal">
           <controls:ColorWheelIcon Width="20" Height="20" Margin="0,0,7,0" />
-          <TextBlock Text="自选颜色" FontSize="13" VerticalAlignment="Center" />
+          <TextBlock FontSize="13" VerticalAlignment="Center">
+            <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Text" Value="自选颜色"/>
+              <Style.Triggers><DataTrigger Binding="{Binding HasBorderColorChanges}" Value="True"><Setter Property="Text" Value="保存颜色"/></DataTrigger></Style.Triggers>
+            </Style></TextBlock.Style>
+          </TextBlock>
         </StackPanel>
       </Button>
-      <TextBlock Text="{Binding BorderColor}" FontFamily="Consolas" Style="{StaticResource MutedText}"
-                 VerticalAlignment="Center" Margin="10,0,0,0" />
+      <TextBlock Text="{Binding PreviewBorderColor}" FontFamily="Consolas" Style="{StaticResource MutedText}"
+                 VerticalAlignment="Center" Margin="10,0,0,0" MouseLeftButtonUp="ChooseCustomColor" Cursor="Hand" ToolTip="自选颜色" />
     </StackPanel>
   </StackPanel>
 </UserControl>

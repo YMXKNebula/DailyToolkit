@@ -261,8 +261,22 @@ internal static partial class Program
                 var textPicker = (DailyToolkit.Desktop.Controls.ColorPicker)view.FindName("FontColorPicker");
                 Require(!textPicker.ShowHexInput && Descendants(textPicker).OfType<TextBox>().All(box => !box.IsVisible), "Notes color picker required hex input");
                 var swatch = Descendants(textPicker).OfType<Button>().First(button => button.Tag as string == "#A675D1");
+                var appliedTextColor = notes.FontColor;
                 swatch.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Require(notes.FontColor == "#A675D1", "Clicking a color did not update the bound text color");
+                Require(notes.PreviewFontColor == "#A675D1" && notes.FontColor == appliedTextColor &&
+                    ((SolidColorBrush)((TextBox)view.FindName("PreviewText")).Foreground).Color == Color.FromRgb(0xA6, 0x75, 0xD1),
+                    "Custom color did not remain confined to the settings preview");
+                Descendants(view).OfType<Button>().Single(button => button.Content as string == "立即保存")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Require(await notes.PendingColorSave && notes.FontColor == "#A675D1" && !notes.HasColorChanges,
+                    "Explicit color save did not apply the draft");
+                var preset = notes.AppearancePresets.Single(option => option.Name == "夜蓝");
+                Descendants(view).OfType<Button>().Single(button => Equals(button.Tag, preset.Value))
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Require(await notes.PendingColorSave && notes.FontColor == preset.Value.Text &&
+                    (await notes.Store.LoadAsync()).Preferences.Background.Color == preset.Value.Background,
+                    "Clicking the notes preset preview did not apply and persist immediately");
+                Require(view.FindName("SaveNoteColors") is null, "Notes added a color-save row to the existing layout");
                 model.Page = "screen-lens"; await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
                 Require(favorite.IsVisible && favorite.Command == model.Gaming.ToggleFavoriteCommand, "Shared title star did not switch to the lens favorite command");
                 model.Page = "floating-notes"; await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);

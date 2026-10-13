@@ -33,8 +33,13 @@ internal static partial class Program
             Require(model.SetShortcut(new(3, 0x55, "Ctrl + Alt + U"), []), "Valid custom shortcut rejected");
             model.ExcludedApplications = "KeePass.exe\nfixture-app";
             model.SelectAppearancePresetCommand.Execute(model.AppearancePresets.Single(preset => preset.Name == "深海"));
-            var applied = model.Appearance; Require(model.HasAppearanceChanges && model.Appearance == applied, "Draft palette changed applied colors before save");
+            Require(await model.PendingAppearanceSave && model.Appearance.Window == "#101D32" && !model.HasAppearanceChanges &&
+                (await store.LoadAsync()).Settings.PanelColors["Window"] == "#101D32", "Preset did not apply and persist without a separate save");
+            var applied = model.Appearance;
             model.AppearanceColors.Single(option => option.Key == "Text").Value = "#EECCAA";
+            Require(model.HasAppearanceChanges && model.Appearance == applied, "Custom draft changed applied colors before save");
+            Require(await model.FlushSettingsAsync() && (await store.LoadAsync()).Settings.PanelColors["Text"] == applied.Text,
+                "Ordinary settings flush persisted a custom palette draft");
             Require(await model.SaveAppearanceAsync() && model.Appearance.Window == "#101D32" && model.Appearance.Text == "#EECCAA", "Independent preset/custom colors were not saved");
             model.EditorText = "private manual fixture"; Require(await model.CreateManualAsync(), "Manual creation failed");
             await model.FlushSettingsAsync(); model.Dispose(); await model.Repository.DisposeAsync(); model = new(store); await model.Ready;
@@ -57,7 +62,7 @@ internal static partial class Program
                 host.ClipRecall.IsFavorite = true; host.OpenFavoritesCommand.Execute(null);
                 Require(host.NavigationItems.Single().Id == "clip-recall", "ClipRecall favorite did not share tool state");
             }
-            Console.WriteLine("PASS ClipRecall direct switch enable/resume, pause/settings restart, hotkey conflicts, independent palette draft/save, main theme isolation and shared favorites");
+            Console.WriteLine("PASS ClipRecall direct switch enable/resume, pause/settings restart, hotkey conflicts, immediate preset persistence, preview-only custom colors, main theme isolation and shared favorites");
 
             var seed = Stopwatch.StartNew();
             for (var index = 0; index < 1000; index++)
@@ -102,7 +107,11 @@ internal static partial class Program
             model = new(store); await model.Ready; model.MaximumRecords = 500;
             Require(!model.IsEnabled && await File.ReadAllTextAsync(store.SettingsPath) == "{", "Broken settings were overwritten or listening enabled");
             model.SelectAppearancePresetCommand.Execute(model.AppearancePresets.Single(preset => preset.Name == "深海"));
-            Require(!await model.SaveAppearanceAsync(), "Read-only corrupt settings claimed a successful palette save");
+            Require(!await model.PendingAppearanceSave && model.Appearance == new ThemePalette() && !model.HasAppearanceChanges,
+                "Read-only corrupt settings applied a failed preset");
+            model.AppearanceColors.Single(option => option.Key == "Text").Value = "#EECCAA";
+            Require(!await model.SaveAppearanceAsync() && model.Appearance == new ThemePalette() && model.AppearanceDraft.Text == "#EECCAA",
+                "Failed custom save changed applied colors or discarded its draft");
             Require(!model.SetShortcut(new(3, 0x42, "Ctrl + Alt + B"), []), "Read-only corrupt settings claimed a successful shortcut change");
             await model.ResetSettingsAsync(); Require(!model.IsEnabled && (await store.LoadAsync()).Writable, "Explicit settings recovery failed");
             Console.WriteLine("PASS ClipRecall fail-closed corrupt settings and explicit recovery without history deletion");

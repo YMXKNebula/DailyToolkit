@@ -185,8 +185,9 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     }
     public async Task ResetSettingsAsync()
     {
-        await Ready; _writable = true; _settings = new(); _settingsDirty = true; Notify("");
-        await FlushSettingsAsync();
+        _appearanceResetVersion++;
+        await Ready; var requestedDraft = AppearanceDraft; _writable = true; _settings = new(); _settingsDirty = true; Notify("");
+        if (await FlushSettingsAsync() && AppearanceDraft == requestedDraft) SetAppearanceDraft(Appearance);
     }
     internal async Task EnsureRepositoryAsync()
     {
@@ -389,7 +390,9 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     }
     internal async Task<bool> PrepareExitAsync()
     {
-        _stopping = true; await _actionTask;
+        _stopping = true; var pendingAppearance = PendingAppearanceSave; var waitingForAppearance = !pendingAppearance.IsCompleted;
+        await Task.WhenAll(_actionTask, pendingAppearance);
+        if (waitingForAppearance && !await pendingAppearance) { _stopping = false; return false; }
         if (!await FlushSettingsAsync()) { _stopping = false; return false; }
         _lifetime.Cancel(); _cleanupTimer?.Dispose();
         try { await Task.WhenAll(_refreshTask, _selectionTask, _imageTask); } catch (OperationCanceledException) { }
@@ -403,7 +406,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
         if (_disposed) return;
         _disposed = true; _lifetime.Cancel(); _cleanupTimer?.Dispose(); Repository.Changed -= RepositoryChanged;
         _searchCancellation?.Cancel(); _searchCancellation?.Dispose(); _selectionCancellation?.Cancel(); _selectionCancellation?.Dispose();
-        await Task.WhenAll(_actionTask, _settingsTask, _refreshTask, _selectionTask, _imageTask, Ready);
+        await Task.WhenAll(_actionTask, _settingsTask, PendingAppearanceSave, _refreshTask, _selectionTask, _imageTask, Ready);
         ReleaseMedia(); DiscardNoteDrafts(); await Repository.DisposeAsync();
     }
 }

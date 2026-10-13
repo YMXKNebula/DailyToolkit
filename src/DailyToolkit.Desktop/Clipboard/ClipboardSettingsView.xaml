@@ -23,7 +23,7 @@
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="历史面板配色" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
-    <TextBlock Text="不随软件主题改变。选好颜色后，点击“保存配色”。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
+    <TextBlock Text="预设即选即用，自定义颜色保存后应用。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
     <ItemsControl ItemsSource="{Binding AppearancePresets}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
      <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Margin="0,0,8,8" Padding="10,6"
       Command="{Binding DataContext.SelectAppearancePresetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">

@@ -86,7 +86,7 @@ internal static partial class Program
             SaveClipboardVisual((FrameworkElement)panel.Content, images, "panel-image");
             model.IsPreviewExpanded = false;
             model.SelectAppearancePresetCommand.Execute(model.AppearancePresets.Single(preset => preset.Name == "深海"));
-            Require(await model.SaveAppearanceAsync(), "Visual palette save failed"); model.ApplyAppearance(panel.Resources);
+            Require(await model.PendingAppearanceSave, "Visual preset did not save automatically"); model.ApplyAppearance(panel.Resources);
             model.Selected = model.Entries.Single(entry => entry.Id == note.Id); await WaitClipboardAsync(() => Task.FromResult(model.HasSelection));
             ((Expander)panel.FindName("PreviewExpander")).IsExpanded = true;
             await panel.Dispatcher.InvokeAsync(panel.UpdateLayout, DispatcherPriority.ContextIdle);

@@ -127,7 +127,7 @@ internal sealed class NotesController : IDisposable
     {
         _stopping = true; _shortcuts.Suspend(true); await _operation; await Ready;
         if (_window is not null) _window.NoteEditor.IsReadOnly = true;
-        if (!await _model.FlushAsync())
+        if (!await _model.FlushAsync(exiting: true))
         {
             _stopping = false; _shortcuts.Suspend(false);
             if (_window is not null) _window.NoteEditor.IsReadOnly = !_model.ContentWritable;

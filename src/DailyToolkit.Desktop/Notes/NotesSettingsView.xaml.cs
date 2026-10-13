@@ -38,7 +38,8 @@ public partial class NotesSettingsView : UserControl
             if (IsVisible) { _model?.LoadFontList(); UpdatePreview(); }
         };
     }
-    private void Changed(object? sender, PropertyChangedEventArgs e) { if (IsVisible && e.PropertyName == "") UpdatePreview(); }
+    private void Changed(object? sender, PropertyChangedEventArgs e)
+    { if (IsVisible && e.PropertyName is "" or nameof(NotesViewModel.PreviewPreferences)) UpdatePreview(); }
     private void SettingsSizeChanged(object sender, SizeChangedEventArgs e)
     {
         AppearanceCard.Height = Math.Max(160, e.NewSize.Height - 12);
@@ -67,7 +68,7 @@ public partial class NotesSettingsView : UserControl
     private void UpdatePreview()
     {
         if (_model is null) return;
-        var preferences = _model.Preferences;
+        var preferences = _model.PreviewPreferences;
         var focused = PreviewFocused.IsChecked == true;
         _displayArea.Apply(focused);
         NotesWindow.PaintChrome(AppearancePreview, PreviewEditorFrame, PreviewText, PreviewHide, PreviewResize, PreviewMove, preferences, focused);
@@ -109,7 +110,8 @@ public partial class NotesSettingsView : UserControl
     private void ApplyBackground(object sender, RoutedEventArgs e) { if (((FrameworkElement)sender).Tag is NotesBackground background) _model?.ApplyBackground(background); }
     private void ApplyFont(object sender, RoutedEventArgs e) { if (((FrameworkElement)sender).Tag is NotesFont font) _model?.ApplyFont(font); }
     private void PreviewFocusChanged(object sender, RoutedEventArgs e) { if (IsInitialized) UpdatePreview(); }
-    private void ApplyAppearance(object sender, RoutedEventArgs e) { if (((FrameworkElement)sender).Tag is NotesColors colors) _model?.ApplyAppearance(colors); }
+    private async void ApplyAppearance(object sender, RoutedEventArgs e)
+    { if (_model is not null && ((FrameworkElement)sender).Tag is NotesColors colors) await _model.ApplyAppearancePresetAsync(colors); }
     private void ChooseColor(object sender, RoutedEventArgs e)
     {
         var picker = (((FrameworkElement)sender).Tag as string) switch { "font" => FontColorPicker, "focus" => FocusColorPicker, _ => BackgroundColorPicker };
@@ -125,7 +127,11 @@ public partial class NotesSettingsView : UserControl
         var binding = box.GetBindingExpression(TextBox.TextProperty);
         binding?.UpdateSource(); binding?.UpdateTarget();
     }
-    private async void SaveNow(object sender, RoutedEventArgs e) { if (_model is not null && await _model.FlushAsync()) _model.Notice = ""; }
+    private async void SaveNow(object sender, RoutedEventArgs e)
+    {
+        if (_model is null || _model.HasColorChanges && !await _model.SaveColorDraftAsync()) return;
+        if (await _model.FlushAsync()) _model.Notice = "";
+    }
     private async void ExportText(object sender, RoutedEventArgs e)
     {
         if (_model is null || !_model.ContentWritable) return;

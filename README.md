@@ -2,7 +2,7 @@
 
 Windows 桌面工具集，提供放大镜、浮笺、剪贴回溯和电脑信息查看。
 
-[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [0.7.11 更新说明](docs/RELEASE_0711.md)
+[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [0.7.12 更新说明](docs/RELEASE_0712.md)
 
 ## 下载和运行
 

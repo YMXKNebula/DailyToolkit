@@ -34,6 +34,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Isolated clipboard event checks failed.' }
           & $checks --clipboard-native-visuals (Join-Path $env:RUNNER_TEMP 'clipboard-panel-checks')
           if ($LASTEXITCODE -ne 0) { throw 'Clipboard panel checks failed.' }
+          & $checks --clipboard-native-palette-checks (Join-Path $env:RUNNER_TEMP 'palette-checks')
+          if ($LASTEXITCODE -ne 0) { throw 'Isolated palette checks failed.' }
       - name: Package portable app
         shell: pwsh
         run: ./scripts/publish.ps1

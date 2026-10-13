@@ -14,12 +14,14 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     private string _status = "未开启";
     private readonly GamingPreferencesStore _preferencesStore;
     private GamingPreferences _preferences;
+    private string _previewBorderColor = LensBorderColor.Default;
     private readonly LensWheelAccumulator _wheel = new();
 
     public GamingViewModel(GamingPreferencesStore? preferencesStore = null)
     {
         _preferencesStore = preferencesStore ?? new();
         _preferences = _preferencesStore.Load();
+        _previewBorderColor = _preferences.BorderColor;
         _width=_preferences.FrameWidth; _height=_preferences.FrameHeight;
         _zoom=_preferences.Zoom;
         _session.SetImageMode(_preferences.LensImageMode);
@@ -38,6 +40,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         ToggleCommand = new(_ => Toggle(), () => IsEnabled && (IsActive || SelectedMonitor is not null));
         ToggleFavoriteCommand = new(_ => IsFavorite = !IsFavorite);
         ResetDefaultsCommand = new(_ => ResetDefaults());
+        SaveBorderColorCommand = new(_ => BorderColor = PreviewBorderColor, () => HasBorderColorChanges);
+        DiscardBorderColorCommand = new(_ => PreviewBorderColor = BorderColor, () => HasBorderColorChanges);
     }
 
     public IReadOnlyList<CaptureMonitor> Monitors { get; private set; }
@@ -151,13 +155,31 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
         {
             if (!LensBorderColor.TryParse(value,out var rgb)) return;
             var color=$"#{rgb:X6}";
-            if (color == BorderColor) return;
-            SavePreferences(_preferences with { BorderColor=color });
+            if (color == BorderColor) { PreviewBorderColor = color; return; }
+            var next = _preferences with { BorderColor=color };
+            if (!_preferencesStore.Save(next)) { Status = "颜色未能保存，请检查空间或权限。"; return; }
+            _preferences = next;
             _session.SetBorderColor(rgb);
             Notify(nameof(BorderColor));
+            PreviewBorderColor = color;
         }
     }
     internal uint BorderColorRgb => LensBorderColor.TryParse(BorderColor,out var rgb) ? rgb : LensBorderColor.DefaultRgb;
+    public string PreviewBorderColor
+    {
+        get => _previewBorderColor;
+        set
+        {
+            if (!LensBorderColor.TryParse(value, out var rgb)) return;
+            Set(ref _previewBorderColor, $"#{rgb:X6}");
+            Notify(nameof(HasBorderColorChanges));
+            SaveBorderColorCommand.Refresh(); DiscardBorderColorCommand.Refresh();
+        }
+    }
+    public bool HasBorderColorChanges => PreviewBorderColor != BorderColor;
+    internal uint PreviewBorderColorRgb => LensBorderColor.TryParse(PreviewBorderColor, out var rgb) ? rgb : LensBorderColor.DefaultRgb;
+    public RelayCommand SaveBorderColorCommand { get; }
+    public RelayCommand DiscardBorderColorCommand { get; }
     internal PixelBounds? ActiveBounds => _session.ActiveBounds;
     internal LensPointerController? PointerForDiagnostics => _session.PointerForDiagnostics;
     internal bool VerticalGuide => _session.VerticalGuide;

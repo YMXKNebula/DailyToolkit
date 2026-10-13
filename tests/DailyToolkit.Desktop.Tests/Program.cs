@@ -24,7 +24,7 @@ internal static partial class Program
     {
         try
         {
-            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _]) ClipboardTestStation.Connect();
+            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _]) ClipboardTestStation.Connect();
             else if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer") ClipboardTestStation.Connect(args[1], args[2]);
         }
         catch (Exception exception) { Console.WriteLine("FAIL Clipboard test isolation: " + exception); return 1; }
@@ -62,6 +62,14 @@ internal static partial class Program
                 { await CheckClipboardNativeShortcutsAsync(); exitCode = 0; return; }
                 if (args is ["--clipboard-native-visuals", var clipboardImages])
                 { await CheckClipboardVisualsAsync(clipboardImages); exitCode = 0; return; }
+                if (args is ["--clipboard-native-palette-checks", var paletteImages])
+                {
+                    await CheckNotesPersistenceAsync(); await CheckNotesStabilityAsync();
+                    await CheckPalettePersistenceAsync(); await CheckThemeEditingAsync();
+                    await CheckClipboardViewModelAsync(); await CheckClipboardVisualsAsync(Path.Combine(paletteImages, "clipboard"));
+                    await CheckNotesAppearanceAndNavigationAsync(Path.Combine(paletteImages, "notes"));
+                    await CheckPreviewLayoutAsync(Path.Combine(paletteImages, "lens")); exitCode = 0; return;
+                }
                 if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer")
                 { await RunClipboardWriterAsync(args[3], args.Length == 5 ? args[4] : null); exitCode = 0; return; }
                 if (args is ["--clipboard-checks"])

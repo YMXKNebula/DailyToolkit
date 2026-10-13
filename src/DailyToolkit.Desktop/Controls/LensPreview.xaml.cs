@@ -63,7 +63,7 @@ public partial class LensPreview : UserControl
             or nameof(GamingViewModel.Zoom) or nameof(GamingViewModel.Sharpening) or nameof(GamingViewModel.ImageMode)
             or nameof(GamingViewModel.SelectedMonitor) or nameof(GamingViewModel.FrameRate)
             or nameof(GamingViewModel.MovementMode) or nameof(GamingViewModel.PositionResetVersion)
-            or nameof(GamingViewModel.WheelZoomEnabled) or nameof(GamingViewModel.BorderColor))) return;
+            or nameof(GamingViewModel.WheelZoomEnabled) or nameof(GamingViewModel.PreviewBorderColor))) return;
         _dirty=true;
         UpdateTimer();
     }
@@ -92,7 +92,7 @@ public partial class LensPreview : UserControl
         var renderer=_renderer ??= new();
         var settings = new LensPreviewSettings(monitor.Bounds.Width,monitor.Bounds.Height,
             _model.EffectiveFrameWidth,_model.EffectiveFrameHeight,_model.Zoom,_model.Sharpening,_model.FrameRate,
-            _pointerX,_pointerY,_verticalGuide,_horizontalGuide,_model.BorderColorRgb,_model.ImageMode);
+            _pointerX,_pointerY,_verticalGuide,_horizontalGuide,_model.PreviewBorderColorRgb,_model.ImageMode);
         try
         {
             var result=await Task.Run(() => renderer.Render(settings));

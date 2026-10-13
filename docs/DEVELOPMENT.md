@@ -2,6 +2,18 @@
 
 本页面向参与源码开发的贡献者。程序使用说明见 [项目主页](../README.md)。
 
+## 配色交互
+
+软件主题、现有工具和后续工具统一使用以下规则：点击配色预设后应用并保存；自定义颜色只更新设置页预览，点击保存后才应用。撤销修改恢复已保存的配色。保存失败时保留原配色和编辑草稿，并显示简短错误提示。
+
+工具的独立配色不随软件主题切换。复用已有颜色控件、预设和设置存储，分别维护已应用颜色与预览草稿；自动保存其他设置或正常退出时，不能将未确认的颜色草稿写入配置。
+
+隔离的配色检查使用临时数据与独立 Windows 窗口站，不发送实机输入、不操作正在运行的程序：
+
+```powershell
+tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyToolkit.Desktop.Tests.exe --clipboard-native-palette-checks <预览图片目录>
+```
+
 ## 从源码构建
 
 需要 Windows 和 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)。

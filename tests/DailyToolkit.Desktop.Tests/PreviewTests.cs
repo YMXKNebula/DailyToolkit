@@ -69,7 +69,7 @@ internal static partial class Program
         Console.WriteLine("PASS Bundled photo preview runs the real shader, with zoom, sharpening, independent dimensions and monitor clipping");
     }
 
-    private static async Task CheckPreviewLayoutAsync()
+    private static async Task CheckPreviewLayoutAsync(string? images = null)
     {
         var directory=Directory.CreateTempSubdirectory("DailyToolkit-lens-layout-tests-");
         var display=new DisplayInfo(1920,1080,1,1920,1040,false);
@@ -124,6 +124,21 @@ internal static partial class Program
             var timeout=DateTime.UtcNow.AddSeconds(5);
             while(preview.CurrentFrame?.Settings.BorderColor != 0x4285F4 && DateTime.UtcNow < timeout) await Task.Delay(20);
             Require(preview.CurrentFrame?.Settings.BorderColor == 0x4285F4,"The selected swatch did not refresh the photo preview");
+            model.Gaming.PreviewBorderColor = "#EECCAA";
+            timeout = DateTime.UtcNow.AddSeconds(5);
+            while (preview.CurrentFrame?.Settings.BorderColor != 0xEECCAA && DateTime.UtcNow < timeout) await Task.Delay(20);
+            Require(preview.CurrentFrame?.Settings.BorderColor == 0xEECCAA && model.Gaming.BorderColor == "#4285F4" &&
+                new GamingPreferencesStore(Path.Combine(directory.FullName, "gaming.json")).Load().BorderColor == "#4285F4",
+                "Custom lens color escaped the photo preview");
+            if (images is not null) SaveClipboardVisual((FrameworkElement)window.PreviewContent, images, "custom-preview");
+            ((System.Windows.Controls.Button)picker.FindName("CustomColorButton"))
+                .RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Require(model.Gaming.BorderColor == "#EECCAA" && !model.Gaming.HasBorderColorChanges,
+                "Lens save button did not apply the preview color");
+            model.Gaming.PreviewBorderColor = "#CCEEAA";
+            Buttons(picker).Single(button => button.Tag as string == "#4285F4").RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Require(model.Gaming.BorderColor == "#4285F4" && model.Gaming.PreviewBorderColor == "#4285F4" && !model.Gaming.HasBorderColorChanges,
+                "Lens preset did not replace the custom preview");
             model.Gaming.IsFavorite=true;
             var favoriteButton=(System.Windows.Controls.Button)window.FindName("FavoritesButton");
             favoriteButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
