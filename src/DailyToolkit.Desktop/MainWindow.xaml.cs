@@ -286,6 +286,12 @@ public partial class MainWindow : Window
         e.Cancel = true;
         if (_closing) return;
         _closing = true;
+        if (_viewModel.FilePack.HasUnfinishedTasks && MessageBox.Show(this,
+            "退出会停止正在打包的任务。外部软件工作区会保留。", "退出 DailyToolkit",
+            MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
+        {
+            _closing = false; _exitRequested = false; return;
+        }
         _shortcuts?.Suspend(true);
         _viewModel.Gaming.Stop();
         _clockTimer.Stop();
@@ -303,6 +309,15 @@ public partial class MainWindow : Window
             _closing = false; _exitRequested = false;
             _notes?.CancelExitPreparation();
             _viewModel.Notice = "剪贴回溯尚未保存完成，请完成当前编辑或重试保存后退出。";
+            if (!IsVisible) Show();
+            RegisterLensHotkey(); UpdateLocalPolling(); return;
+        }
+        try { await _viewModel.FilePack.ShutdownAsync(); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _closing = false; _exitRequested = false;
+            _notes?.CancelExitPreparation();
+            _viewModel.Notice = "文件集装箱尚未保存完成，请重试退出。";
             if (!IsVisible) Show();
             RegisterLensHotkey(); UpdateLocalPolling(); return;
         }
@@ -412,6 +427,15 @@ public partial class MainWindow : Window
             _viewModel.Notice = "";
         }
         catch (ExternalException exception) { Trace.WriteLine(exception); _viewModel.Notice = "剪贴板正忙，请稍后再试。"; }
+    }
+
+    private void OpenThirdPartyNotices(object sender, RoutedEventArgs e)
+    {
+        var file = Path.Combine(AppContext.BaseDirectory, "THIRD_PARTY_NOTICES.txt");
+        if (!File.Exists(file)) file = Path.Combine(AppContext.BaseDirectory, "tools", "7zip", "License.txt");
+        try { Process.Start(new ProcessStartInfo(file) { UseShellExecute = true }); }
+        catch (Exception exception) when (exception is Win32Exception or IOException or UnauthorizedAccessException)
+        { _viewModel.Notice = "未能打开许可文件。"; }
     }
 
     private void OpenRepository(object sender, RequestNavigateEventArgs e)

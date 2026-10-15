@@ -9,6 +9,8 @@ using DailyToolkit.Desktop.Environment;
 using DailyToolkit.Desktop.Gaming;
 using DailyToolkit.Desktop.Notes;
 using DailyToolkit.Desktop.ClipRecall;
+using DailyToolkit.Core.FilePack;
+using DailyToolkit.Desktop.FilePack;
 
 namespace DailyToolkit.Desktop.Presentation;
 
@@ -44,7 +46,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // Each installed tool gets one entry here; favorites reuse the same entries and tool state.
     private readonly NavigationItem[] _navigation=[new("screen-lens","放大镜","\uE71E",canToggle:true),
         new("floating-notes","浮笺","\uE70B",canToggle:true),
-        new("clip-recall","剪贴回溯","\uE8C8",canToggle:true)];
+        new("clip-recall","剪贴回溯","\uE8C8",canToggle:true),
+        new("file-pack","文件集装箱","\uE7B8")];
     private string _softwareSearch = "";
     private string _notice = "";
     private bool _isRefreshing;
@@ -61,7 +64,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TimeProvider? clock = null, FavoritesStore? favoritesStore = null, GamingPreferencesStore? gamingPreferencesStore = null,
         NavigationOrderStore? navigationStore = null, AppPreferencesStore? appPreferencesStore = null,
         Runtime.IStartupRegistration? startupRegistration = null, NotesStore? notesStore = null,
-        ClipboardSettingsStore? clipboardSettingsStore = null)
+        ClipboardSettingsStore? clipboardSettingsStore = null, FilePackStore? filePackStore = null)
     {
         _probe = probe;
         _display = display;
@@ -79,6 +82,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Gaming = new(gamingPreferencesStore);
         Notes = new(notesStore);
         ClipRecall = new(clipboardSettingsStore);
+        FilePack = new(filePackStore);
+        FilePack.IsFavorite = _favoriteIds.Contains("file-pack");
         ClipRecall.IsFavorite = _favoriteIds.Contains("clip-recall");
         _navigation[2].IsEnabled = ClipRecall.IsEnabled;
         Notes.IsFavorite = _favoriteIds.Contains("floating-notes");
@@ -108,12 +113,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         MoveDownCommand=new(parameter => MoveBy(parameter,1),() => !IsSettings && NavigationItems.Count > 1);
         RefreshCommand = new(_ =>
         {
-            if (IsSettings && !IsHome) return;
+            if (IsSettings && !IsHome || ShowFilePack) return;
             if (ShowScreenLens) Gaming.RefreshMonitors(); else _ = InitializeAsync();
-        }, () => (!IsSettings || IsHome) && (ShowScreenLens ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus));
+        }, () => !ShowFilePack && (!IsSettings || IsHome) && (ShowScreenLens ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus));
         Gaming.PropertyChanged += OnGamingChanged;
         Notes.PropertyChanged += OnNotesChanged;
         ClipRecall.PropertyChanged += OnClipRecallChanged;
+        FilePack.PropertyChanged += OnFilePackChanged;
         RefreshNavigation();
         NotifyNavigation();
     }
@@ -143,10 +149,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public GamingViewModel Gaming { get; }
     public NotesViewModel Notes { get; }
     public ClipboardHistoryViewModel ClipRecall { get; }
+    public FilePackViewModel FilePack { get; }
     public RelayCommand RefreshCommand { get; }
     public Task CurrentProbeTask { get; private set; } = Task.CompletedTask;
     public Task CurrentLocalStatusTask { get; private set; } = Task.CompletedTask;
-    public Task PendingWork => Task.WhenAll(CurrentProbeTask, CurrentLocalStatusTask, Notes.Ready, ClipRecall.Ready, ClipRecall.PendingSettings);
+    public Task PendingWork => Task.WhenAll(CurrentProbeTask, CurrentLocalStatusTask, Notes.Ready, ClipRecall.Ready, ClipRecall.PendingSettings, FilePack.Ready);
     public MachineReport Report => _report;
     public ICollectionView SoftwareView => _softwareView;
 
@@ -183,15 +190,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool ShowScreenLens => Page == "screen-lens";
     public bool ShowFloatingNotes => Page == "floating-notes";
     public bool ShowClipRecall => Page == "clip-recall";
+    public bool ShowFilePack => Page == "file-pack";
     public bool ShowFavoritesEmpty => IsFavorites && !HasFavorites;
     public bool ShowAllTools => !IsFavorites && !IsSettings;
-    public bool ShowRefresh => (!IsSettings || IsHome) && !ShowFloatingNotes && !ShowClipRecall;
+    public bool ShowRefresh => (!IsSettings || IsHome) && !ShowFloatingNotes && !ShowClipRecall && !ShowFilePack;
     public string FavoritesToggleHint => IsFavorites ? "关闭收藏夹" : "打开收藏夹";
     public string SettingsToggleHint => IsSettings ? "关闭软件设置" : "打开软件设置";
     public string PageTitle => IsSettings ? _settingsNavigation.First(item => item.Id == Page).Name : ShowFavoritesEmpty ? "收藏夹" : _navigation.First(item => item.Id == Page).Name;
     public string RefreshText => ShowScreenLens ? "刷新屏幕" : "刷新";
-    public string FooterStatusText => IsHome ? StatusText : IsSettings || ShowFavoritesEmpty ? "" : ShowClipRecall ? ClipRecall.Status : ShowFloatingNotes ? Notes.Status : !Gaming.IsEnabled ? "功能已停用" : Gaming.IsActive ? "放大运行中" : "未开启";
-    public string FooterSourceText => IsHome ? LocalSourceText : IsSettings || ShowFavoritesEmpty ? "" : ShowClipRecall ? "本地剪贴板历史" : ShowFloatingNotes ? "本地笔记" : "本机显示";
+    public string FooterStatusText => IsHome ? StatusText : IsSettings || ShowFavoritesEmpty ? "" : ShowFilePack ? FilePack.Status : ShowClipRecall ? ClipRecall.Status : ShowFloatingNotes ? Notes.Status : !Gaming.IsEnabled ? "功能已停用" : Gaming.IsActive ? "放大运行中" : "未开启";
+    public string FooterSourceText => IsHome ? LocalSourceText : IsSettings || ShowFavoritesEmpty ? "" : ShowFilePack ? "本地文件打包" : ShowClipRecall ? "本地剪贴板历史" : ShowFloatingNotes ? "本地笔记" : "本机显示";
     public bool PageAnimationsEnabled
     {
         get => _appPreferences.PageAnimationsEnabled;
@@ -277,6 +285,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void NotifyNavigation()
     {
+        FilePack.IsVisible = !IsSettings && ShowFilePack;
         foreach (var item in _navigation) item.IsSelected=item.Id == Page;
         foreach (var item in _settingsNavigation) item.IsSelected=IsSettings && item.Id == Page;
         Notify(nameof(Page)); Notify(""); RefreshCommand.Refresh();
@@ -532,7 +541,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public void CancelPending() => _lifetime.Cancel();
-    public void Dispose() { _startupDisposed=true; ClipRecall.PropertyChanged -= OnClipRecallChanged; ClipRecall.Dispose(); Notes.PropertyChanged -= OnNotesChanged; Notes.Dispose(); Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { _startupDisposed=true; FilePack.PropertyChanged -= OnFilePackChanged; FilePack.Dispose(); ClipRecall.PropertyChanged -= OnClipRecallChanged; ClipRecall.Dispose(); Notes.PropertyChanged -= OnNotesChanged; Notes.Dispose(); Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 
     private static string FormatBytes(long? bytes) => bytes is null ? "未知" :
         bytes >= 1024L * 1024 * 1024 ? $"{bytes.Value / (1024d * 1024 * 1024):0.#} GB" :

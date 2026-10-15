@@ -1,0 +1,601 @@
+using System.Collections;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
+using System.Windows;
+using System.Windows.Threading;
+using DailyToolkit.Core.FilePack;
+using DailyToolkit.Desktop.Presentation;
+using Microsoft.Win32;
+
+namespace DailyToolkit.Desktop.FilePack;
+
+public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDisposable
+{
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
+    private readonly FileCollectionService _collection = new();
+    private readonly PackPlanner _planner = new();
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly Action<string> _openDirectory;
+    private readonly HashSet<Guid> _openWhenPrepared = [];
+    private readonly Dictionary<Guid, FilePackTaskViewModel> _rows = [];
+    private readonly HashSet<Task> _operations = [];
+    private readonly SemaphoreSlim _preferencesGate = new(1, 1);
+    private Task? _initializing, _shutdownTask;
+    private CancellationTokenSource? _collectionCancellation;
+    private bool _loaded, _loading, _favorite, _visible, _collecting, _creating, _shuttingDown, _disposed;
+    private string _notice = "", _taskName = "文件集装箱", _archiveName = "文件集装箱", _outputDirectory = "";
+    private string _newFolderPath = "新建文件夹", _moveTargetPath = "";
+    private PackMode _mode = PackMode.BuiltIn;
+    private PackFormat _format = PackFormat.Zip;
+    private PackCompression _compression = PackCompression.Standard;
+    private int _maximumParallel = 2;
+    private long _draftBytes;
+    private bool _batchEntries;
+    private bool _askOutputEachTime, _keepExternalWorkspace;
+
+    public FilePackViewModel(FilePackStore? store = null, string? enginePath = null, Action<string>? openDirectory = null)
+    {
+        Store = store ?? new(Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+            "DailyToolkit", "FilePack"));
+        Manager = new(Store, new SevenZipAdapter(enginePath ?? Path.Combine(AppContext.BaseDirectory, "tools", "7zip", "7za.exe")));
+        _openDirectory = openDirectory ?? OpenDirectoryWithExplorer;
+        Manager.TaskChanged += TaskChanged;
+        ToggleFavoriteCommand = new(_ => IsFavorite = !IsFavorite);
+        AddFilesCommand = new(_ => PickFiles(), () => CanEditDraft);
+        AddFoldersCommand = new(_ => PickFolders(), () => CanEditDraft);
+        RemoveSelectedCommand = new(parameter => RemoveEntries(SelectedRows(parameter)), () => CanEditDraft && Entries.Count > 0);
+        ClearCommand = new(_ => ClearDraft(), () => CanEditDraft && Entries.Count > 0);
+        AddVirtualFolderCommand = new(_ => AddVirtualFolder(NewFolderPath), () => CanEditDraft);
+        MoveSelectedCommand = new(parameter => MoveEntries(SelectedRows(parameter), MoveTargetPath), () => CanEditDraft && Entries.Count > 0);
+        CheckDuplicatesCommand = new(_ => CheckDuplicates(), () => CanEditDraft && Entries.Count > 0);
+        BrowseOutputCommand = new(_ => PickOutputDirectory(), () => CanEditDraft);
+        CreateTaskCommand = new(_ => Track(CreateTaskAsync()), () => CanEditDraft && Entries.Count > 0);
+        CancelCollectionCommand = new(_ => _collectionCancellation?.Cancel(), () => IsCollecting);
+        CancelTaskCommand = new(parameter => Act(parameter, row => Manager.CancelAsync(row.TaskId)));
+        RetryTaskCommand = new(parameter => Act(parameter, RetryTaskAsync));
+        MoveUpCommand = new(parameter => MoveQueued(parameter, -1));
+        MoveDownCommand = new(parameter => MoveQueued(parameter, 1));
+        OpenTaskCommand = new(parameter => { if (parameter is FilePackTaskViewModel row) OpenTask(row); });
+        CompleteExternalCommand = new(parameter => Act(parameter, row => FinishExternalAsync(row, row.Info.Snapshot.Options.KeepWorkspace)));
+        KeepExternalCommand = new(parameter => Act(parameter, row => FinishExternalAsync(row, !row.Info.Snapshot.Options.KeepWorkspace)));
+        CleanupTaskCommand = new(parameter => Act(parameter, CleanupTaskAsync));
+        RemoveTaskCommand = new(parameter => Act(parameter, row => Manager.RemoveAsync(row.TaskId)));
+        Entries.CollectionChanged += (_, change) =>
+        {
+            if (_batchEntries) return;
+            if (change.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) _draftBytes = 0;
+            else
+            {
+                if (change.OldItems is not null) foreach (FilePackEntryViewModel row in change.OldItems) _draftBytes -= row.Entry.Size;
+                if (change.NewItems is not null) foreach (FilePackEntryViewModel row in change.NewItems) _draftBytes += row.Entry.Size;
+            }
+            Notify(nameof(DraftSummary)); RefreshCommands();
+        };
+    }
+
+    public FilePackStore Store { get; }
+    public FilePackManager Manager { get; }
+    public Task Ready => _initializing ?? Task.CompletedTask;
+    public ObservableCollection<FilePackEntryViewModel> Entries { get; } = [];
+    public ObservableCollection<FilePackTaskViewModel> Tasks { get; } = [];
+    public IReadOnlyList<FilePackChoice<PackMode>> Modes { get; } = [new("内置压缩", PackMode.BuiltIn), new("外部软件", PackMode.External)];
+    public IReadOnlyList<FilePackChoice<PackFormat>> Formats { get; } = [new("ZIP", PackFormat.Zip), new("7z", PackFormat.SevenZip), new("TAR", PackFormat.Tar)];
+    public IReadOnlyList<FilePackChoice<PackCompression>> CompressionLevels { get; } = [new("不压缩", PackCompression.Store),
+        new("快速", PackCompression.Fast), new("标准", PackCompression.Standard), new("最大", PackCompression.Maximum)];
+    public IReadOnlyList<int> ParallelChoices { get; } = [1, 2, 3, 4];
+    public Func<string, string, bool>? ConfirmAction { get; set; }
+    public Func<string, FilePackOutputChoice>? ResolveOutputConflict { get; set; }
+    public Func<string, FilePackEntryConflictChoice>? ResolveEntryConflict { get; set; }
+    public Func<string?>? SelectOutputDirectory { get; set; }
+    public RelayCommand ToggleFavoriteCommand { get; }
+    public RelayCommand AddFilesCommand { get; }
+    public RelayCommand AddFoldersCommand { get; }
+    public RelayCommand RemoveSelectedCommand { get; }
+    public RelayCommand ClearCommand { get; }
+    public RelayCommand AddVirtualFolderCommand { get; }
+    public RelayCommand MoveSelectedCommand { get; }
+    public RelayCommand CheckDuplicatesCommand { get; }
+    public RelayCommand BrowseOutputCommand { get; }
+    public RelayCommand CreateTaskCommand { get; }
+    public RelayCommand CancelCollectionCommand { get; }
+    public RelayCommand CancelTaskCommand { get; }
+    public RelayCommand RetryTaskCommand { get; }
+    public RelayCommand MoveUpCommand { get; }
+    public RelayCommand MoveDownCommand { get; }
+    public RelayCommand OpenTaskCommand { get; }
+    public RelayCommand CompleteExternalCommand { get; }
+    public RelayCommand KeepExternalCommand { get; }
+    public RelayCommand CleanupTaskCommand { get; }
+    public RelayCommand RemoveTaskCommand { get; }
+
+    public bool IsLoaded => _loaded;
+    public bool IsInitializing => _loading;
+    public bool IsVisible { get => _visible; set { if (Set(ref _visible, value) && value) Track(InitializeAsync()); } }
+    public bool IsFavorite { get => _favorite; set { if (Set(ref _favorite, value)) { Notify(nameof(FavoriteSymbol)); Notify(nameof(FavoriteHint)); } } }
+    public string FavoriteSymbol => IsFavorite ? "★" : "☆";
+    public string FavoriteHint => IsFavorite ? "取消收藏文件集装箱" : "收藏文件集装箱";
+    public string Notice { get => _notice; private set { if (Set(ref _notice, value)) Notify(nameof(HasNotice)); } }
+    public bool HasNotice => Notice.Length > 0;
+    public bool IsCollecting { get => _collecting; private set { if (Set(ref _collecting, value)) DraftStateChanged(); } }
+    public bool IsCreating { get => _creating; private set { if (Set(ref _creating, value)) DraftStateChanged(); } }
+    public bool CanEditDraft => _loaded && !_collecting && !_creating && !_shuttingDown && !_disposed;
+    public bool HasUnfinishedTasks => IsInitializing || IsCollecting || IsCreating || Tasks.Any(row => row.CanCancel || row.IsExternalReady);
+    public string Status => IsInitializing ? "正在读取任务" : !_loaded ? "尚未打开" : IsCollecting ? "正在收集文件" : RunningCount > 0 ? $"正在执行 {RunningCount} 个任务" :
+        WaitingCount > 0 ? $"等待执行 {WaitingCount} 个任务" : ExternalCount > 0 ? $"等待外部操作 {ExternalCount} 个任务" : "就绪";
+    public int RunningCount => Tasks.Count(row => row.IsRunning);
+    public int WaitingCount => Tasks.Count(row => row.IsQueued);
+    public int CompletedCount => Tasks.Count(row => row.Info.State == PackState.Completed);
+    public int FailedCount => Tasks.Count(row => row.Info.State is PackState.Failed or PackState.Interrupted);
+    public int ExternalCount => Tasks.Count(row => row.IsExternalReady);
+    public string TaskSummary => $"执行 {RunningCount} · 排队 {WaitingCount} · 完成 {CompletedCount} · 失败 {FailedCount}" +
+        (ExternalCount == 0 ? "" : $" · 外部 {ExternalCount}");
+    public string DraftSummary => $"{Entries.Count} 项 · {FormatBytes(_draftBytes)}";
+    public string TaskName { get => _taskName; set => Set(ref _taskName, value); }
+    public string ArchiveName { get => _archiveName; set { if (Set(ref _archiveName, value)) Notify(nameof(OutputPreview)); } }
+    public string OutputDirectory { get => _outputDirectory; set { if (Set(ref _outputDirectory, value)) Notify(nameof(OutputPreview)); } }
+    public string NewFolderPath { get => _newFolderPath; set => Set(ref _newFolderPath, value); }
+    public string MoveTargetPath { get => _moveTargetPath; set => Set(ref _moveTargetPath, value); }
+    public PackMode Mode { get => _mode; set { if (Set(ref _mode, value)) { Notify(nameof(IsBuiltIn)); Notify(nameof(IsExternal)); Notify(nameof(CanChooseCompression)); Notify(nameof(CreateButtonText)); } } }
+    public bool IsBuiltIn => Mode == PackMode.BuiltIn;
+    public bool IsExternal => !IsBuiltIn;
+    public string CreateButtonText => IsBuiltIn ? "创建压缩任务" : "准备外部工作区";
+    public PackFormat Format { get => _format; set { if (Set(ref _format, value)) { Notify(nameof(CanChooseCompression)); Notify(nameof(OutputPreview)); } } }
+    public PackCompression Compression { get => _compression; set => Set(ref _compression, value); }
+    public bool CanChooseCompression => IsBuiltIn && Format != PackFormat.Tar;
+    public string OutputPreview
+    {
+        get { try { return string.IsNullOrWhiteSpace(OutputDirectory) ? "选择保存文件夹" : FilePackPaths.GetOutputPath(DraftOptions()); }
+            catch (Exception exception) when (IsExpected(exception)) { return "请填写有效的文件名与保存位置"; } }
+    }
+    public int MaximumParallel { get => _maximumParallel; set { value = Math.Clamp(value, 1, 4); if (Set(ref _maximumParallel, value) && _loaded) SavePreferences(); } }
+    public bool AskOutputEachTime { get => _askOutputEachTime; set { if (Set(ref _askOutputEachTime, value) && _loaded) SavePreferences(); } }
+    public bool KeepExternalWorkspace { get => _keepExternalWorkspace; set { if (Set(ref _keepExternalWorkspace, value) && _loaded) SavePreferences(); } }
+
+    public Task InitializeAsync()
+    {
+        if (_disposed || _shuttingDown) return Task.CompletedTask;
+        return _initializing ??= InitializeCoreAsync();
+    }
+    private async Task InitializeCoreAsync()
+    {
+        _loading = true; Notify(nameof(IsInitializing)); NotifyTaskState();
+        try
+        {
+            await Manager.InitializeAsync();
+            if (_disposed || _shuttingDown) return;
+            var preferences = Manager.Preferences;
+            _maximumParallel = preferences.MaximumParallel; _outputDirectory = preferences.LastOutputDirectory;
+            _askOutputEachTime = preferences.AskOutputEachTime; _keepExternalWorkspace = preferences.KeepExternalWorkspace;
+            foreach (var task in Manager.Tasks) Upsert(task);
+            _loaded = true;
+            SortTasks();
+            Notice = string.Join(System.Environment.NewLine, Store.Diagnostics);
+            Notify(""); RefreshCommands();
+        }
+        catch (Exception exception) when (IsExpected(exception)) { Notice = $"任务记录未能打开：{exception.Message}"; }
+        finally { _loading = false; Notify(nameof(IsInitializing)); NotifyTaskState(); }
+    }
+
+    public Task AddPathsAsync(IEnumerable<string> paths)
+    {
+        if (!CanEditDraft) return Task.CompletedTask;
+        var operation = AddPathsCoreAsync(paths.ToArray()); Track(operation); return operation;
+    }
+    private async Task AddPathsCoreAsync(string[] paths)
+    {
+        IsCollecting = true;
+        _collectionCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        try
+        {
+            Notice = "";
+            var existing = Entries.Select(row => row.Entry).ToArray();
+            var known = existing.Select(entry => entry.Id).ToHashSet();
+            var result = await _collection.CollectAsync(paths, existing, _collectionCancellation.Token);
+            _collectionCancellation.Token.ThrowIfCancellationRequested();
+            var renamed = result.Entries.Where(entry => !known.Contains(entry.Id) && !string.IsNullOrEmpty(entry.SourcePath) &&
+                !string.Equals(entry.ArchivePath, Path.GetRelativePath(entry.SourceRoot, entry.SourcePath).Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)).ToArray();
+            var entries = result.Entries;
+            if (renamed.Length > 0)
+            {
+                var details = string.Join(System.Environment.NewLine, renamed.Take(12).Select(entry => $"{Path.GetFileName(entry.SourcePath)} → {entry.ArchivePath}")) +
+                    (renamed.Length > 12 ? $"{System.Environment.NewLine}另有 {renamed.Length - 12} 项" : "");
+                var choice = (ResolveEntryConflict ?? FilePackDialogs.EntryConflict)(details);
+                if (choice == FilePackEntryConflictChoice.Cancel) { Notice = ""; return; }
+                if (choice == FilePackEntryConflictChoice.Skip)
+                { var skipped = renamed.Select(entry => entry.Id).ToHashSet(); entries = result.Entries.Where(entry => !skipped.Contains(entry.Id)).ToArray(); }
+            }
+            ReplaceEntries(entries);
+            Notice = string.Join(System.Environment.NewLine, result.Warnings.Where(warning => !warning.StartsWith("包内重名", StringComparison.Ordinal)).Take(12));
+        }
+        catch (OperationCanceledException) { Notice = ""; }
+        catch (Exception exception) when (IsExpected(exception)) { Notice = $"文件未能添加：{exception.Message}"; }
+        finally { _collectionCancellation.Dispose(); _collectionCancellation = null; IsCollecting = false; }
+    }
+
+    public bool TryRenameEntry(FilePackEntryViewModel row, string archivePath)
+    {
+        if (!CanEditDraft || !Entries.Contains(row)) { row.ResetDraft(); return false; }
+        try
+        {
+            archivePath = FilePackPaths.NormalizeArchivePath(archivePath);
+            var old = row.Entry.ArchivePath;
+            var mapped = Entries.Select(item => item.Entry.Id == row.Id ? item.Entry with { ArchivePath = archivePath } :
+                row.Entry.IsDirectory && item.Entry.ArchivePath.StartsWith(old + "/", StringComparison.OrdinalIgnoreCase) ?
+                    item.Entry with { ArchivePath = archivePath + item.Entry.ArchivePath[old.Length..] } : item.Entry).ToArray();
+            FilePackPaths.ValidateEntries(mapped); ReplaceEntries(mapped); Notice = ""; return true;
+        }
+        catch (Exception exception) when (IsExpected(exception)) { row.ResetDraft(); Notice = $"包内路径未能修改：{exception.Message}"; return false; }
+    }
+    public bool AddVirtualFolder(string archivePath)
+    {
+        if (!CanEditDraft) return false;
+        try
+        {
+            var entry = new PackEntry(Guid.NewGuid(), "", FilePackPaths.NormalizeArchivePath(archivePath), true, 0, null, "");
+            FilePackPaths.ValidateEntries(Entries.Select(row => row.Entry).Append(entry));
+            Entries.Add(new(entry)); Notice = ""; return true;
+        }
+        catch (Exception exception) when (IsExpected(exception)) { Notice = $"文件夹未能创建：{exception.Message}"; return false; }
+    }
+    public bool MoveEntries(IEnumerable<FilePackEntryViewModel> selected, string target)
+    {
+        if (!CanEditDraft) return false;
+        try
+        {
+            var folder = string.IsNullOrWhiteSpace(target) ? "" : FilePackPaths.NormalizeArchivePath(target) + "/";
+            var present = Entries.ToHashSet();
+            var moves = selected.Where(present.Contains).Select(row => row.Entry).OrderBy(entry => entry.ArchivePath.Length).ToArray();
+            var mapped = Entries.Select(row => row.Entry).ToArray();
+            var roots = new Dictionary<string, PackEntry>(StringComparer.OrdinalIgnoreCase);
+            PackEntry? FindRoot(string path)
+            {
+                if (roots.TryGetValue(path, out var exact)) return exact;
+                while (path.LastIndexOf('/') is var split && split >= 0)
+                { path = path[..split]; if (roots.TryGetValue(path, out var ancestor) && ancestor.IsDirectory) return ancestor; }
+                return null;
+            }
+            foreach (var move in moves)
+                if (FindRoot(move.ArchivePath) is null) roots.Add(move.ArchivePath, move);
+            for (var index = 0; index < mapped.Length; index++)
+                if (FindRoot(mapped[index].ArchivePath) is { } root)
+                    mapped[index] = mapped[index] with { ArchivePath = folder + Path.GetFileName(root.ArchivePath) + mapped[index].ArchivePath[root.ArchivePath.Length..] };
+            FilePackPaths.ValidateEntries(mapped); ReplaceEntries(mapped); Notice = ""; return true;
+        }
+        catch (Exception exception) when (IsExpected(exception)) { Notice = $"条目未能移动：{exception.Message}"; return false; }
+    }
+    public void RemoveEntries(IEnumerable<FilePackEntryViewModel> selected)
+    {
+        if (!CanEditDraft) return;
+        var ids = selected.Select(row => row.Id).ToHashSet();
+        ReplaceEntries(Entries.Where(row => !ids.Contains(row.Id)).Select(row => row.Entry).ToArray());
+        Notice = "";
+    }
+    public void ClearDraft() { if (!CanEditDraft) return; Entries.Clear(); Notice = ""; }
+    public void CheckDuplicates()
+    {
+        if (!CanEditDraft) return;
+        try
+        {
+            var duplicate = Entries.Where(row => row.Entry.SourcePath.Length > 0).GroupBy(row =>
+                FilePackPaths.NormalizeSourcePath(row.Entry.SourcePath), StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).ToArray();
+            FilePackPaths.ValidateEntries(Entries.Select(row => row.Entry));
+            Notice = duplicate.Length == 0 ? "未发现重复或路径冲突。" : $"发现 {duplicate.Length} 组重复来源。";
+        }
+        catch (Exception exception) when (IsExpected(exception)) { Notice = exception.Message; }
+    }
+
+    public Task<PackTaskInfo?> CreateTaskAsync()
+    {
+        if (!CanEditDraft || Entries.Count == 0) return Task.FromResult<PackTaskInfo?>(null);
+        var task = CreateTaskCoreAsync(); Track(task); return task;
+    }
+    private async Task<PackTaskInfo?> CreateTaskCoreAsync()
+    {
+        IsCreating = true;
+        var taskId = Guid.NewGuid();
+        try
+        {
+            CommitPathDrafts();
+            var entries = Entries.Select(row => row.Entry with { }).ToArray();
+            FilePackPaths.ValidateEntries(entries);
+            var options = DraftOptions();
+            if (IsBuiltIn)
+            {
+                if (AskOutputEachTime || string.IsNullOrWhiteSpace(OutputDirectory))
+                { if (!PickOutputDirectory()) { Notice = ""; return null; } options = DraftOptions(); }
+                while (true)
+                {
+                    var path = FilePackPaths.GetOutputPath(options);
+                    var reserved = Manager.Tasks.Any(task => task.Snapshot.Options.Mode == PackMode.BuiltIn &&
+                        task.State is PackState.Queued or PackState.Collecting or PackState.Copying or PackState.Compressing or PackState.Verifying &&
+                        string.Equals(task.OutputPath, path, StringComparison.OrdinalIgnoreCase));
+                    if (!File.Exists(path) && !Directory.Exists(path) && !reserved) break;
+                    var choice = (ResolveOutputConflict ?? FilePackDialogs.OutputConflict)(path + (reserved ? "\n已有未完成任务使用此路径。" : ""));
+                    if (choice == FilePackOutputChoice.Cancel) { Notice = ""; return null; }
+                    if (choice == FilePackOutputChoice.Reselect)
+                    { if (!PickOutputDirectory()) { Notice = ""; return null; } options = DraftOptions(); continue; }
+                    if (choice == FilePackOutputChoice.Overwrite)
+                    {
+                        if (reserved) throw new IOException("此名称有未完成任务，请选择自动更名或重新选择保存位置。");
+                        if (Directory.Exists(path)) throw new IOException("目标名称已被文件夹占用，请重新选择或自动更名。");
+                        options = options with { OutputPolicy = PackOutputPolicy.Overwrite, ApprovedOverwriteStamp = FilePackPaths.CaptureSourceStamp(path) };
+                    }
+                    else options = options with { OutputPolicy = PackOutputPolicy.AutoRename };
+                    break;
+                }
+            }
+            var snapshot = new PackSnapshot(taskId, Guid.NewGuid(), string.IsNullOrWhiteSpace(TaskName) ? ArchiveName.Trim() : TaskName.Trim(),
+                entries, options, DateTimeOffset.UtcNow);
+            var planningSnapshot = snapshot;
+            var plan = await Task.Run(() => _planner.Create(planningSnapshot), _lifetime.Token);
+            if (plan.RequiresStaging)
+            {
+                var message = IsExternal ? $"将复制文件到独立工作区，需要约 {FormatBytes(plan.RequiredStagingBytes)} 额外空间。" :
+                    $"此包内布局需要临时副本，额外占用约 {FormatBytes(plan.RequiredStagingBytes)}。";
+                if (!(ConfirmAction ?? FilePackDialogs.Confirm)("准备临时文件", message)) { Notice = ""; return null; }
+                snapshot = snapshot with { Options = options with { AllowStaging = true } };
+            }
+            if (snapshot.Options.Mode == PackMode.External) _openWhenPrepared.Add(taskId);
+            var info = await Manager.EnqueueAsync(snapshot, _lifetime.Token);
+            Upsert(info);
+            if (info.State == PackState.AwaitingExternal) OpenPreparedExternal(info);
+            var preferencesSaved = await SavePreferencesCoreAsync();
+            Entries.Clear(); if (preferencesSaved) Notice = ""; return info;
+        }
+        catch (OperationCanceledException) { _openWhenPrepared.Remove(taskId); Notice = ""; return null; }
+        catch (Exception exception) when (IsExpected(exception)) { _openWhenPrepared.Remove(taskId); Notice = $"任务未能创建：{exception.Message}"; return null; }
+        finally { IsCreating = false; }
+    }
+    private void CommitPathDrafts()
+    {
+        foreach (var row in Entries.ToArray())
+        {
+            if (row.PathDraft == row.ArchivePath) continue;
+            var path = FilePackPaths.NormalizeArchivePath(row.PathDraft);
+            var previous = row.Entry.ArchivePath;
+            var mapped = Entries.Select(item => item.Id == row.Id ? item.Entry with { ArchivePath = path } :
+                row.Entry.IsDirectory && item.ArchivePath.StartsWith(previous + "/", StringComparison.OrdinalIgnoreCase) ?
+                    item.Entry with { ArchivePath = path + item.ArchivePath[previous.Length..] } : item.Entry).ToArray();
+            FilePackPaths.ValidateEntries(mapped); ReplaceEntries(mapped);
+        }
+    }
+    private PackOptions DraftOptions() => new(Mode, Format, Format == PackFormat.Tar ? PackCompression.Store : Compression,
+        OutputDirectory.Trim(), ArchiveName.Trim(), KeepWorkspace: Mode == PackMode.External && KeepExternalWorkspace);
+
+    private void PickFiles()
+    {
+        var dialog = new OpenFileDialog { Title = "添加文件", Multiselect = true, CheckFileExists = true };
+        if (dialog.ShowDialog() == true) _ = AddPathsAsync(dialog.FileNames);
+    }
+    private void PickFolders()
+    {
+        var dialog = new OpenFolderDialog { Title = "添加文件夹", Multiselect = true };
+        if (dialog.ShowDialog() == true) _ = AddPathsAsync(dialog.FolderNames);
+    }
+    public bool PickOutputDirectory()
+    {
+        var path = SelectOutputDirectory is not null ? SelectOutputDirectory() : ChooseDirectory();
+        if (string.IsNullOrEmpty(path)) return false;
+        OutputDirectory = path; return true;
+    }
+    private string? ChooseDirectory()
+    {
+        var dialog = new OpenFolderDialog { Title = "选择保存文件夹", Multiselect = false };
+        if (Directory.Exists(OutputDirectory)) dialog.InitialDirectory = OutputDirectory;
+        return dialog.ShowDialog() == true ? dialog.FolderName : null;
+    }
+    private static IEnumerable<FilePackEntryViewModel> SelectedRows(object? parameter) =>
+        parameter is IEnumerable selected ? selected.OfType<FilePackEntryViewModel>().ToArray() : [];
+
+    private async Task RetryTaskAsync(FilePackTaskViewModel row)
+    {
+        if (!row.CanRetry) return;
+        var external = row.Info.Snapshot.Options.Mode == PackMode.External;
+        if (external && row.Info.WorkspacePath.Length > 0 && !(ConfirmAction ?? FilePackDialogs.Confirm)("重新准备工作区",
+            "上次工作区将被删除。请先移出要保留的文件。")) return;
+        // Retry may return a replacement task ID; subscribe before queueing so fast preparation is observed.
+        if (external) _openWhenPrepared.Add(row.TaskId);
+        try
+        {
+            var info = await Manager.RetryAsync(row.TaskId);
+            if (external && info.TaskId != row.TaskId) { _openWhenPrepared.Remove(row.TaskId); _openWhenPrepared.Add(info.TaskId); }
+            Upsert(info); if (info.State == PackState.AwaitingExternal) OpenPreparedExternal(info);
+        }
+        catch { _openWhenPrepared.Remove(row.TaskId); throw; }
+    }
+    private async Task FinishExternalAsync(FilePackTaskViewModel row, bool keep)
+    {
+        if (!row.IsExternalReady) return;
+        if (!keep && !(ConfirmAction ?? FilePackDialogs.Confirm)("完成并清理",
+            "将删除工作区内的全部文件。请先移出压缩包和要保留的文件。")) return;
+        await Manager.CompleteExternalAsync(row.TaskId, keep); Notice = "";
+    }
+    private async Task CleanupTaskAsync(FilePackTaskViewModel row)
+    {
+        if (!row.CanCleanup) return;
+        if (!(ConfirmAction ?? FilePackDialogs.Confirm)("清理临时文件", "将删除工作区内的全部文件。请先移出要保留的文件。")) return;
+        if (row.IsExternalReady) await Manager.CompleteExternalAsync(row.TaskId);
+        else await Manager.CleanupAsync(row.TaskId);
+        Notice = "";
+    }
+    private void MoveQueued(object? parameter, int direction)
+    {
+        if (parameter is not FilePackTaskViewModel { IsQueued: true } row || _shuttingDown) return;
+        try { Manager.MoveQueued(row.TaskId, direction); }
+        catch (Exception exception) when (IsExpected(exception)) { Notice = $"队列顺序未能修改：{exception.Message}"; }
+    }
+    private void OpenTask(FilePackTaskViewModel row)
+    {
+        try
+        {
+            var location = row.Location;
+            var directory = row.Info.Snapshot.Options.Mode == PackMode.External ? location : Path.GetDirectoryName(location);
+            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory)) { Notice = "文件夹尚未生成或已不存在。"; return; }
+            _openDirectory(directory);
+        }
+        catch (Exception exception) when (IsExpected(exception)) { Notice = $"文件夹未能打开：{exception.Message}"; }
+    }
+    private static void OpenDirectoryWithExplorer(string directory)
+    {
+        var start = new ProcessStartInfo("explorer.exe") { UseShellExecute = false };
+        start.ArgumentList.Add(directory); Process.Start(start)?.Dispose();
+    }
+    private void OpenPreparedExternal(PackTaskInfo info)
+    {
+        if (info.State != PackState.AwaitingExternal || !_openWhenPrepared.Remove(info.TaskId) || _disposed || _shuttingDown) return;
+        try { _openDirectory(info.WorkspacePath); }
+        catch (Exception exception) when (IsExpected(exception)) { Notice = $"工作区已准备好，文件夹未能自动打开：{exception.Message}"; }
+    }
+    private void TaskChanged(PackTaskInfo info)
+    {
+        if (_disposed) return;
+        if (!_dispatcher.CheckAccess()) { _dispatcher.BeginInvoke(() => TaskChanged(info)); return; }
+        Upsert(info);
+        if (!_rows.TryGetValue(info.TaskId, out var row)) { _openWhenPrepared.Remove(info.TaskId); return; }
+        if (row.Info.State is PackState.Failed or PackState.Cancelled or PackState.Interrupted) _openWhenPrepared.Remove(info.TaskId);
+        OpenPreparedExternal(row.Info);
+    }
+    private void Upsert(PackTaskInfo info)
+    {
+        // A worker can advance while its earlier notification waits for the UI dispatcher.
+        var currentTasks = Manager.Tasks;
+        var current = currentTasks.FirstOrDefault(task => task.TaskId == info.TaskId);
+        if (current is null)
+        {
+            if (_rows.Remove(info.TaskId, out var removed)) Tasks.Remove(removed);
+            NotifyTaskState(); return;
+        }
+        info = current;
+        var reorder = true;
+        if (_rows.TryGetValue(info.TaskId, out var row))
+        {
+            reorder = row.Info.State != info.State || row.Info.QueueOrder != info.QueueOrder || row.Info.Snapshot.CreatedAt != info.Snapshot.CreatedAt;
+            row.Update(info);
+        }
+        else { row = new(info); _rows.Add(info.TaskId, row); Tasks.Add(row); }
+        var present = currentTasks.Select(task => task.TaskId).ToHashSet();
+        foreach (var removed in Tasks.Where(item => item.TaskId != info.TaskId && !present.Contains(item.TaskId)).ToArray())
+        { Tasks.Remove(removed); _rows.Remove(removed.TaskId); }
+        if (reorder && !_loading) SortTasks();
+        NotifyTaskState();
+    }
+    private void SortTasks()
+    {
+        var sorted = Tasks.OrderBy(row => row.IsRunning ? 0 : row.IsQueued ? 1 : row.IsExternalReady ? 2 : 3)
+            .ThenBy(row => row.IsQueued ? row.Info.QueueOrder : 0).ThenByDescending(row => row.Info.Snapshot.CreatedAt).ToArray();
+        for (var index = 0; index < sorted.Length; index++)
+        { if (ReferenceEquals(Tasks[index], sorted[index])) continue; var current = Tasks.IndexOf(sorted[index]); Tasks.Move(current, index); }
+    }
+    private void ReplaceEntries(IEnumerable<PackEntry> entries)
+    {
+        var byId = Entries.ToDictionary(row => row.Id);
+        var next = entries.ToArray();
+        var nextIds = next.Select(entry => entry.Id).ToHashSet();
+        _batchEntries = true;
+        try
+        {
+            if (next.Length == 0) Entries.Clear();
+            else
+            {
+                for (var index = Entries.Count - 1; index >= 0; index--)
+                    if (!nextIds.Contains(Entries[index].Id)) Entries.RemoveAt(index);
+                foreach (var entry in next)
+                { if (byId.TryGetValue(entry.Id, out var row)) { if (row.Entry != entry) row.Update(entry); } else Entries.Add(new(entry)); }
+            }
+        }
+        finally
+        {
+            _batchEntries = false; _draftBytes = Entries.Sum(row => row.Entry.Size);
+            Notify(nameof(DraftSummary)); RefreshCommands();
+        }
+    }
+    private void Act(object? parameter, Func<FilePackTaskViewModel, Task> operation)
+    { if (parameter is FilePackTaskViewModel row && !_shuttingDown && !_disposed) Track(HandleActionAsync(row, operation)); }
+    private async Task HandleActionAsync(FilePackTaskViewModel row, Func<FilePackTaskViewModel, Task> operation)
+    {
+        try
+        {
+            await operation(row);
+            var tasks = Manager.Tasks;
+            foreach (var removed in Tasks.Where(item => !tasks.Any(info => info.TaskId == item.TaskId)).ToArray())
+            { Tasks.Remove(removed); _rows.Remove(removed.TaskId); }
+            NotifyTaskState();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception exception) when (IsExpected(exception)) { Notice = $"操作未能完成：{exception.Message}"; }
+    }
+    private void SavePreferences() => Track(SavePreferencesCoreAsync());
+    private async Task<bool> SavePreferencesCoreAsync(bool throwOnFailure = false)
+    {
+        await _preferencesGate.WaitAsync();
+        try
+        {
+            if (!_loaded || _disposed) return true;
+            await Manager.SavePreferencesAsync(new(MaximumParallel, OutputDirectory, AskOutputEachTime, KeepExternalWorkspace));
+            return true;
+        }
+        catch (Exception exception) when (IsExpected(exception))
+        { Notice = $"设置未能保存：{exception.Message}"; if (throwOnFailure) throw; return false; }
+        finally { _preferencesGate.Release(); }
+    }
+    private void Track(Task operation)
+    {
+        if (operation.IsCompleted) return;
+        if (!_operations.Add(operation)) return;
+        _ = ObserveAsync(operation);
+    }
+    private async Task ObserveAsync(Task operation)
+    {
+        try { await operation; }
+        catch (OperationCanceledException) { }
+        catch (Exception exception) { if (!_disposed) Notice = $"操作未能完成：{exception.Message}"; }
+        finally { _operations.Remove(operation); }
+    }
+    private void DraftStateChanged() { Notify(nameof(CanEditDraft)); NotifyTaskState(); RefreshCommands(); }
+    private void NotifyTaskState()
+    { Notify(nameof(HasUnfinishedTasks)); Notify(nameof(Status)); Notify(nameof(RunningCount)); Notify(nameof(WaitingCount)); Notify(nameof(CompletedCount));
+        Notify(nameof(FailedCount)); Notify(nameof(ExternalCount)); Notify(nameof(TaskSummary)); }
+    private void RefreshCommands()
+    { AddFilesCommand.Refresh(); AddFoldersCommand.Refresh(); RemoveSelectedCommand.Refresh(); ClearCommand.Refresh(); AddVirtualFolderCommand.Refresh();
+        MoveSelectedCommand.Refresh(); CheckDuplicatesCommand.Refresh(); BrowseOutputCommand.Refresh(); CreateTaskCommand.Refresh(); CancelCollectionCommand.Refresh(); }
+
+    public async Task FlushAsync()
+    {
+        if (_initializing is not null) await _initializing;
+        if (_loaded && !_disposed) await SavePreferencesCoreAsync(throwOnFailure: true);
+    }
+    public Task ShutdownAsync()
+    {
+        if (_shutdownTask is { IsFaulted: true } or { IsCanceled: true }) _shutdownTask = null;
+        return _shutdownTask ??= ShutdownCoreAsync();
+    }
+    private async Task ShutdownCoreAsync()
+    {
+        _shuttingDown = true; _lifetime.Cancel(); _collectionCancellation?.Cancel(); DraftStateChanged();
+        while (_operations.Count > 0)
+        { try { await Task.WhenAll(_operations.ToArray()); } catch (Exception exception) when (exception is OperationCanceledException || IsExpected(exception)) { }
+            _operations.RemoveWhere(task => task.IsCompleted); }
+        if (_initializing is not null) { await _initializing; await FlushAsync(); await Manager.ShutdownAsync(); }
+        _openWhenPrepared.Clear(); NotifyTaskState();
+    }
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true; _shuttingDown = true; _lifetime.Cancel(); _collectionCancellation?.Cancel();
+        Manager.TaskChanged -= TaskChanged; _openWhenPrepared.Clear();
+        _ = DisposeManagerAsync();
+    }
+    private async Task DisposeManagerAsync()
+    { try { await Manager.DisposeAsync(); } catch (Exception) { /* Normal shutdown reports failures before disposal. */ } }
+    public async ValueTask DisposeAsync() { await ShutdownAsync(); Dispose(); }
+    internal static bool IsExpected(Exception exception) => exception is IOException or UnauthorizedAccessException or ArgumentException or
+        InvalidOperationException or System.ComponentModel.Win32Exception or System.Security.SecurityException or NotSupportedException;
+    public static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        double size = bytes; string[] units = ["KB", "MB", "GB", "TB"];
+        foreach (var unit in units) { size /= 1024; if (size < 1024 || unit == units[^1]) return $"{size:0.#} {unit}"; }
+        return "";
+    }
+}

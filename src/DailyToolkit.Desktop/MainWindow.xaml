@@ -4,6 +4,7 @@
         xmlns:controls="clr-namespace:DailyToolkit.Desktop.Controls"
         xmlns:notes="clr-namespace:DailyToolkit.Desktop.Notes"
         xmlns:clip="clr-namespace:DailyToolkit.Desktop.ClipRecall"
+        xmlns:filepack="clr-namespace:DailyToolkit.Desktop.FilePack"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="DailyToolkit" Icon="Assets/dt.ico" Width="1040" Height="800" MinWidth="680" MinHeight="540"
         FontFamily="Microsoft YaHei UI" FontSize="14"
@@ -119,6 +120,9 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding DataContext.ShowClipRecall, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
                   <Setter Property="Visibility" Value="Visible"/><Setter Property="DataContext" Value="{Binding DataContext.ClipRecall, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding DataContext.ShowFilePack, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                  <Setter Property="Visibility" Value="Visible"/><Setter Property="DataContext" Value="{Binding DataContext.FilePack, RelativeSource={RelativeSource AncestorType=Window}}"/>
                 </DataTrigger>
               </Style.Triggers>
             </Style></Button.Style>
@@ -343,6 +347,9 @@
       <clip:ClipboardSettingsView x:Name="ClipRecallSettings" Grid.Row="1"
                     Visibility="{Binding DataContext.ShowClipRecall, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
                     DataContext="{Binding ClipRecall}" />
+      <filepack:FilePackView x:Name="FilePackWorkbench" Grid.Row="1"
+                    Visibility="{Binding DataContext.ShowFilePack, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
+                    DataContext="{Binding FilePack}" />
       <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     Visibility="{Binding ShowSettingsContent, Converter={StaticResource VisibleWhen}}">
         <StackPanel Margin="0,0,8,0">
@@ -463,6 +470,14 @@
               <TextBlock Text="作者：YMXKNebula" Style="{StaticResource MutedText}" Margin="0,0,0,8" />
               <TextBlock Text="代码许可证：MIT" Style="{StaticResource MutedText}" />
               <TextBlock Margin="0,14,0,0"><Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">项目主页</Hyperlink></TextBlock>
+              <Expander Header="第三方许可" Foreground="{DynamicResource MutedBrush}" Margin="0,14,0,0">
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Text="7-Zip Extra 26.04" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" />
+                  <TextBlock Text="GNU LGPL 2.1 或更新版本；部分代码采用 BSD 许可。" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,5,0,0" />
+                  <TextBlock Margin="0,8,0,0"><Hyperlink NavigateUri="https://www.7-zip.org/" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">7-Zip 项目</Hyperlink><Run Text="　"/><Hyperlink NavigateUri="https://github.com/ip7z/7zip/releases/tag/26.04" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">源码与下载</Hyperlink></TextBlock>
+                  <Button Content="查看许可与声明" Click="OpenThirdPartyNotices" HorizontalAlignment="Left" Padding="10,6" Margin="0,10,0,0" />
+                </StackPanel>
+              </Expander>
             </StackPanel>
           </Border>
         </StackPanel>

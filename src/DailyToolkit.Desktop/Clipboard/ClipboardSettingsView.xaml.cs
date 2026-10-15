@@ -31,6 +31,12 @@ public partial class ClipboardSettingsView : UserControl
     private void UpdatePalettePreview() => Model?.ApplyAppearance(PalettePreview.Resources, draft: true);
     private void OpenPanel(object sender, RoutedEventArgs e) { if (Model is { } model) { model.SavedOnly = false; model.OpenPanel(); } }
     private void OpenSaved(object sender, RoutedEventArgs e) { if (Model is { } model) { model.SavedOnly = true; model.OpenPanel(); } }
+    private void OpenDataMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.ContextMenu is not { } menu) return;
+        menu.PlacementTarget = button;
+        menu.IsOpen = true;
+    }
     private void ShortcutFocus(object sender, KeyboardFocusChangedEventArgs e) => ShortcutEditing?.Invoke(true);
     private void ShortcutBlur(object sender, KeyboardFocusChangedEventArgs e) => ShortcutEditing?.Invoke(false);
     private void CaptureShortcut(object sender, KeyEventArgs e)

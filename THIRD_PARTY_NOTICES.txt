@@ -1,5 +1,15 @@
 DailyToolkit - third-party components
 
+7-Zip Extra 26.04 (standalone 7za.exe, unmodified)
+Copyright (C) 1999-2026 Igor Pavlov.
+GNU LGPL 2.1 or later, with BSD 3-clause and BSD 2-clause code portions.
+Used by the FilePack module as a separate local process for ZIP, 7z and TAR.
+Full official distribution notices: tools/7zip/License.txt and Readme.txt.
+Exact version, executable hashes and source retrieval: tools/7zip/SOURCE.txt.
+https://www.7-zip.org/
+https://github.com/ip7z/7zip/releases/tag/26.04
+Corresponding source: https://github.com/ip7z/7zip/releases/download/26.04/7z2604-src.7z
+
 The application packages include the following components under the MIT License:
 
 AMD FidelityFX Contrast Adaptive Sharpening (adapted CAS filter weights)

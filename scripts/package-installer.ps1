@@ -13,7 +13,9 @@ if ((Get-Item -LiteralPath $executable).VersionInfo.ProductVersion -notmatch ('^
 }
 $expected = @('DailyToolkit.exe','LICENSE-DailyToolkit.txt','README.txt','THIRD_PARTY_NOTICES.txt',
     'microsoft.netcore.app.runtime-LICENSE.TXT','microsoft.netcore.app.runtime-THIRD-PARTY-NOTICES.TXT',
-    'microsoft.windowsdesktop.app.runtime-LICENSE','licenses\Windows-SDK-License.rtf')
+    'microsoft.windowsdesktop.app.runtime-LICENSE','licenses\Windows-SDK-License.rtf',
+    'tools\7zip\7za.exe','tools\7zip\License.txt','tools\7zip\Readme.txt','tools\7zip\SOURCE.txt',
+    'tools\7zip\COPYING.txt','tools\7zip\7z2604-src.7z')
 $actual = @(Get-ChildItem -LiteralPath $PayloadDirectory -Recurse -File | ForEach-Object {
     [IO.Path]::GetRelativePath($PayloadDirectory, $_.FullName)
 })

@@ -5,6 +5,8 @@
   <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="8,6"/></Style>
   <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Style>
+  <Style TargetType="MenuItem"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Style>
+  <Style TargetType="ContextMenu"><Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/></Style>
  </UserControl.Resources>
  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
   <StackPanel Margin="0,0,8,0" IsEnabled="{Binding IsLoaded}">
@@ -78,13 +80,23 @@
     <TextBox Text="{Binding ExcludedApplications, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" Height="90" VerticalScrollBarVisibility="Auto" MaxLength="10000" AutomationProperties.Name="排除应用列表"/>
     <TextBlock Text="无法自动识别所有密码或私人资料，复制前请暂停记录。来源明确禁止保存历史的内容会跳过。加密记录通常只能在原 Windows 用户和电脑上读取。" Style="{StaticResource MutedText}" Margin="0,10,0,0"/>
    </StackPanel></Border>
-   <Border Style="{StaticResource Card}"><StackPanel>
+   <Border x:Name="DataManagementCard" Style="{StaticResource Card}"><StackPanel>
     <TextBlock Text="数据管理" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
     <TextBlock Text="{Binding StorageText}" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,12"/>
-    <WrapPanel><Button Content="历史记录" Click="OpenPanel" Margin="0,0,8,8"/><Button Content="永久保存记录" Click="OpenSaved" Margin="0,0,8,8"/><Button Content="清空普通历史" Click="ClearOrdinary" Margin="0,0,8,8"/><Button Content="清空全部历史" Click="ClearAll" Margin="0,0,0,8"/></WrapPanel>
-    <WrapPanel><Button Content="打开数据目录" Click="OpenDirectory" Margin="0,0,8,8"/><Button Content="创建加密备份" Click="Backup" Margin="0,0,8,8"/><Button Content="恢复最近备份" Click="RestoreBackup" Margin="0,0,0,8"/></WrapPanel>
-    <WrapPanel><Button Content="重试保存设置" Click="SaveSettings" Margin="0,0,8,8"/><Button Content="恢复默认设置" Click="ResetSettings" Margin="0,0,0,8"/></WrapPanel>
-    <TextBlock Text="删除记录可在 12 秒内撤销；清空历史无法撤销，且会移除最近备份。恢复备份前请暂停监听。" Style="{StaticResource MutedText}"/>
+    <WrapPanel>
+     <Button Content="历史记录" Click="OpenPanel" Margin="0,0,8,8"/>
+     <Button Content="永久保存" Click="OpenSaved" Margin="0,0,8,8"/>
+     <Button x:Name="DataManagementMoreButton" Content="更多" Click="OpenDataMenu" Margin="0,0,0,8" AutomationProperties.Name="更多数据管理操作">
+      <Button.ContextMenu><ContextMenu Placement="Bottom" DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+        FontFamily="{Binding PlacementTarget.FontFamily, RelativeSource={RelativeSource Self}}" FontSize="{Binding PlacementTarget.FontSize, RelativeSource={RelativeSource Self}}">
+       <MenuItem Header="清空普通历史" Click="ClearOrdinary"/><MenuItem Header="清空全部历史" Click="ClearAll"/>
+       <Separator/>
+       <MenuItem Header="打开数据目录" Click="OpenDirectory"/><MenuItem Header="创建加密备份" Click="Backup"/><MenuItem Header="恢复最近备份" Click="RestoreBackup"/>
+       <Separator/>
+       <MenuItem Header="重试保存设置" Click="SaveSettings"/><MenuItem Header="恢复默认设置" Click="ResetSettings"/>
+      </ContextMenu></Button.ContextMenu>
+     </Button>
+    </WrapPanel>
    </StackPanel></Border>
    <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Foreground="{DynamicResource AccentBrush}" Margin="0,12,0,0"/>
   </StackPanel>

@@ -23,6 +23,17 @@ tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyTo
 .\src\DailyToolkit.Desktop\bin\Release\net10.0-windows10.0.26100.0\DailyToolkit.exe
 ```
 
+## 文件集装箱检查
+
+核心测试包含收集、规划、原件不变和工作区清理。以下集成检查使用随程序提供的官方引擎、临时样本和独立 Windows 窗口站，不操作正在运行的应用或发送实机输入：
+
+```powershell
+$env:DAILYTOOLKIT_FILEPACK_CROSS_VOLUME_ROOT = '<另一磁盘的临时目录>'
+tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyToolkit.Desktop.Tests.exe --clipboard-native-filepack-checks <预览图片目录>
+```
+
+包含真实 ZIP/7z/TAR、各压缩等级、映射回退、外部工作区、并发二/四进程、独立取消、输出冲突与恢复。未设置另一磁盘临时根时跨盘检查明确跳过。源码中的独立引擎来自官方 26.04 Extra，x64 和 arm64 按发布 RuntimeIdentifier 选择；许可和来源哈希随包复制。
+
 ## 打包
 
 先生成便携版：

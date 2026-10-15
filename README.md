@@ -1,8 +1,8 @@
 # DailyToolkit
 
-Windows 桌面工具集，提供放大镜、浮笺、剪贴回溯和电脑信息查看。
+Windows 桌面工具集，提供放大镜、浮笺、剪贴回溯、文件集装箱和电脑信息查看。
 
-[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [0.7.12 更新说明](docs/RELEASE_0712.md)
+[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [0.8.0 更新说明](docs/RELEASE_080.md)
 
 ## 下载和运行
 
@@ -61,6 +61,12 @@ Windows 桌面工具集，提供放大镜、浮笺、剪贴回溯和电脑信息
 文件默认只记路径；开启“文件夹缓存”后，会保存大小限制内的新文件副本。成功缓存后，即使原文件删除，也能重新复制。历史面板有独立配色预设，也可以自定义颜色。
 
 功能默认关闭，记录在本机加密保存。复制密码等敏感内容前，可以暂停记录或排除来源应用。详细操作与容量设置见 [剪贴回溯说明](docs/CLIPRECALL.md)。
+
+## 文件集装箱
+
+将不同文件夹、不同磁盘的文件一起打包，支持拖入、改包内路径和新建包内文件夹。内置 ZIP、7z、TAR，也可以整理到独立工作区，交给自己常用的压缩软件。
+
+每个任务可以单独取消或重试；默认同时压缩两个任务，最多四个。切换工具或收进托盘时继续打包。详细操作见 [文件集装箱说明](docs/FILEPACK.md)。
 
 ## 主题、收藏与后台运行
 

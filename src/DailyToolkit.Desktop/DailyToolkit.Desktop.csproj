@@ -23,4 +23,10 @@
     <InternalsVisibleTo Include="DailyToolkit.Desktop.Tests" />
     <InternalsVisibleTo Include="DailyToolkit.LensAiPrototype" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Tools/7zip/win-x64/7za.exe" Condition="'$(RuntimeIdentifier)' != 'win-arm64'" Link="tools/7zip/7za.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="Tools/7zip/win-arm64/7za.exe" Condition="'$(RuntimeIdentifier)' == 'win-arm64'" Link="tools/7zip/7za.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="Tools/7zip/*.txt" Link="tools/7zip/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="Tools/7zip/7z2604-src.7z" Link="tools/7zip/7z2604-src.7z" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
 </Project>

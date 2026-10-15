@@ -1,0 +1,34 @@
+7-Zip Extra 26.04 (2026-10-05)
+Copyright (C) 1999-2026 Igor Pavlov.
+
+DailyToolkit distributes the unmodified official standalone 7za.exe.
+It creates ZIP, 7z and TAR without an additional DLL. The official Windows
+Extra package calls this binary 7za.exe, not 7zz.exe. Reduced extraction
+format support does not affect the three creation formats used by FilePack.
+
+License: GNU LGPL 2.1 or later, plus BSD 3-clause and BSD 2-clause portions.
+The original distribution notices are in License.txt and Readme.txt.
+The full GNU LGPL 2.1 text is in COPYING.txt. The exact corresponding official
+source is included alongside this file as 7z2604-src.7z (SHA256 below).
+This executable runs as a separate process, and users may replace it with
+a compatible official build. DailyToolkit does not modify 7-Zip code.
+
+Official download: https://www.7-zip.org/download.html
+Exact binary package:
+https://github.com/ip7z/7zip/releases/download/26.04/7z2604-extra.7z
+Corresponding source:
+https://github.com/ip7z/7zip/releases/download/26.04/7z2604-src.7z
+Source repository: https://github.com/ip7z/7zip/tree/26.04
+
+7z2604-src.7z SHA256:
+6bcfd2679d178174df06d09d50147dd7b5980d7beac896136689dfc9d51e0fd9
+
+SHA256 verified against GitHub's official release asset digest:
+7z2604-extra.7z:
+dc4b11d3399db18b063630137145f5585d8f7ac847bf3639bd1185d7d1f7cee0
+
+SHA256 of the extracted, unmodified executables:
+win-x64/7za.exe:
+15d4c788c148e3677e2fc1c4a01f191fb6669eba4f6acf8a465f0f1a6f1e1260
+win-arm64/7za.exe:
+88aea89faa900ea6c5f3723d5b62924328f079ae5ddcbca32248a08aeceea230

@@ -69,6 +69,12 @@ Source: "{#PayloadDir}\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignore
 Source: "{#PayloadDir}\microsoft.*.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\microsoft.windowsdesktop.app.runtime-LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\licenses\Windows-SDK-License.rtf"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "{#PayloadDir}\tools\7zip\7za.exe"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
+Source: "{#PayloadDir}\tools\7zip\License.txt"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
+Source: "{#PayloadDir}\tools\7zip\Readme.txt"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
+Source: "{#PayloadDir}\tools\7zip\SOURCE.txt"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
+Source: "{#PayloadDir}\tools\7zip\COPYING.txt"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
+Source: "{#PayloadDir}\tools\7zip\7z2604-src.7z"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
 Source: "..\docs\INSTALLER_README.txt"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion
 
 [Icons]

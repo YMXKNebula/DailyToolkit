@@ -13,12 +13,19 @@ namespace DailyToolkit.Desktop.Tests;
 
 internal static partial class Program
 {
-    private static void SaveClipboardVisual(FrameworkElement visual, string directory, string name)
+    private static void SaveClipboardVisual(FrameworkElement visual, string directory, string name, bool contentOnly = false)
     {
         visual.UpdateLayout(); var dpi = VisualTreeHelper.GetDpi(visual);
         var bitmap = new RenderTargetBitmap((int)Math.Ceiling(visual.ActualWidth * dpi.DpiScaleX),
             (int)Math.Ceiling(visual.ActualHeight * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
-        bitmap.Render(visual); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        if (contentOnly)
+        {
+            var drawing = new DrawingVisual();
+            using (var context = drawing.RenderOpen()) context.DrawRectangle(new VisualBrush(visual), null, new Rect(0, 0, visual.ActualWidth, visual.ActualHeight));
+            bitmap.Render(drawing);
+        }
+        else bitmap.Render(visual);
+        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
         Directory.CreateDirectory(directory); using var file = File.Create(Path.Combine(directory, name + ".png")); encoder.Save(file);
     }
     private static async Task CheckClipboardVisualsAsync(string images)
@@ -106,6 +113,25 @@ internal static partial class Program
             ((ScrollViewer)view.Content).ScrollToVerticalOffset(980);
             await settingsWindow.Dispatcher.InvokeAsync(settingsWindow.UpdateLayout, DispatcherPriority.ContextIdle);
             SaveClipboardVisual(view, images, "settings-files");
+            ((ScrollViewer)view.Content).ScrollToBottom();
+            await settingsWindow.Dispatcher.InvokeAsync(settingsWindow.UpdateLayout, DispatcherPriority.ContextIdle);
+            var dataCard = (Border)view.FindName("DataManagementCard");
+            SaveClipboardVisual(dataCard, images, "data-management", contentOnly: true);
+            var more = (Button)view.FindName("DataManagementMoreButton");
+            more.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await settingsWindow.Dispatcher.InvokeAsync(settingsWindow.UpdateLayout, DispatcherPriority.ContextIdle);
+            Require(more.ContextMenu is { IsOpen: true } menu && menu.PlacementTarget == more && menu.DataContext == model,
+                "Data-management menu did not open on click or lost its model");
+            SaveClipboardVisual(more.ContextMenu!, images, "data-management-menu");
+            more.ContextMenu!.IsOpen = false;
+            model.ApplyAppearance(settingsWindow.Resources);
+            settingsWindow.Foreground = (Brush)settingsWindow.FindResource("TextBrush");
+            settingsWindow.Background = (Brush)settingsWindow.FindResource("WindowBrush"); view.Background = settingsWindow.Background;
+            SaveClipboardVisual(dataCard, images, "data-management-deepsea", contentOnly: true);
+            more.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await settingsWindow.Dispatcher.InvokeAsync(settingsWindow.UpdateLayout, DispatcherPriority.ContextIdle);
+            SaveClipboardVisual(more.ContextMenu!, images, "data-management-menu-deepsea");
+            more.ContextMenu!.IsOpen = false;
             Console.WriteLine($"PASS Isolated clipboard panel placement on {areas.Count} available monitor work areas, independent light/deep-sea palettes and settings rendering; images: {Path.GetFullPath(images)}");
         }
         finally { panel?.CloseRuntime(); settingsWindow?.Close(); await model.DisposeAsync(); DeleteClipboardFixture(directory); }

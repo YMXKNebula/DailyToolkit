@@ -13,8 +13,20 @@ DailyToolkit 是 Windows 本地工具集。桌面界面使用 WPF，公共代码
 | `src/DailyToolkit.Desktop/Gaming` | 放大运行会话、原生窗口、捕获与显卡渲染 |
 | `src/DailyToolkit.Core/Notes` | 浮笺设置、坐标恢复与拖动阈值规则 |
 | `src/DailyToolkit.Desktop/Notes` | 浮笺窗口、设置页、生命周期、焦点、热键和异步存储 |
+| `src/DailyToolkit.Core/FilePack` | 文件清单、路径规划、独立工作区、原生压缩进程和任务调度 |
+| `src/DailyToolkit.Desktop/FilePack` | 文件集装箱工作台、对话框和独立任务展示 |
 | `tests` | 适配、进程通信及界面生命周期检查 |
 | `scripts` | 编译和打包 |
+
+## 文件集装箱
+
+`FileCollectionService` 只读收集来源并创建条目快照，`PackPlanner` 决定按来源目录分批直接读取，或按清单准备临时副本。`FilePackWorkspaceManager` 验证 SessionId、TaskId、归属标记和重解析路径；所有清理都限定在本任务工作区。`SevenZipAdapter` 使用 `ArgumentList` 和 UTF-8 清单调用官方独立进程，流式读取并限制日志大小，完成后执行完整性和路径/类型/大小检查。
+
+`FilePackManager` 事件驱动调度独立任务：内置默认二个、最多四个，外部准备另占一个受控复制名额。最终路径提前占用，先写同一文件系统的任务临时目录，校验后移动或原子替换。每任务配置单独保存，排队与运行任务重启后标为中断；已经准备好的外部工作区经过归属检查后恢复等待手动操作，不自动打开资源管理器。
+
+工作台沿用既有导航、收藏、主题、缩放和界面命令，首次打开才初始化存储。主窗口只接入页面和退出等待；切换工具不停止任务。界面不直接启动压缩进程或执行存储事务。
+
+每次原生压缩调用归属一个独立的 Windows Job Object，正常取消仅终止自己的进程，父程序异常退出也由 Windows 回收本次子进程。重启不依据持久化 PID 终止进程。
 
 ## 浮笺
 
