@@ -190,12 +190,14 @@ internal static partial class Program
                 model.Cancel(); await first;
                 Require(!model.IsBusy && model.CanUpdate && model.Status == "已取消更新。", "Cancelled update left controls busy.");
             }
-            using (var handler = new UpdateHandler((_, _) => Task.FromResult(UpdateResponse(UpdateMetadata(payload)))))
+            var currentVersion = Version.Parse(MainViewModel.ApplicationVersion);
+            var newerVersion = new Version(currentVersion.Major, currentVersion.Minor, currentVersion.Build + 1).ToString(3);
+            using (var handler = new UpdateHandler((_, _) => Task.FromResult(UpdateResponse(UpdateMetadata(payload, version: newerVersion)))))
             using (var client = new HttpClient(handler))
             using (var model = new AppUpdateViewModel(new(client)))
             {
                 await model.RunAsync();
-                Require(model.ActionText == "更新" && model.Status.Contains("0.8.0") && model.CanUpdate,
+                Require(model.ActionText == "更新" && model.Status.Contains(newerVersion) && model.CanUpdate,
                     "New release did not enable the update button.");
             }
             Console.WriteLine("PASS Update controls avoid background requests, serialize clicks and recover after cancellation");
