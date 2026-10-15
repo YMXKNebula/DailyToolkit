@@ -51,6 +51,16 @@ jobs:
       - name: Check installer lifecycle
         shell: pwsh
         run: ./scripts/test-installer.ps1 -Compiler (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
+      - name: Keep installer failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-check-diagnostics
+          path: |
+            .local/installer-tests/*.log
+            .local/installer-tests/*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
           name: DailyToolkit-win-x64

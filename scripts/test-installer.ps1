@@ -29,10 +29,18 @@ function Assert-Installer([bool]$condition, [string]$message) {
     if (-not $condition) { throw $message }
 }
 function Invoke-TestSetup([string]$file, [string]$label, [string[]]$extra = @()) {
+    $elapsed = [Diagnostics.Stopwatch]::StartNew()
     $arguments = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/LOG="' + (Join-Path $work "$label.log") + '"')) + $extra
     $process = Start-Process -FilePath $file -ArgumentList $arguments -WindowStyle Hidden -PassThru
     if (-not $process.WaitForExit(45000)) { throw "$label did not finish; no process was force-closed." }
     $exitCode = $process.ExitCode
+    Write-Host ("Installer check {0}: exit={1}, elapsed={2} ms" -f $label, $exitCode, $elapsed.ElapsedMilliseconds)
+    if ($null -eq $exitCode -or $exitCode -ne 0) {
+        $diagnostic = Join-Path $work "$label.log"
+        if (Test-Path -LiteralPath $diagnostic) {
+            Get-Content -LiteralPath $diagnostic -Tail 80 | ForEach-Object { Write-Host $_ }
+        }
+    }
     if ($exitCode -eq 0 -and [IO.Path]::GetFileName($file) -match '^unins\d+\.exe$') {
         # Inno's separate self-deletion helper can finish after the process exits.
         $deadline = [DateTime]::UtcNow.AddSeconds(5)
@@ -182,6 +190,13 @@ try {
 } catch {
     [pscustomobject]@{Error=$_.Exception.Message; Position=$_.InvocationInfo.PositionMessage; Stack=$_.ScriptStackTrace; PassedChecks=$checks} |
         ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $work 'failure.json') -Encoding utf8
+    Get-Content -LiteralPath (Join-Path $work 'failure.json') | ForEach-Object { Write-Host $_ }
+    if ($hostProcess) {
+        Write-Host ("Installer test host: id={0}, exited={1}" -f $hostProcess.Id, $hostProcess.HasExited)
+    }
+    foreach ($fixture in @('saved-upgrade-ready.json.exit-request','saved-note.txt','installed\update-restarted.txt')) {
+        Write-Host ("Installer test fixture {0}: exists={1}" -f $fixture, (Test-Path -LiteralPath (Join-Path $work $fixture)))
+    }
     throw
 } finally {
     Stop-TestHost
