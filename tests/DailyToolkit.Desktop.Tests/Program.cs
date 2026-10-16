@@ -70,7 +70,7 @@ internal static partial class Program
                 if (args is ["--clipboard-native-checks"])
                 { await CheckClipboardNativeAsync(); await CheckClipboardNativeMediaAsync(); exitCode = 0; return; }
                 if (args is ["--clipboard-shortcut-checks"])
-                { await CheckClipboardNativeShortcutsAsync(); exitCode = 0; return; }
+                { await CheckClipboardNativeShortcutsAsync(); await CheckFilePackShortcutNoticesAsync(); exitCode = 0; return; }
                 if (args is ["--clipboard-native-visuals", var clipboardImages])
                 { await CheckClipboardVisualsAsync(clipboardImages); exitCode = 0; return; }
                 if (args is ["--clipboard-native-palette-checks", var paletteImages])

@@ -8,11 +8,10 @@
  <Border x:Name="WindowFrame" Focusable="True" Background="{DynamicResource WindowBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="16,10,16,16">
   <Grid shell:WindowChrome.IsHitTestVisibleInChrome="True"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
    <Grid Height="30" Background="Transparent" Margin="0,0,0,12" shell:WindowChrome.IsHitTestVisibleInChrome="False">
-    <TextBlock x:Name="WindowTitle" Text="文件集装箱" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold"/>
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" shell:WindowChrome.IsHitTestVisibleInChrome="True">
-     <Button Content="−" Click="MinimizeWindow" Width="30" Height="28" Padding="0" Focusable="False" ToolTip="最小化" AutomationProperties.Name="最小化文件集装箱" Margin="0,0,6,0"/>
-     <Button Content="×" Click="HideWindow" Width="30" Height="28" Padding="0" Focusable="False" ToolTip="关闭（Esc）" AutomationProperties.Name="关闭文件集装箱"/>
-    </StackPanel>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <TextBlock x:Name="WindowTitle" Text="文件集装箱" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+    <Button x:Name="MinimizeButton" Grid.Column="1" Content="−" Click="MinimizeWindow" Width="30" Height="28" Padding="0" Focusable="False" ToolTip="最小化" AutomationProperties.Name="最小化文件集装箱" Margin="0,0,6,0" shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
+    <Button x:Name="CloseButton" Grid.Column="2" Content="×" Click="HideWindow" Width="30" Height="28" Padding="0" Focusable="False" ToolTip="关闭（Esc）" AutomationProperties.Name="关闭文件集装箱" shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
    </Grid>
    <ContentControl x:Name="Body" Grid.Row="1"/>
   </Grid>

@@ -9,8 +9,10 @@ public sealed partial class FilePackViewModel
     private bool _enabled = true, _settingsLoaded, _settingsDirty;
     private KeyboardShortcut? _toggleShortcut = new(3, 0x50, "Ctrl + Alt + P");
     private QuickPackPreferences _quickPack = new();
+    // Keep older settings-page colors in storage; the page now uses application resources.
     private Dictionary<string, string> _settingsColors = [], _packColors = [], _quickColors = [];
     private FilePackAppearance _selectedAppearance = null!;
+    private string _shortcutNotice = "";
     public Task SettingsReady { get; private set; } = Task.CompletedTask;
     public bool SettingsLoaded => _settingsLoaded;
     public bool IsEnabled => _enabled;
@@ -23,7 +25,6 @@ public sealed partial class FilePackViewModel
     public RelayCommand OpenPackWindowCommand { get; private set; } = null!;
     public RelayCommand QuickPackCommand { get; private set; } = null!;
     public RelayCommand BrowseQuickOutputCommand { get; private set; } = null!;
-    public FilePackAppearance SettingsAppearance { get; private set; } = null!;
     public FilePackAppearance PackAppearance { get; private set; } = null!;
     public FilePackAppearance QuickAppearance { get; private set; } = null!;
     public IReadOnlyList<FilePackAppearance> Appearances { get; private set; } = [];
@@ -39,10 +40,9 @@ public sealed partial class FilePackViewModel
         _quickPack = _quickPack with { ArchiveName = value }; Notify(); SavePreferences(); } }
     private void InitializeSettings()
     {
-        SettingsAppearance = new("功能设置", palette => SavePaletteAsync(0, palette));
         PackAppearance = new("详细打包", palette => SavePaletteAsync(1, palette));
         QuickAppearance = new("快速装载", palette => SavePaletteAsync(2, palette));
-        Appearances = [SettingsAppearance, PackAppearance, QuickAppearance]; _selectedAppearance = QuickAppearance;
+        Appearances = [PackAppearance, QuickAppearance]; _selectedAppearance = QuickAppearance;
         ToggleEnabledCommand = new(_ => Track(SetEnabledAsync(!IsEnabled)));
         OpenQuickWindowCommand = new(_ => QuickWindowRequested?.Invoke(), () => IsEnabled && !_shuttingDown);
         OpenPackWindowCommand = new(_ => PackWindowRequested?.Invoke());
@@ -64,7 +64,7 @@ public sealed partial class FilePackViewModel
             _maximumParallel = preferences.MaximumParallel; _outputDirectory = preferences.LastOutputDirectory;
             _askOutputEachTime = preferences.AskOutputEachTime; _keepExternalWorkspace = preferences.KeepExternalWorkspace;
             _settingsColors = preferences.SettingsColors; _packColors = preferences.PackWindowColors; _quickColors = preferences.QuickWindowColors;
-            SettingsAppearance.Load(preferences.SettingsColors); PackAppearance.Load(preferences.PackWindowColors);
+            PackAppearance.Load(preferences.PackWindowColors);
             QuickAppearance.Load(preferences.QuickWindowColors);
             Notice = string.Join(System.Environment.NewLine, Store.Diagnostics);
         }
@@ -85,8 +85,9 @@ public sealed partial class FilePackViewModel
     public bool SetShortcut(KeyboardShortcut? shortcut, IEnumerable<KeyboardShortcut?> reserved)
     {
         if (!_settingsLoaded || _disposed || _shuttingDown) return false;
-        if (shortcut is { IsValid: false }) { Notice = "快捷键无效。"; return false; }
-        if (shortcut is not null && reserved.Any(shortcut.Matches)) { Notice = "此快捷键与其他工具冲突。"; return false; }
+        if (shortcut is { IsValid: false }) { SetShortcutNotice("快捷键无效。"); return false; }
+        if (shortcut is not null && reserved.Any(shortcut.Matches)) { SetShortcutNotice("此快捷键与其他工具冲突。"); return false; }
+        SetShortcutNotice("");
         _toggleShortcut = shortcut; Notify(nameof(ToggleShortcut)); Notify(nameof(ShortcutText)); SavePreferences(); return true;
     }
     private FilePackPreferences CurrentPreferences() => new(MaximumParallel, OutputDirectory, AskOutputEachTime, KeepExternalWorkspace)
@@ -103,16 +104,22 @@ public sealed partial class FilePackViewModel
             if (_disposed) return false;
             var colors = FilePackAppearance.Colors(palette);
             var next = CurrentPreferences();
-            next = target switch { 0 => next with { SettingsColors = colors }, 1 => next with { PackWindowColors = colors },
+            next = target switch { 1 => next with { PackWindowColors = colors },
                 _ => next with { QuickWindowColors = colors } };
             if (_loaded) await Manager.SavePreferencesAsync(next); else await Store.SavePreferencesAsync(next);
             // Commit persisted colors under the same gate as ordinary preferences;
             // a queued preference write must not race the appearance notification.
-            if (target == 0) _settingsColors = colors; else if (target == 1) _packColors = colors; else _quickColors = colors;
+            if (target == 1) _packColors = colors; else _quickColors = colors;
             return true;
         }
         catch (Exception exception) when (IsExpected(exception)) { Notice = "配色未能保存，请检查空间或权限。"; return false; }
         finally { _preferencesGate.Release(); }
     }
     internal void SetNotice(string notice) => Notice = notice;
+    internal void SetShortcutNotice(string notice)
+    {
+        if (notice.Length > 0) Notice = notice;
+        else if (Notice == _shortcutNotice) Notice = "";
+        _shortcutNotice = notice;
+    }
 }

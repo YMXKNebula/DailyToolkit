@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Shell;
@@ -22,6 +23,13 @@ public partial class FilePackWindow : Window
         Width = quick ? 480 : 1080; Height = quick ? 440 : 780;
         MinWidth = _minimumWidth = quick ? 380 : 680; MinHeight = _minimumHeight = quick ? 320 : 540;
         Title = quick ? "文件集装箱 · 快速装载" : "文件集装箱 · 详细打包"; WindowTitle.Text = Title;
+        if (quick)
+        {
+            var header = (Grid)WindowTitle.Parent;
+            header.ColumnDefinitions[0].Width = GridLength.Auto; header.ColumnDefinitions[1].Width = new(1, GridUnitType.Star);
+            Grid.SetColumn(MinimizeButton, 0); MinimizeButton.Margin = new(0);
+            Grid.SetColumn(WindowTitle, 1); WindowTitle.HorizontalAlignment = HorizontalAlignment.Center; WindowTitle.Margin = new(8, 0, 8, 0);
+        }
         Body.Content = quick ? new FilePackQuickView() : new FilePackView();
         _appearance.Apply(Resources); _appearance.PropertyChanged += AppearanceChanged;
         SystemParameters.StaticPropertyChanged += SystemAppearanceChanged;

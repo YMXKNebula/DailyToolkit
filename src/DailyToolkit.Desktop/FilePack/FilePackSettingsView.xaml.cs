@@ -36,7 +36,7 @@ public partial class FilePackSettingsView : UserControl
     private void Changed(object? sender, PropertyChangedEventArgs e)
     { if (e.PropertyName is "" or nameof(SystemParameters.HighContrast) or nameof(FilePackViewModel.SelectedAppearance) or nameof(FilePackAppearance.Applied) or nameof(FilePackAppearance.Draft)) UpdateAppearance(); }
     private void UpdateAppearance()
-    { _model?.SettingsAppearance.Apply(Resources); _model?.SelectedAppearance.Apply(PalettePreview.Resources, draft: true); }
+    { _model?.SelectedAppearance.Apply(PalettePreview.Resources, draft: true); }
     private void ShortcutFocus(object sender, KeyboardFocusChangedEventArgs e) => ShortcutEditing?.Invoke(true);
     private void ShortcutBlur(object sender, KeyboardFocusChangedEventArgs e) => ShortcutEditing?.Invoke(false);
     private void CaptureShortcut(object sender, KeyEventArgs e)

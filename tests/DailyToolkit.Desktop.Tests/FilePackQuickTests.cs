@@ -47,6 +47,12 @@ internal static partial class Program
             controller.ToggleQuick();
             await WaitForFilePackAsync(() => controller.QuickWindow?.IsVisible == true, "Quick loading window did not open");
             var quick = controller.QuickWindow!;
+            quick.UpdateLayout();
+            var minimize = (Button)quick.FindName("MinimizeButton"); var close = (Button)quick.FindName("CloseButton");
+            var header = (Grid)minimize.Parent;
+            var minimizePosition = minimize.TranslatePoint(new Point(), header); var closePosition = close.TranslatePoint(new Point(), header);
+            Require(Math.Abs(minimizePosition.X) < 1 && Math.Abs(closePosition.X + close.ActualWidth - header.ActualWidth) < 1 &&
+                Math.Abs(minimizePosition.Y - closePosition.Y) < 1, "Quick minimize/close buttons were not at opposite ends of the top row");
             model.SetNotice("");
             var input = Path.Combine(fixture.FullName, "中文 空格.txt"); await File.WriteAllTextAsync(input, "quick packaging fixture");
             await model.AddPathsAsync([input]);
@@ -78,10 +84,37 @@ internal static partial class Program
             Require(fileBox.BorderThickness.Left == 1 && ((SolidColorBrush)fileBox.BorderBrush).Color ==
                 (Color)ColorConverter.ConvertFromString(model.QuickAppearance.Applied.Accent), "Quick files lacked separate boxes or a selected outline");
             var settingsView = new FilePackSettingsView { DataContext = model };
-            var settingsWindow = new Window { Content = settingsView, Width = 800, Height = 1020, ShowInTaskbar = false };
+            var settingsSurface = new Border { Child = settingsView };
+            settingsSurface.SetResourceReference(Border.BackgroundProperty, "AccentSoftBrush");
+            var settingsWindow = new Window { Content = settingsSurface, Width = 800, Height = 1020, ShowInTaskbar = false };
             settingsWindow.Show(); settingsWindow.UpdateLayout();
             try
             {
+                host.SelectThemePresetCommand.Execute(host.ThemePresets.Single(value => value.Name == "深海"));
+                host.ApplyTheme(settingsWindow.Resources); globalPalette = host.Theme;
+                settingsWindow.UpdateLayout();
+                CheckFilePackSettingsTheme(settingsView, globalPalette);
+                Require(model.Appearances.Count == 2 && model.Appearances.All(value => value == model.QuickAppearance || value == model.PackAppearance),
+                    "Settings page still exposed a palette overriding the application theme");
+                foreach (var appearance in model.Appearances)
+                { appearance.PresetCommand.Execute(appearance.Presets.Single(value => value.Name == "深海")); await appearance.PendingSave; }
+                foreach (var (width, height) in new[] { (380d, 320d), (480d, 440d), (720d, 600d) })
+                {
+                    quick.Width = width; quick.Height = height; quick.UpdateLayout();
+                    foreach (var control in FilePackDescendants(quick).OfType<Button>().Where(value => value.IsVisible))
+                    {
+                        var point = control.TranslatePoint(new Point(), quick);
+                        Require(point.X >= 0 && point.Y >= 0 && point.X + control.ActualWidth <= quick.ActualWidth + 1 &&
+                            point.Y + control.ActualHeight <= quick.ActualHeight + 1, "Quick window buttons overflowed at a supported size");
+                    }
+                    foreach (var scale in new[] { 1d, 1.25d, 1.5d, 2d })
+                        SaveFilePackFrame(quick, images, $"quick-dark-{width}x{height}-dpi-{scale * 100:0}", scale);
+                }
+                quick.Width = 480; quick.Height = 440;
+                foreach (var scale in new[] { 1d, 1.25d, 1.5d, 2d })
+                    SaveFilePackFrame(settingsWindow, images, $"settings-dark-dpi-{scale * 100:0}", scale);
+                detail.Show(); detail.UpdateLayout(); SaveFilePackFrame(detail, images, "detail-dark"); detail.Hide();
+                Console.WriteLine("PASS FilePack dark UI bounds at three window sizes and 100/125/150/200 percent DPI rendering; actual mixed-DPI transitions not simulated");
                 foreach (var appearance in model.Appearances)
                 {
                     model.SelectedAppearance = appearance;
@@ -97,6 +130,7 @@ internal static partial class Program
                     Require(appearance.Applied == applied && appearance.Draft.Window == "#372349" && appearance.HasChanges,
                         "Custom color was applied before Save");
                     Require(host.Theme == globalPalette, "A FilePack palette modified the application palette");
+                    CheckFilePackSettingsTheme(settingsView, globalPalette);
                     if (appearance == model.QuickAppearance)
                     {
                         Require(((SolidColorBrush)quick.Resources["WindowBrush"]).Color == (Color)ColorConverter.ConvertFromString(applied.Window),
@@ -112,8 +146,9 @@ internal static partial class Program
                 model.SelectedAppearance = model.QuickAppearance;
                 model.QuickAppearance.PresetCommand.Execute(model.QuickAppearance.Presets.Single(value => value.Name == "薄荷"));
                 await model.QuickAppearance.PendingSave;
-                Require(model.PackAppearance.Applied.Window == "#372349" && model.SettingsAppearance.Applied.Window == "#372349",
+                Require(model.PackAppearance.Applied.Window == "#372349",
                     "Selecting one window preset changed the other windows");
+                CheckFilePackSettingsTheme(settingsView, globalPalette);
                 SaveFilePackFrame(quick, images, "filepack-quick");
                 detail.Show(); detail.UpdateLayout(); SaveFilePackFrame(detail, images, "filepack-detail"); detail.Hide();
                 SaveFilePackFrame(settingsWindow, images, "filepack-settings");
@@ -169,21 +204,104 @@ internal static partial class Program
                 await restored.SettingsReady;
                 Require(!restored.IsEnabled && restored.QuickFormat == PackFormat.Zip && restored.QuickArchiveName == "快速归档" &&
                     restored.QuickOutputDirectory == model.QuickOutputDirectory && restored.QuickAppearance.Applied.Window == "#110022" &&
-                    restored.PackAppearance.Applied.Window == "#372349" && restored.SettingsAppearance.Applied.Window == "#372349",
+                    restored.PackAppearance.Applied.Window == "#372349",
                     "Tool switch, quick options or independent palettes did not survive restart");
+            }
+            var legacyStore = new FilePackStore(Path.Combine(fixture.FullName, "legacy-colors"));
+            await legacyStore.SavePreferencesAsync(new FilePackPreferences(2, "")
+                { SettingsColors = new() { ["Window"] = "#FFFFFF", ["Text"] = "#000000" } });
+            await using (var legacyModel = new FilePackViewModel(legacyStore))
+            {
+                await legacyModel.SettingsReady;
+                var legacyView = new FilePackSettingsView { DataContext = legacyModel };
+                var legacyWindow = new Window { Content = legacyView, Width = 800, Height = 800, ShowInTaskbar = false };
+                host.ApplyTheme(legacyWindow.Resources); legacyWindow.Show(); legacyWindow.UpdateLayout();
+                try { CheckFilePackSettingsTheme(legacyView, host.Theme); }
+                finally { legacyWindow.Close(); }
+                legacyModel.QuickAppearance.PresetCommand.Execute(legacyModel.QuickAppearance.Presets.Single(value => value.Name == "深海"));
+                await legacyModel.QuickAppearance.PendingSave;
+                var legacyPreferences = await legacyStore.LoadPreferencesAsync();
+                Require(legacyPreferences.SettingsColors["Window"] == "#FFFFFF" && legacyPreferences.SettingsColors["Text"] == "#000000",
+                    "Saving a window palette destroyed older settings-page color data");
+                Console.WriteLine("PASS Older settings-page colors no longer override the application theme and remain preserved in storage");
             }
             Require(await model.SetEnabledAsync(true), "FilePack could not be re-enabled");
             await model.ShutdownAsync();
-            Console.WriteLine("PASS FilePack switch, separate quick/detail/settings views, shared draft, independent saved quick ZIP settings, auto-rename, source preservation, three palette drafts/presets/failure/restart and native chrome");
+            Console.WriteLine("PASS FilePack switch, separate quick/detail/settings views, shared draft, independent saved quick ZIP settings, auto-rename, source preservation, two window palette drafts/presets/failure/restart, application-themed settings and native chrome");
         }
         finally { FilePackPaths.EnsureNoReparsePoints(fixture.FullName); fixture.Delete(recursive: true); }
         await CheckFilePackBrokerAsync();
         CheckFilePackContextMenu();
     }
+    private static void CheckFilePackSettingsTheme(FilePackSettingsView view, ThemePalette palette)
+    {
+        var scroll = (ScrollViewer)view.Content;
+        var card = FilePackDescendants(view).OfType<Border>().First(value => ReferenceEquals(value.Style, view.FindResource("Card")));
+        Require((scroll.Background is null || scroll.Background == Brushes.Transparent) &&
+            ((SolidColorBrush)card.Background).Color == (Color)ColorConverter.ConvertFromString(palette.Surface) &&
+            ((SolidColorBrush)view.Foreground).Color == (Color)ColorConverter.ConvertFromString(palette.Text),
+            "FilePack settings background, cards or text did not follow the application palette");
+    }
+    private static void CheckFilePackShortcutNotices(FilePackViewModel model, FilePackController controller)
+    {
+        var free = new KeyboardShortcut(3, 0x84, "Ctrl + Alt + F21");
+        var occupied = new KeyboardShortcut(3, 0x85, "Ctrl + Alt + F22");
+        var accepted = model.SetShortcut(free, []);
+        Require(accepted && controller.IsHotkeyRegistered && !model.HasNotice,
+            $"Changing a rejected shortcut to a free chord failed: accepted={accepted}, registered={controller.IsHotkeyRegistered}, notice={model.Notice}");
+        using var source = ClipboardTestWindow();
+        using var competitor = new LensShortcutController(source, hotkeyId: 0xB042);
+        Require(competitor.Configure(occupied, LensActivationMode.Toggle), "Shortcut notice fixture could not register its test chord");
+        Require(model.SetShortcut(occupied, []) && !controller.IsHotkeyRegistered && model.Notice.Contains("被占用", StringComparison.Ordinal),
+            "A native FilePack registration conflict did not produce a notice");
+        Require(model.SetShortcut(free, []) && controller.IsHotkeyRegistered && !model.HasNotice,
+            "A successful replacement left the native conflict notice");
+        model.SetShortcut(occupied, []); competitor.Suspend(true); controller.Suspend(false);
+        Require(controller.IsHotkeyRegistered && !model.HasNotice, "A successful resume left the stale conflict notice");
+        const string unrelated = "配色未能保存，请检查空间或权限。";
+        model.SetNotice(unrelated); controller.Suspend(true); controller.Suspend(false);
+        Require(controller.IsHotkeyRegistered && model.Notice == unrelated, "Shortcut recovery cleared an unrelated storage error");
+        model.SetShortcut(free, []); Require(competitor.Suspend(false), "Shortcut fixture could not reoccupy its chord");
+        model.SetShortcut(occupied, []);
+        Require(model.HasNotice && model.SetShortcut(null, []) && !controller.IsHotkeyRegistered && !model.HasNotice,
+            "Clearing the shortcut left its conflict notice");
+        model.SetShortcut(free, []);
+        Console.WriteLine("PASS FilePack native conflict notices clear after replacement, resume or clearing; unrelated errors retained; no input simulation");
+    }
+    private static async Task CheckFilePackShortcutNoticesAsync()
+    {
+        var fixture = Directory.CreateTempSubdirectory("DailyToolkit-filepack-shortcut-");
+        try
+        {
+            var display = new DisplayInfo(1920, 1080, 1, 1920, 1040, false);
+            using var host = new MainViewModel(new ControlledProbe(display), display, new LocalProbe(),
+                favoritesStore: new FavoritesStore(Path.Combine(fixture.FullName, "favorites.json")),
+                gamingPreferencesStore: new GamingPreferencesStore(Path.Combine(fixture.FullName, "gaming.json")),
+                navigationStore: new NavigationOrderStore(Path.Combine(fixture.FullName, "navigation.json")),
+                appPreferencesStore: new AppPreferencesStore(Path.Combine(fixture.FullName, "app.json")), startupRegistration: new StartupFake(),
+                notesStore: IsolatedNotes(), clipboardSettingsStore: IsolatedClipboard(), filePackStore: new FilePackStore(Path.Combine(fixture.FullName, "module")));
+            var model = host.FilePack; await model.SettingsReady;
+            model.SetShortcut(new(3, 0x84, "Ctrl + Alt + F21"), []);
+            using var source = ClipboardTestWindow();
+            using var controller = new FilePackController(host, source, () => [host.Gaming.ToggleShortcut]);
+            await controller.Ready;
+            Require(!model.SetShortcut(host.Gaming.ToggleShortcut, [host.Gaming.ToggleShortcut]), "Reserved shortcut was accepted");
+            CheckFilePackShortcutNotices(model, controller);
+            await model.ShutdownAsync();
+        }
+        finally { FilePackPaths.EnsureNoReparsePoints(fixture.FullName); fixture.Delete(recursive: true); }
+    }
     private static void CheckFilePackChrome(FilePackWindow window)
     {
         var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(window);
         Require(window.ResizeMode == ResizeMode.CanResize && chrome.ResizeBorderThickness.Left == 6, "FilePack resize frame was lost");
+        foreach (var name in new[] { "MinimizeButton", "CloseButton" })
+        {
+            var button = (Button)window.FindName(name); var center = button.PointToScreen(new Point(button.ActualWidth / 2, button.ActualHeight / 2));
+            var buttonPoint = ((uint)(int)center.X & 0xffff) | (((uint)(int)center.Y & 0xffff) << 16);
+            Require(ClipboardChromeHit(window.Handle, 0x84, IntPtr.Zero, new IntPtr(unchecked((int)buttonPoint))).ToInt32() == 1,
+                "FilePack caption button was treated as a draggable surface");
+        }
         var point = window.PointToScreen(new Point(window.ActualWidth / 2, 3));
         var packed = ((uint)(int)point.X & 0xffff) | (((uint)(int)point.Y & 0xffff) << 16);
         Require(ClipboardChromeHit(window.Handle, 0x84, IntPtr.Zero, new IntPtr(unchecked((int)packed))).ToInt32() == 12,
@@ -205,10 +323,10 @@ internal static partial class Program
                 $"FilePack frame hit at {local} did not provide resize/drag behavior ({expected})");
         }
     }
-    private static void SaveFilePackFrame(Window window, string directory, string name)
+    private static void SaveFilePackFrame(Window window, string directory, string name, double scale = 1)
     {
         window.UpdateLayout(); var content = (FrameworkElement)window.Content;
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth), (int)Math.Ceiling(content.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth * scale), (int)Math.Ceiling(content.ActualHeight * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
         bitmap.Render(content); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
         Directory.CreateDirectory(directory); using var file = File.Create(Path.Combine(directory, name + ".png")); encoder.Save(file);
     }

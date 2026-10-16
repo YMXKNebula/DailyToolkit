@@ -5,7 +5,7 @@
   <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/><Setter Property="Padding" Value="8,6"/></Style>
   <Style TargetType="CheckBox"><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Style>
  </UserControl.Resources>
- <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Background="{DynamicResource WindowBrush}">
+ <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
   <StackPanel Margin="0,0,8,0" IsEnabled="{Binding SettingsLoaded}">
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <DockPanel Margin="0,0,0,12"><controls:FeatureSwitch DockPanel.Dock="Right" IsOn="{Binding IsEnabled}" Command="{Binding ToggleEnabledCommand}" Style="{StaticResource FeatureSwitchStyle}" AutomationProperties.Name="文件集装箱功能开关"

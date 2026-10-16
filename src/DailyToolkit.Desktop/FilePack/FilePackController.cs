@@ -11,6 +11,7 @@ namespace DailyToolkit.Desktop.FilePack;
 internal sealed class FilePackController : IDisposable
 {
     internal const int HotkeyId = 0xB041;
+    private const string ShortcutInUseNotice = "快捷键已被占用，请更换组合。";
     private readonly MainViewModel _host;
     private readonly FilePackViewModel _model;
     private readonly Func<IEnumerable<KeyboardShortcut?>> _reserved;
@@ -55,13 +56,18 @@ internal sealed class FilePackController : IDisposable
     {
         if (_disposed || !_readyForRegistration || !_model.SettingsLoaded) return;
         var shortcut = _model.IsEnabled ? _model.ToggleShortcut : null;
+        var notice = "";
         if (shortcut is not null && _reserved().Any(shortcut.Matches))
-        { shortcut = null; _model.SetNotice("文件集装箱快捷键与其他工具冲突。"); }
-        if (!_shortcut.Configure(shortcut, LensActivationMode.Toggle)) _model.SetNotice("文件集装箱快捷键已被占用，请更换组合。");
+        { shortcut = null; notice = "此快捷键与其他工具冲突。"; }
+        if (!_shortcut.Configure(shortcut, LensActivationMode.Toggle)) notice = ShortcutInUseNotice;
+        _model.SetShortcutNotice(notice);
         if (!_model.IsEnabled) { _cancelShow = true; Hide(_quick, true); }
     }
     public void Suspend(bool suspended)
-    { if (!_shortcut.Suspend(suspended)) _model.SetNotice("文件集装箱快捷键已被占用，请更换组合。"); }
+    {
+        if (!_shortcut.Suspend(suspended)) _model.SetShortcutNotice(ShortcutInUseNotice);
+        else if (!suspended && _shortcut.IsRegistered) _model.SetShortcutNotice("");
+    }
     public async void ToggleQuick()
     {
         if (_disposed || _model.IsStopping || !_model.IsEnabled) return;
