@@ -180,7 +180,7 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
             }
             while (_settingsDirty)
             {
-                if (!_settingsWritable) { Notice = "原设置文件无法读取，暂时不能覆盖；请恢复全部默认设置后重试保存。正文仍独立保存。"; return false; }
+                if (!_settingsWritable) { Notice = "原设置无法读取，请恢复默认设置后重试。正文仍可保存。"; return false; }
                 var revision = _settingsRevision; var settings = Preferences;
                 await Store.SaveSettingsAsync(settings);
                 if (_settingsRevision == revision) _settingsDirty = false;
@@ -190,7 +190,7 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
             return !_contentDirty && !_settingsDirty;
         }
         catch (Exception exception) when (NotesStore.IsStorageError(exception))
-        { Notice = "保存失败，内容仍在内存中。请检查数据目录权限或可用空间，重试保存或导出后再退出。"; return false; }
+        { Notice = "保存失败，请检查空间或权限。重试保存或导出后再退出。"; return false; }
         finally { _saving.Release(); }
     }
     public void Dispose() { _disposed = true; _saveTimer.Stop(); _saveTimer.Tick -= SaveTick; }

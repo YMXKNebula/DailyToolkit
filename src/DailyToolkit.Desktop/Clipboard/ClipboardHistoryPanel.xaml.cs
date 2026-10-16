@@ -75,7 +75,7 @@ public partial class ClipboardHistoryPanel : Window
     }
     internal bool ConfirmHide()
     {
-        if (_model.IsBusy) { _model.Notice = "操作正在保存，请完成后再关闭面板。"; return false; }
+        if (_model.IsBusy) { _model.Notice = "正在保存，请稍后关闭。"; return false; }
         if (ManualEditor.Visibility == Visibility.Visible && _model.EditorText.Length > 0 &&
             MessageBox.Show(this, "手动记录尚未保存。是否放弃本次编辑？", "关闭剪贴回溯", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return false;
@@ -170,7 +170,7 @@ public partial class ClipboardHistoryPanel : Window
     private void NewRecord(object sender, RoutedEventArgs e) => ShowEditor("新建记录", "", null);
     private void EditRecord(object sender, RoutedEventArgs e)
     {
-        if (!_model.CanEditManual || _model.Selected is null) { _model.Notice = "外部原始内容不可编辑，请使用复制为新记录。"; return; }
+        if (!_model.CanEditManual || _model.Selected is null) { _model.Notice = "请用“复制为新记录”编辑此内容。"; return; }
         ShowEditor("编辑手动记录", _model.DetailText, _model.Selected.Id);
     }
     private void DuplicateRecord(object sender, RoutedEventArgs e)
@@ -183,7 +183,7 @@ public partial class ClipboardHistoryPanel : Window
     private async void RemoveFileCache(object sender, RoutedEventArgs e)
     {
         if (!_model.HasFileCache) return;
-        if (MessageBox.Show(this, "移除文件缓存后，原文件删除时将无法重新复制。原路径记录会保留。", "移除文件缓存",
+        if (MessageBox.Show(this, "移除缓存？原件删除后将无法复制，路径记录保留。", "移除文件缓存",
             MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK)
             await _model.RemoveSelectedFileCacheAsync();
     }

@@ -106,6 +106,7 @@ internal static partial class Program
                 Background = (Brush)Application.Current.Resources["WindowBrush"] };
             view.Background = settingsWindow.Background;
             settingsWindow.Show(); await settingsWindow.Dispatcher.InvokeAsync(settingsWindow.UpdateLayout, DispatcherPriority.ContextIdle);
+            CheckCompactPresetCards(view);
             SaveClipboardVisual(view, images, "settings-top");
             ((ScrollViewer)view.Content).ScrollToVerticalOffset(440);
             await settingsWindow.Dispatcher.InvokeAsync(settingsWindow.UpdateLayout, DispatcherPriority.ContextIdle);
@@ -132,6 +133,15 @@ internal static partial class Program
             await settingsWindow.Dispatcher.InvokeAsync(settingsWindow.UpdateLayout, DispatcherPriority.ContextIdle);
             SaveClipboardVisual(more.ContextMenu!, images, "data-management-menu-deepsea");
             more.ContextMenu!.IsOpen = false;
+            ((ScrollViewer)view.Content).ScrollToTop();
+            foreach (var width in new[] { 680d, 900d })
+            {
+                settingsWindow.Width = width;
+                await settingsWindow.Dispatcher.InvokeAsync(settingsWindow.UpdateLayout, DispatcherPriority.ContextIdle);
+                CheckCompactPresetCards(view);
+                foreach (var scale in new[] { 1d, 1.25d, 1.5d, 2d })
+                    SaveFilePackFrame(settingsWindow, images, $"settings-presets-{width}-dpi-{scale * 100:0}", scale);
+            }
             Console.WriteLine($"PASS Isolated clipboard panel placement on {areas.Count} available monitor work areas, independent light/deep-sea palettes and settings rendering; images: {Path.GetFullPath(images)}");
         }
         finally { panel?.CloseRuntime(); settingsWindow?.Close(); await model.DisposeAsync(); DeleteClipboardFixture(directory); }

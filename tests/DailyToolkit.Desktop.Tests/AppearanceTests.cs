@@ -14,7 +14,7 @@ namespace DailyToolkit.Desktop.Tests;
 
 internal static partial class Program
 {
-    private static async Task CheckThemeEditingAsync()
+    private static async Task CheckThemeEditingAsync(string? images = null)
     {
         var directory=Directory.CreateTempSubdirectory("DailyToolkit-theme-tests-");
         var display=new DisplayInfo(1920,1080,1,1920,1040,false);
@@ -53,9 +53,9 @@ internal static partial class Program
                 }
             }
             var presetButtons=Descendants(presetList).OfType<Button>().ToArray();
-            Require(!details.IsExpanded && model.ThemePresets.Count == 12 && presetButtons.Length == 12 && !save.IsEnabled &&
-                presetButtons.All(button => button.Content is TextBlock text && text.Text == ((ThemePreset)button.DataContext).Name),
+            Require(!details.IsExpanded && model.ThemePresets.Count == 12 && presetButtons.Length == 12 && !save.IsEnabled,
                 "Theme presets were missing or detailed colors were shown without opening their section");
+            CheckCompactPresetCards(presetList);
             var blue=model.ThemePresets.Single(p => p.Name == "海蓝");
             await ClickCommandAsync(presetButtons.Single(button => button.DataContext == blue));
             window.UpdateLayout();
@@ -152,6 +152,23 @@ internal static partial class Program
                     model.ThemeColors.All(option => option.Value == (string)typeof(ThemePalette).GetProperty(option.Key)!.GetValue(p)!),
                     "Switching panels lost preset button colors or detailed configuration");
             }
+            if (images is not null)
+            {
+                model.Page = "settings-theme"; details.IsExpanded = false;
+                foreach (var theme in new[] { "浅色", "深海" })
+                {
+                    model.SelectThemePresetCommand.Execute(model.ThemePresets.Single(value => value.Name == theme));
+                    foreach (var width in new[] { 680d, 1040d })
+                    {
+                        window.Width = width; window.Height = 780; window.UpdateLayout();
+                        ((ScrollViewer)window.FindName("SettingsScroll")).ScrollToTop();
+                        await Application.Current.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ContextIdle);
+                        CheckCompactPresetCards(presetList);
+                        foreach (var scale in new[] { 1d, 1.25d, 1.5d, 2d })
+                            SaveFilePackFrame(window, images, $"theme-{theme}-{width}-dpi-{scale * 100:0}", scale);
+                    }
+                }
+            }
         }
         finally
         {
@@ -161,5 +178,23 @@ internal static partial class Program
                 directory.Name.StartsWith("DailyToolkit-theme-tests-",StringComparison.Ordinal)) directory.Delete(recursive:true);
         }
         Console.WriteLine("PASS Twelve named presets sync footer colors and detailed configuration; palette/button drafts stay in preview until atomic Save");
+    }
+
+    private static void CheckCompactPresetCards(DependencyObject parent)
+    {
+        var buttons = FilePackDescendants(parent).OfType<Button>().Where(button => button.DataContext is ThemePreset).ToArray();
+        Require(buttons.Length == 12, "A palette preset card is missing");
+        foreach (var button in buttons)
+        {
+            var preset = (ThemePreset)button.DataContext;
+            var contents = FilePackDescendants(button).ToArray();
+            var label = contents.OfType<TextBlock>().Single(value => value.Text == preset.Name);
+            var thumbnail = contents.OfType<Border>().Single(value => value.Width == 32 && value.Height == 20);
+            var position = label.TranslatePoint(new Point(), button);
+            Require(thumbnail.Background is SolidColorBrush brush && brush.Color == (Color)ColorConverter.ConvertFromString(preset.Palette.Window) &&
+                button.ActualHeight <= 42 && position.X >= 0 && position.Y >= 0 &&
+                position.X + label.DesiredSize.Width <= button.ActualWidth && position.Y + label.DesiredSize.Height <= button.ActualHeight,
+                $"Preset {preset.Name} has the wrong preview or a clipped label");
+        }
     }
 }

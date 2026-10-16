@@ -16,19 +16,27 @@
     <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" Margin="0,8,0,0"/>
     <Grid Margin="0,16,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <TextBlock Text="呼出 / 关闭" VerticalAlignment="Center" FontWeight="SemiBold"/>
-     <TextBox Grid.Column="1" IsReadOnly="True" Text="{Binding ShortcutText, Mode=OneWay}" PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" Margin="12,0,6,0" ToolTip="按下新的快捷键；Esc 取消。" AutomationProperties.Name="剪贴回溯全局快捷键"/>
+     <TextBox Grid.Column="1" IsReadOnly="True" Text="{Binding ShortcutText, Mode=OneWay}" PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" Margin="12,0,6,0" ToolTip="按下组合键，Esc 取消。" AutomationProperties.Name="剪贴回溯全局快捷键"/>
      <Button Grid.Column="2" Content="清空" Click="ClearShortcut" Padding="8,6"/>
     </Grid>
     <Button Content="恢复默认快捷键" Click="ResetShortcut" HorizontalAlignment="Left"/>
-    <CheckBox Content="恢复的内容允许进入 Windows 剪贴板历史（Win+V）" IsChecked="{Binding IncludeRestoredInWindowsHistory}" Margin="0,16,0,0"/>
-    <TextBlock Text="默认关闭，是否收录由 Windows 设置和内容类型决定。重新复制时不允许云剪贴板同步。" Style="{StaticResource MutedText}" Margin="0,8,0,0"/>
+    <CheckBox Content="重新复制时加入 Win+V 历史" IsChecked="{Binding IncludeRestoredInWindowsHistory}" Margin="0,16,0,0"/>
+    <TextBlock Text="是否收录取决于 Windows；不允许云同步。" Style="{StaticResource MutedText}" Margin="0,8,0,0"/>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="历史面板配色" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
-    <TextBlock Text="预设即选即用，自定义颜色保存后应用。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
+    <TextBlock Text="自定义颜色保存后应用。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
     <ItemsControl ItemsSource="{Binding AppearancePresets}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-     <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Margin="0,0,8,8" Padding="10,6"
+     <ItemsControl.ItemTemplate><DataTemplate><Button Margin="0,0,8,8" Padding="10,6" AutomationProperties.Name="{Binding Name}"
       Command="{Binding DataContext.SelectAppearancePresetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+      <StackPanel Orientation="Horizontal">
+       <Border Background="{Binding Palette.Window}" BorderBrush="{Binding Palette.Border}" BorderThickness="1" CornerRadius="3" Width="32" Height="20" Padding="2">
+        <StackPanel><Border Background="{Binding Palette.Surface}" Height="5" CornerRadius="1"/>
+         <Border Background="{Binding Palette.AccentSoft}" Height="4" CornerRadius="1" Margin="0,3,0,0"/>
+        </StackPanel>
+       </Border>
+       <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+      </StackPanel>
       <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/></DataTrigger></Style.Triggers></Style></Button.Style>
      </Button></DataTemplate></ItemsControl.ItemTemplate>
     </ItemsControl>
@@ -55,7 +63,7 @@
      <StackPanel Margin="0,0,0,12"><TextBlock Text="单条上限（KB）"/><TextBox Text="{Binding MaximumTextKilobytes, UpdateSourceTrigger=LostFocus}" Width="110" Margin="0,6,0,0"/></StackPanel>
      <StackPanel Margin="16,0,0,12"><TextBlock Text="图片上限（MB）"/><TextBox Text="{Binding MaximumImageMegabytes, UpdateSourceTrigger=LostFocus}" Width="110" Margin="0,6,0,0"/></StackPanel>
     </WrapPanel>
-    <TextBlock Text="永久保存项不会自动清理；只置顶的记录仍按普通规则清理。" Style="{StaticResource MutedText}"/>
+    <TextBlock Text="永久保存项不自动清理，置顶项仍会清理。" Style="{StaticResource MutedText}"/>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="文件夹缓存" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
@@ -64,21 +72,21 @@
        VerticalAlignment="Center" Margin="12,0,0,0" AutomationProperties.Name="自动缓存文件并从缓存复制"
        AnimationSpeed="{Binding DataContext.AnimationSpeed, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=1}"
        AnimationsEnabled="{Binding DataContext.PageAnimationsEnabled, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=True}"/>
-     <TextBlock Text="自动缓存新复制的文件，并优先从缓存重新复制" VerticalAlignment="Center" TextWrapping="Wrap"/>
+     <TextBlock Text="自动缓存新文件" VerticalAlignment="Center" TextWrapping="Wrap"/>
     </DockPanel>
-    <TextBlock Text="关闭后使用原路径。开启后自动保存限制内的新文件副本，旧记录可手动缓存。原件删除后，成功缓存的文件仍可重新复制。" Style="{StaticResource MutedText}" Margin="0,8,0,12"/>
+    <TextBlock Text="开启后优先从缓存复制，关闭后使用原路径。" Style="{StaticResource MutedText}" Margin="0,8,0,12"/>
     <WrapPanel>
      <StackPanel Margin="0,0,16,12"><TextBlock Text="单条文件总大小（MB）"/><TextBox Text="{Binding MaximumCachedFileMegabytes, UpdateSourceTrigger=LostFocus}" Width="140" Margin="0,6,0,0"/></StackPanel>
      <StackPanel Margin="0,0,0,12"><TextBlock Text="文件缓存总限额（MB）"/><TextBox Text="{Binding MaximumFileCacheMegabytes, UpdateSourceTrigger=LostFocus}" Width="140" Margin="0,6,0,0"/></StackPanel>
     </WrapPanel>
-    <TextBlock Text="缓存加密保存，重新复制时生成未加密临时副本。最后使用满 24 小时后，在软件运行且历史库打开时清理；临时副本也受总限额约束。关闭开关会保留已有缓存。" Style="{StaticResource MutedText}"/>
+    <TextBlock Text="缓存加密保存，复制时生成未加密副本。最后使用满 24 小时后，运行期间清理。关闭开关保留已有缓存。" Style="{StaticResource MutedText}"/>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="隐私与排除应用" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
     <CheckBox Content="暂停监听" IsChecked="{Binding IsPaused}" IsEnabled="{Binding IsEnabled}" Margin="0,0,0,12"/>
-    <TextBlock Text="排除应用：每行一个进程名，如 KeePass.exe、1Password.exe。无法确定来源时不会匹配。" Style="{StaticResource MutedText}" Margin="0,0,0,8"/>
+    <TextBlock Text="排除应用：每行一个进程名，如 KeePass.exe。来源不明时无法排除。" Style="{StaticResource MutedText}" Margin="0,0,0,8"/>
     <TextBox Text="{Binding ExcludedApplications, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" Height="90" VerticalScrollBarVisibility="Auto" MaxLength="10000" AutomationProperties.Name="排除应用列表"/>
-    <TextBlock Text="无法自动识别所有密码或私人资料，复制前请暂停记录。来源明确禁止保存历史的内容会跳过。加密记录通常只能在原 Windows 用户和电脑上读取。" Style="{StaticResource MutedText}" Margin="0,10,0,0"/>
+    <TextBlock Text="复制敏感内容前请暂停记录，无法自动识别所有密码。加密记录通常仅限原电脑、原用户读取。" Style="{StaticResource MutedText}" Margin="0,10,0,0"/>
    </StackPanel></Border>
    <Border x:Name="DataManagementCard" Style="{StaticResource Card}"><StackPanel>
     <TextBlock Text="数据管理" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>

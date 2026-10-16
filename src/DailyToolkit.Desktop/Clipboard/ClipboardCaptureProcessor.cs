@@ -87,7 +87,7 @@ internal sealed class ClipboardCaptureProcessor : IAsyncDisposable
             catch (Exception exception) when (IsExpectedError(exception))
             {
                 Status?.Invoke(exception is InvalidDataException or InvalidOperationException ? exception.Message :
-                    "文件未能缓存，原路径记录保留；请检查文件可读性、空间或权限。");
+                    "文件缓存失败，已保留路径。请检查文件、空间或权限。");
             }
         }
     }
@@ -103,7 +103,7 @@ internal sealed class ClipboardCaptureProcessor : IAsyncDisposable
                 await ProcessAsync(await ReadAsync(settings).ConfigureAwait(false), settings, epoch).ConfigureAwait(false);
             }
             catch (Exception exception) when (IsExpectedError(exception))
-            { Status?.Invoke("剪贴板内容未能保存，原历史已保留；请检查磁盘空间、数据目录权限或数据库占用。"); }
+            { Status?.Invoke("剪贴内容保存失败，请检查空间、目录权限或数据库占用。"); }
             finally { _operation.Release(); }
         }
     }

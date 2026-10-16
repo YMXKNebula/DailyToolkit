@@ -23,7 +23,7 @@
       <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
       <TextBlock Text="显示 / 隐藏" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
       <TextBox Grid.Column="1" Tag="toggle" Text="{Binding ToggleShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="12,0,4,8" Padding="8,6" MinWidth="62" VerticalContentAlignment="Center"
-       PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="按下新的快捷键；Esc 取消。" AutomationProperties.Name="浮笺显示隐藏快捷键"/>
+       PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="按下组合键，Esc 取消。" AutomationProperties.Name="浮笺显示隐藏快捷键"/>
       <Button Grid.Column="2" Tag="toggle" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12" Margin="0,0,0,8"/>
       <TextBlock Grid.Row="1" Text="聚焦" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
       <TextBox Grid.Row="1" Grid.Column="1" Tag="focus" Text="{Binding FocusShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="12,0,4,0" Padding="8,6" MinWidth="62" VerticalContentAlignment="Center"
@@ -41,14 +41,14 @@
       <RadioButton x:Name="NotesFixedMode" Content="固定" GroupName="NotesMovement" IsChecked="{Binding IsFixedMode, Mode=TwoWay}" Margin="0,0,18,0"/>
       <RadioButton x:Name="NotesMovableMode" Content="可移动" GroupName="NotesMovement" IsChecked="{Binding IsMovableMode, Mode=TwoWay}"/>
      </WrapPanel>
-     <TextBlock Text="可移动时，按住顶部即可拖动。" Style="{StaticResource MutedText}" Margin="0,0,0,16"/>
+     <TextBlock Text="可移动模式下拖动顶部。" Style="{StaticResource MutedText}" Margin="0,0,0,16"/>
      <CheckBox Content="始终置顶" IsChecked="{Binding Topmost}" Margin="0,0,0,12"/>
      <CheckBox x:Name="ClickFocus" Content="点击浮笺聚焦" IsChecked="{Binding FocusOnClick}" Margin="0,0,0,12"/>
      <WrapPanel><TextBlock Text="宽度" VerticalAlignment="Center"/><TextBox x:Name="NoteWidth" Text="{Binding Width, StringFormat=0, UpdateSourceTrigger=LostFocus}" PreviewTextInput="SizeInput" DataObject.Pasting="PasteSize" LostKeyboardFocus="CommitSize" Width="70" Margin="8,0,16,8" Padding="6"/>
       <TextBlock Text="高度" VerticalAlignment="Center"/><TextBox x:Name="NoteHeight" Text="{Binding Height, StringFormat=0, UpdateSourceTrigger=LostFocus}" PreviewTextInput="SizeInput" DataObject.Pasting="PasteSize" LostKeyboardFocus="CommitSize" Width="70" Margin="8,0,0,8" Padding="6"/></WrapPanel>
-     <CheckBox x:Name="ManualResize" Content="允许拖动右下角调整大小" IsChecked="{Binding AllowManualResize}" Margin="0,4,0,12"/>
+     <CheckBox x:Name="ManualResize" Content="拖动右下角调整大小" IsChecked="{Binding AllowManualResize}" Margin="0,4,0,12"/>
      <Button Content="重置位置" Click="ResetPosition" HorizontalAlignment="Left"/>
-     <TextBlock Text="宽高填写整数，Esc 结束编辑。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
+     <TextBlock Text="宽高填写整数。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
     </StackPanel></Border>
     <Border x:Name="AppearanceCard" Style="{StaticResource Card}" Margin="0,0,0,12">
      <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
@@ -66,7 +66,7 @@
          <StackPanel x:Name="BackgroundSettings">
           <TextBlock Text="背景" FontWeight="SemiBold" Margin="0,0,0,12"/>
           <WrapPanel Margin="0,4,0,8"><TextBlock Text="背景颜色" VerticalAlignment="Center" Margin="0,0,10,0"/>
-           <Button x:Name="BackgroundColorSwatch" Tag="background" Click="ChooseColor" Width="30" Height="28" Padding="0" BorderThickness="1" ToolTip="点击选择背景颜色" AutomationProperties.Name="选择背景颜色"/>
+           <Button x:Name="BackgroundColorSwatch" Tag="background" Click="ChooseColor" Width="30" Height="28" Padding="0" BorderThickness="1" ToolTip="选择背景颜色" AutomationProperties.Name="选择背景颜色"/>
           </WrapPanel>
           <controls:ColorPicker x:Name="BackgroundColorPicker" Color="{Binding PreviewBackgroundColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
           <Button Content="恢复默认背景" Click="ResetBackground" HorizontalAlignment="Left" Margin="0,0,0,14"/>
@@ -79,7 +79,7 @@
            <ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding Name}" Tag="{Binding Value}" Click="ApplyFont" Margin="0,0,8,8" Padding="10,7"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
           <ComboBox x:Name="FontChoice" ItemsSource="{Binding InstalledFonts}" SelectedItem="{Binding FontFamily, Mode=TwoWay}" IsEditable="False" IsTextSearchEnabled="True" Padding="6" Margin="0,4,0,12" MaxDropDownHeight="280" AutomationProperties.Name="浮笺字体"/>
           <WrapPanel Margin="0,0,0,12"><TextBlock Text="文字颜色" VerticalAlignment="Center"/>
-           <Button x:Name="FontColorSwatch" Tag="font" Click="ChooseColor" Width="30" Height="28" Margin="10,0,0,0" Padding="0" BorderThickness="1" ToolTip="点击选择文字颜色" AutomationProperties.Name="选择文字颜色"/>
+           <Button x:Name="FontColorSwatch" Tag="font" Click="ChooseColor" Width="30" Height="28" Margin="10,0,0,0" Padding="0" BorderThickness="1" ToolTip="选择文字颜色" AutomationProperties.Name="选择文字颜色"/>
           </WrapPanel>
           <controls:ColorPicker x:Name="FontColorPicker" Color="{Binding PreviewFontColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
           <WrapPanel Margin="0,0,0,14"><CheckBox Content="粗体" IsChecked="{Binding FontBold}" VerticalAlignment="Center" Margin="0,0,12,0"/>
@@ -90,7 +90,7 @@
          <StackPanel Margin="0,24,0,0">
           <TextBlock Text="聚焦外观" FontWeight="SemiBold" Margin="0,0,0,12"/>
           <WrapPanel Margin="0,0,0,8"><TextBlock Text="边框颜色" VerticalAlignment="Center" Margin="0,0,10,0"/>
-           <Button x:Name="FocusColorSwatch" Tag="focus" Click="ChooseColor" Width="30" Height="28" Padding="0" BorderThickness="1" ToolTip="点击选择聚焦边框颜色" AutomationProperties.Name="选择聚焦边框颜色"/>
+           <Button x:Name="FocusColorSwatch" Tag="focus" Click="ChooseColor" Width="30" Height="28" Padding="0" BorderThickness="1" ToolTip="选择聚焦边框颜色" AutomationProperties.Name="选择聚焦边框颜色"/>
           </WrapPanel>
           <controls:ColorPicker x:Name="FocusColorPicker" Color="{Binding PreviewFocusBorderColor, Mode=TwoWay}" ShowHexInput="False" Margin="0,0,0,12"/>
           <CheckBox Content="聚焦时完全不透明" IsChecked="{Binding OpaqueWhenFocused}" Margin="0,0,0,12"/>
@@ -120,8 +120,8 @@
     <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
      <TextBlock Text="数据管理" FontWeight="SemiBold" Margin="0,0,0,12"/>
      <WrapPanel><Button Content="立即保存" Click="SaveNow" Margin="0,0,8,8"/><Button Content="导出文本" Click="ExportText" Margin="0,0,8,8"/>
-      <Button Content="打开数据目录" Click="OpenDirectory" Margin="0,0,8,8"/><Button Content="恢复全部默认设置" Click="ResetSettings" Margin="0,0,8,8"/></WrapPanel>
-     <TextBlock Text="笔记保存在本机，恢复设置不会清空正文。" Style="{StaticResource MutedText}"/>
+      <Button Content="打开数据目录" Click="OpenDirectory" Margin="0,0,8,8"/><Button Content="恢复默认设置" Click="ResetSettings" Margin="0,0,8,8"/></WrapPanel>
+     <TextBlock Text="恢复设置保留正文。" Style="{StaticResource MutedText}"/>
      <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,12,0,0"/>
     </StackPanel></Border>
    </StackPanel>

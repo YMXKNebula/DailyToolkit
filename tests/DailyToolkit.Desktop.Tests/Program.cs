@@ -78,7 +78,7 @@ internal static partial class Program
                 if (args is ["--clipboard-native-palette-checks", var paletteImages])
                 {
                     await CheckNotesPersistenceAsync(); await CheckNotesStabilityAsync();
-                    await CheckPalettePersistenceAsync(); await CheckThemeEditingAsync();
+                    await CheckPalettePersistenceAsync(); await CheckThemeEditingAsync(Path.Combine(paletteImages, "theme"));
                     await CheckClipboardViewModelAsync(); await CheckClipboardVisualsAsync(Path.Combine(paletteImages, "clipboard"));
                     await CheckNotesAppearanceAndNavigationAsync(Path.Combine(paletteImages, "notes"));
                     await CheckPreviewLayoutAsync(Path.Combine(paletteImages, "lens")); exitCode = 0; return;

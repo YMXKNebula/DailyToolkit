@@ -90,16 +90,16 @@ chinesesimplified.DesktopIcon=创建桌面快捷方式
 english.DesktopIcon=Create a desktop shortcut
 chinesesimplified.MigrateStartup=将已有的开机自启改为安装版（管理员自启需要授权）
 english.MigrateStartup=Move existing startup to this installation (administrator startup requires permission)
-chinesesimplified.CloseFailed=DailyToolkit 尚未退出，可能有笔记未能保存。请先保存笔记并从托盘退出，再重试。
-english.CloseFailed=DailyToolkit is still running. Save your note and exit from the tray, then retry.
-chinesesimplified.StartupFailed=软件已经安装，但自启迁移未完成。请在安装版设置中关闭并重新启用开机自启；管理员自启需要 Windows 授权。
-english.StartupFailed=Installation completed, but startup migration did not finish. Disable and re-enable startup in this installation; administrator startup requires Windows permission.
-chinesesimplified.CleanupFailed=未能清理本安装目录的自启入口，卸载已停止。请在软件设置中关闭开机自启后重试。
-english.CleanupFailed=Startup for this installation could not be removed. Uninstall has stopped. Disable startup in the application settings and retry.
-chinesesimplified.Downgrade=已安装的版本较新。请使用同版或更新版本的安装包。
+chinesesimplified.CloseFailed=请先保存笔记并从托盘退出 DailyToolkit，再重试。
+english.CloseFailed=Save your note and exit DailyToolkit from the tray, then retry.
+chinesesimplified.StartupFailed=安装完成，自启迁移失败。请在安装版中重新设置自启；管理员自启需要 Windows 授权。
+english.StartupFailed=Installed. Startup migration failed; reset startup in the app. Administrator startup requires Windows permission.
+chinesesimplified.CleanupFailed=自启清理失败，卸载已停止。请关闭开机自启后重试。
+english.CleanupFailed=Startup cleanup failed. Uninstall stopped; disable startup in the app and retry.
+chinesesimplified.Downgrade=已安装较新版本，请使用同版或更新安装包。
 english.Downgrade=A newer version is installed. Use an installer for the same or a newer version.
-chinesesimplified.DataDirectory=不能安装到笔记和个人设置目录。请选择单独的程序目录。
-english.DataDirectory=Do not install into the notes and settings directory. Choose a separate application directory.
+chinesesimplified.DataDirectory=请选择单独的程序目录，不能覆盖个人数据。
+english.DataDirectory=Choose a separate app directory to protect your personal data.
 
 [Code]
 const

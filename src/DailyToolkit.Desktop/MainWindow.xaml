@@ -166,7 +166,7 @@
                 <TextBlock Text="{Binding NetworkText}" FontSize="22" FontWeight="SemiBold" Margin="0,8,0,5" />
                 <TextBlock Text="{Binding NetworkDetail}" Style="{StaticResource MutedText}" />
                 <TextBlock Text="{Binding TrafficText}" FontFamily="Segoe UI" FontSize="13" Margin="0,8,0,0"
-                           TextWrapping="Wrap" ToolTip="有默认网关的活动网卡流量，不进行联网测速" />
+                           TextWrapping="Wrap" ToolTip="网卡流量，非测速" />
               </StackPanel>
             </Border>
             <Border Style="{StaticResource Card}" MinHeight="152" Margin="6,0,6,12">
@@ -214,7 +214,7 @@
                 <TextBlock Text="来自 Windows 安装记录，可能不包含便携软件。" Style="{StaticResource MutedText}" Margin="0,0,0,12" />
                 <TextBox Text="{Binding SoftwareSearch, UpdateSourceTrigger=PropertyChanged}" Padding="10,8" Margin="0,0,0,12"
                          Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}"
-                         ToolTip="输入软件名称、版本或发布者筛选" AutomationProperties.Name="筛选已安装软件" />
+                         ToolTip="搜索名称、版本或发布者" AutomationProperties.Name="筛选已安装软件" />
                 <DataGrid ItemsSource="{Binding SoftwareView}" Height="260" SelectionMode="Single">
                   <DataGrid.Columns>
                     <DataGridTextColumn Header="软件" Binding="{Binding Name}" Width="*" />
@@ -249,14 +249,14 @@
                          MinWidth="62" Margin="12,0,4,0" VerticalContentAlignment="Center"
                          PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur"
                          Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}"
-                         ToolTip="按下快捷键以设置，按 Esc 取消。"
+                         ToolTip="按下组合键，Esc 取消。"
                          AutomationProperties.Name="开启或关闭放大框的快捷键" />
                 <Button Grid.Column="2" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12" />
               <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="10,0,4,0">
                 <RadioButton Content="按住" GroupName="LensMode" IsChecked="{Binding IsHoldMode}" Style="{StaticResource NavButton}"
-                             Padding="8,7" FontSize="13" Margin="0,0,2,0" ToolTip="按住快捷键开启，松开组合键中的任意一键就关闭。" />
+                             Padding="8,7" FontSize="13" Margin="0,0,2,0" ToolTip="按住放大，松开关闭。" />
                 <RadioButton Content="切换" GroupName="LensMode" IsChecked="{Binding IsToggleMode}" Style="{StaticResource NavButton}"
-                             Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次开启，再按一次关闭。" />
+                             Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次开启或关闭。" />
               </StackPanel>
               </Grid>
               <Border x:Name="LensDetailsPanel">
@@ -278,7 +278,7 @@
                     </Grid>
                     <Slider Minimum="1" Maximum="{Binding MaximumZoom}" TickFrequency="0.25" IsSnapToTickEnabled="True" Value="{Binding Zoom}" Margin="0,10,0,10" AutomationProperties.Name="放大倍率" />
                     <CheckBox x:Name="LensWheelZoom" Content="滚轮调节" IsChecked="{Binding WheelZoomEnabled, Mode=TwoWay}" Margin="0,0,0,18"
-                              ToolTip="在放大框或预览图内用滚轮调节倍率。关闭后仍可使用上方滑块。" />
+                              ToolTip="在放大框或预览中滚轮调节倍率。" />
                     <TextBlock Text="框体颜色" FontWeight="SemiBold" Margin="0,0,0,10" />
                     <controls:LensColorPicker x:Name="LensFrameColor" Margin="0,0,0,18" />
                     <TextBlock Text="画面模式" FontWeight="SemiBold" Margin="0,0,0,8" />
@@ -370,7 +370,17 @@
                         </DataTrigger></Style.Triggers>
                       </Style>
                     </Button.Style>
-                    <TextBlock Text="{Binding Name}" HorizontalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal">
+                      <Border Background="{Binding Palette.Window}" BorderBrush="{Binding Palette.Border}" BorderThickness="1" CornerRadius="3" Width="32" Height="20" Padding="2">
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="7"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                          <Border Background="{Binding Palette.Sidebar}" CornerRadius="1" Margin="0,0,2,0"/>
+                          <StackPanel Grid.Column="1"><Border Background="{Binding Palette.Surface}" Height="5" CornerRadius="1"/>
+                            <Border Background="{Binding Palette.Accent}" Height="4" Width="10" CornerRadius="1" HorizontalAlignment="Right" Margin="0,3,0,0"/>
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                      <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    </StackPanel>
                   </Button>
                 </DataTemplate></ItemsControl.ItemTemplate>
               </ItemsControl>
@@ -393,7 +403,7 @@
                 <Button Content="恢复默认配色" Command="{Binding ResetThemePreviewCommand}" Margin="0,0,0,8" />
               </WrapPanel>
               </StackPanel>
-              <Expander x:Name="ThemeDetails" Grid.Column="1" Header="颜色详细配置" Foreground="{DynamicResource TextBrush}" FontSize="14">
+              <Expander x:Name="ThemeDetails" Grid.Column="1" Header="自定义颜色" Foreground="{DynamicResource TextBrush}" FontSize="14">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="300" Margin="0,14,0,0">
                 <StackPanel Margin="0,0,8,0">
                   <TextBlock Text="保存后应用。" Style="{StaticResource MutedText}" Margin="0,0,0,14" />
@@ -443,7 +453,7 @@
                 <CheckBox x:Name="LoginStartupSwitch" Content="开机自启动" IsChecked="{Binding StartAtLogin}" Foreground="{DynamicResource TextBrush}" />
                 <StackPanel Margin="24,12,0,0">
                   <CheckBox x:Name="AdminStartupSwitch" Content="以管理员权限启动" IsChecked="{Binding AdminStartup}" IsEnabled="{Binding StartAtLogin}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12"
-                            ToolTip="首次启用及重新启用时需要授权。" />
+                            ToolTip="启用时需要 Windows 授权。" />
                   <CheckBox x:Name="SilentStartupSwitch" Content="静默启动" IsChecked="{Binding SilentStartup}" Foreground="{DynamicResource TextBrush}" ToolTip="启动后仅显示托盘图标。" />
                 </StackPanel>
               </StackPanel>

@@ -87,7 +87,7 @@ internal sealed class NotesController : IDisposable
         if (_stopping || _disposed) return;
         try { await operation(); }
         catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
-        { _model.Notice = "浮笺窗口操作未完成，请重试；笔记内容已保留。"; }
+        { _model.Notice = "窗口操作失败，请重试。"; }
     }
     private void Show()
     {
@@ -111,7 +111,7 @@ internal sealed class NotesController : IDisposable
     {
         if (!_model.IsVisible || !_model.IsFocused) return;
         _window?.ReleaseKeyboard();
-        if (!_focus.Restore()) _model.Notice = "先前窗口已关闭或 Windows 未允许切换；浮笺已停止接收输入，请点击要继续使用的窗口。";
+        if (!_focus.Restore()) _model.Notice = "先前窗口已关闭或 Windows 未允许切换，请点击要使用的窗口。";
     }
     private async Task HideAsync()
     {

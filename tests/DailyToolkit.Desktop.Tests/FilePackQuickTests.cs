@@ -121,6 +121,7 @@ internal static partial class Program
                     model.SelectedAppearance = appearance;
                     var preset = appearance.Presets.Single(value => value.Name == "海蓝");
                     settingsWindow.UpdateLayout();
+                    CheckCompactPresetCards(settingsView);
                     var button = FilePackDescendants(settingsView).OfType<Button>().Single(value => ReferenceEquals(value.DataContext, preset));
                     ((IInvokeProvider)new ButtonAutomationPeer(button).GetPattern(PatternInterface.Invoke)).Invoke();
                     await Application.Current.Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);

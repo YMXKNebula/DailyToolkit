@@ -61,8 +61,8 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public IReadOnlyList<LensFrameRate> FrameRates { get; } = new LensFrameRate[] { new(0,"跟随画面"),new(30,"30 帧/秒"),new(60,"60 帧/秒"),new(120,"120 帧/秒"),new(144,"144 帧/秒"),new(240,"240 帧/秒") };
     public CaptureMonitor? SelectedMonitor { get => _monitor; private set { if (Set(ref _monitor,value)) { NotifyFrameSize(); StartCommand.Refresh(); ToggleCommand.Refresh(); } } }
     public IReadOnlyList<LensSizeOption> FrameSizePresets { get; } = [new(LensFrameSizePreset.Custom,"自定义"),
-        new(LensFrameSizePreset.Small,"小 · 屏幕宽高的 20%"),new(LensFrameSizePreset.Medium,"中 · 屏幕宽高的 30%"),
-        new(LensFrameSizePreset.Large,"大 · 屏幕宽高的 40%")];
+        new(LensFrameSizePreset.Small,"小（20%）"),new(LensFrameSizePreset.Medium,"中（30%）"),
+        new(LensFrameSizePreset.Large,"大（40%）")];
     public LensFrameSizePreset FrameSizePreset
     {
         get => _preferences.FrameSizePreset;
@@ -109,7 +109,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     public double FrameHeight { get => _height; set { if (double.IsFinite(value) && Set(ref _height,Math.Round(Math.Clamp(value,120,1200)))) { SavePreferences(_preferences with { FrameHeight=(int)_height }); NotifyFrameSize(); } } }
     internal double Sharpening => LensImageSettings.GetSharpening(ImageMode);
     public IReadOnlyList<LensImageOption> ImageModes { get; } = [new(LensImageMode.Performance,"性能"),
-        new(LensImageMode.Clear,"清晰（推荐）"),new(LensImageMode.HighQuality,"质量"),new(LensImageMode.Pixel,"像素")];
+        new(LensImageMode.Clear,"清晰"),new(LensImageMode.HighQuality,"质量"),new(LensImageMode.Pixel,"像素")];
     public LensImageMode ImageMode
     {
         get => _preferences.LensImageMode;
@@ -122,7 +122,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
                 _session.SetImageMode(mode);
                 _session.UpdatePicture(Zoom,Sharpening);
             }
-            if (value == LensImageMode.AIEnhanced) Status="AI 增强当前不可用，已切换至质量模式。";
+            if (value == LensImageMode.AIEnhanced) Status="增强模式不可用，已切换为质量。";
         }
     }
     public int FrameRate { get => _fps; set => Set(ref _fps,FrameRates.Any(rate => rate.Value == value) ? value : 0); }
@@ -214,7 +214,7 @@ public sealed class GamingViewModel : ObservableObject, IDisposable
     }
     public bool IsFixedMode { get => MovementMode == LensMovementMode.Fixed; set { if (value) MovementMode=LensMovementMode.Fixed; } }
     public bool IsMovableMode { get => MovementMode == LensMovementMode.Movable; set { if (value) MovementMode=LensMovementMode.Movable; } }
-    public string MovementHint => IsFixedMode ? "固定位置，鼠标可穿透。" : "拖动画面移动，靠近屏幕中心时吸附。";
+    public string MovementHint => IsFixedMode ? "固定，鼠标穿透。" : "拖动移动，靠近屏幕中心吸附。";
     public bool IsFavorite
     {
         get => _favorite;

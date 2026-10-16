@@ -27,7 +27,7 @@ public sealed class NotesStore
         var contentWritable = true; var settingsWritable = true;
         try { if (File.Exists(ContentPath)) text = await File.ReadAllTextAsync(ContentPath, Utf8).ConfigureAwait(false); }
         catch (Exception exception) when (IsStorageError(exception))
-        { contentWritable = false; notices.Add("笔记未能读取，原文件已保留。请打开数据目录检查 default.txt 或其 .bak 备份。"); }
+        { contentWritable = false; notices.Add("笔记读取失败，请在数据目录检查 default.txt 和 .bak 备份。"); }
         try
         {
             if (File.Exists(SettingsPath))
@@ -39,7 +39,7 @@ public sealed class NotesStore
             }
         }
         catch (Exception exception) when (IsStorageError(exception))
-        { settingsWritable = false; notices.Add("浮笺设置未能读取，已临时使用默认值；原文件保留。恢复全部默认设置后可重新保存。"); }
+        { settingsWritable = false; notices.Add("设置读取失败，暂用默认值。原文件保留，恢复默认设置后可重新保存。"); }
         return new(new("default", "浮笺", text), preferences, string.Join(" ", notices), contentWritable, settingsWritable);
     }
 

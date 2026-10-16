@@ -311,7 +311,7 @@ public partial class MainWindow : Window
         {
             _closing = false; _exitRequested = false;
             _notes?.CancelExitPreparation();
-            _viewModel.Notice = "剪贴回溯尚未保存完成，请完成当前编辑或重试保存后退出。";
+            _viewModel.Notice = "剪贴回溯尚未保存，请完成编辑或重试保存后退出。";
             if (!IsVisible) Show();
             RegisterLensHotkey(); _filePack?.Suspend(false); UpdateLocalPolling(); return;
         }
@@ -381,11 +381,11 @@ public partial class MainWindow : Window
         var binding=new KeyboardShortcut((uint)modifiers,(uint)KeyInterop.VirtualKeyFromKey(key),string.Join(" + ",labels));
         if (!binding.IsValid) return;
         if (binding.Matches(_viewModel.Notes.Preferences.ToggleShortcut) || binding.Matches(_viewModel.Notes.Preferences.FocusShortcut))
-        { _viewModel.Notice = "此快捷键与浮笺快捷键冲突，请选择其他组合。"; return; }
+        { _viewModel.Notice = "快捷键与浮笺冲突，请更换组合。"; return; }
         if (_viewModel.ClipRecall.IsEnabled && binding.Matches(_viewModel.ClipRecall.Settings.ToggleShortcut))
-        { _viewModel.Notice = "此快捷键与剪贴回溯快捷键冲突，请选择其他组合。"; return; }
+        { _viewModel.Notice = "快捷键与剪贴回溯冲突，请更换组合。"; return; }
         if (_viewModel.FilePack.IsEnabled && binding.Matches(_viewModel.FilePack.ToggleShortcut))
-        { _viewModel.Notice = "此快捷键与文件集装箱冲突，请选择其他组合。"; return; }
+        { _viewModel.Notice = "快捷键与文件集装箱冲突，请更换组合。"; return; }
         _viewModel.Gaming.SetShortcut(binding);
         Keyboard.ClearFocus();
     }

@@ -86,7 +86,7 @@ internal sealed class ClipboardHistoryController : IDisposable
         catch (Exception exception) when (ClipboardCaptureProcessor.IsExpectedError(exception))
         {
             _monitor.Configure(false); _shortcut.Configure(null, LensActivationMode.Toggle);
-            _model.Notice = "剪贴回溯未能启动，监听已停止，原数据保留。请检查数据目录或恢复备份。";
+            _model.Notice = "历史库打开失败，监听已停止。请检查数据目录或恢复备份。";
         }
     }
     public void Suspend(bool suspended)
@@ -126,7 +126,7 @@ internal sealed class ClipboardHistoryController : IDisposable
         // A user who already activated another app keeps that focus. No attachment
         // to input threads, synthetic keypress, window restoration or polling.
         if (restoreFocus && ownsFocus && !_focus.Restore())
-            _model.Notice = "面板已关闭；先前窗口已关闭或 Windows 未允许恢复焦点。";
+            _model.Notice = "无法返回原窗口，请点击要使用的窗口。";
         return true;
     }
     private async Task<ClipboardOperationResult> RestoreAsync(ClipboardHistoryRecord record)

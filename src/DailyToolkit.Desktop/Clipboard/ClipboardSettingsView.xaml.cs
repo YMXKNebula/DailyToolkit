@@ -70,7 +70,7 @@ public partial class ClipboardSettingsView : UserControl
     }
     private async void ClearAll(object sender, RoutedEventArgs e)
     {
-        if (Model is { } model && MessageBox.Show("清空全部历史，包括永久保存记录、文件缓存、已生成的临时文件、最近备份与恢复数据库？此操作无法撤销。已复制的临时文件路径也会失效。", "清空全部历史", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+        if (Model is { } model && MessageBox.Show("清空全部历史、永久保存项、缓存和备份？无法撤销，已复制的缓存路径也会失效。", "清空全部历史", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
             await model.ClearAsync(true);
     }
     private async void Backup(object sender, RoutedEventArgs e) { if (Model is { } model) await model.BackupAsync(); }
@@ -78,7 +78,7 @@ public partial class ClipboardSettingsView : UserControl
     {
         if (Model is not { } model) return;
         if (model.IsEnabled && !model.IsPaused) { model.Notice = "恢复备份前请暂停监听。"; return; }
-        if (MessageBox.Show("用最近备份恢复历史？当前数据库将保留在 recovery 目录，备份之后的记录不会自动合并。", "恢复最近备份", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+        if (MessageBox.Show("恢复最近备份？较新的记录不会合并，当前历史库另存到 recovery 目录。", "恢复最近备份", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
             await model.RestoreBackupAsync();
     }
     private async void OpenDirectory(object sender, RoutedEventArgs e)

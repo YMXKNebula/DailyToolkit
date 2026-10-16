@@ -102,9 +102,9 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
             if (value is not null) _selectionTask = LoadDetailAsync(value.Id, _selectionCancellation.Token);
         }
     }
-    public string DetailText => _detail?.Content.DisplayText ?? "选择一条记录以查看完整内容。";
+    public string DetailText => _detail?.Content.DisplayText ?? "选择记录查看全文。";
     public string DetailTime => _detail is null ? "" : $"创建于 {_detail.CreatedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}" +
-        (_detail.LastUsedAt is { } used ? $" · 最近恢复 {used.ToLocalTime():MM-dd HH:mm:ss}" : "");
+        (_detail.LastUsedAt is { } used ? $" · 最近复制 {used.ToLocalTime():MM-dd HH:mm:ss}" : "");
     public bool HasSelection => _detail is not null;
     public bool CanEditManual => _detail?.IsManual == true && _detail.Content.Type is ClipboardContentType.Text or ClipboardContentType.Link;
     public string SaveText => _selected?.IsSaved == true ? "取消永久保存" : "永久保存";
@@ -156,13 +156,13 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     public bool SetShortcut(KeyboardShortcut? shortcut, IEnumerable<KeyboardShortcut?> reserved)
     {
         if (shortcut is { IsValid: false } || shortcut is not null && reserved.Any(shortcut.Matches))
-        { Notice = "此快捷键无效或与现有工具冲突，请选择其他组合。"; return false; }
+        { Notice = "快捷键无效或已被占用，请更换组合。"; return false; }
         return ChangeSettings(_settings with { ToggleShortcut = shortcut });
     }
     private bool ChangeSettings(ClipboardHistorySettings settings)
     {
         if (!_loaded || _disposed || _stopping) return false;
-        if (!_writable) { Notice = "设置文件未能读取，已阻止覆盖。请检查原设置或显式恢复默认设置。"; return false; }
+        if (!_writable) { Notice = "设置读取失败，请检查原文件或恢复默认设置。"; return false; }
         _settings = settings.Normalize(); _settingsDirty = true; Notify("");
         _settingsTask = FlushSettingsAsync();
         return true;
@@ -180,7 +180,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
             SettingsCommitted?.Invoke(); QueueMaintenance(); return true;
         }
         catch (Exception exception) when (ClipboardCaptureProcessor.IsExpectedError(exception))
-        { Notice = "剪贴回溯设置保存失败，请检查空间或权限；退出前请重试保存。"; return false; }
+        { Notice = "设置保存失败，请检查空间或权限后重试。"; return false; }
         finally { _settingsGate.Release(); }
     }
     public async Task ResetSettingsAsync()
@@ -253,7 +253,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     public void PreviousPage() { if (CanPrevious) { _offset = Math.Max(0, _offset - 100); RequestRefresh(); } }
     public void NextPage() { if (CanNext) { _offset += 100; RequestRefresh(); } }
     private void SetStatistics(ClipboardHistoryStatistics statistics)
-    { StorageText = $"{statistics.Total} 条记录 · 永久保存 {statistics.Saved} 条 · 占用 {statistics.StorageBytes / 1048576d:0.##} MB"; Notify(nameof(StorageText)); }
+    { StorageText = $"{statistics.Total} 条 · 永久保存 {statistics.Saved} 条 · {statistics.StorageBytes / 1048576d:0.##} MB"; Notify(nameof(StorageText)); }
     internal async Task RefreshStorageAsync()
     {
         await Ready;
@@ -281,7 +281,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
         catch (Exception exception) when (ClipboardCaptureProcessor.IsExpectedError(exception))
         {
             Notice = exception is InvalidOperationException or InvalidDataException ? exception.Message :
-                "操作未完整完成，请检查磁盘空间、权限或数据库占用，并刷新确认当前记录。"; return false;
+                "操作未完成，请检查空间、权限或数据库占用后刷新。"; return false;
         }
         finally { IsBusy = false; }
     }

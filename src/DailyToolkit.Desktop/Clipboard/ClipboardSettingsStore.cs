@@ -21,7 +21,7 @@ public sealed class ClipboardSettingsStore
             return (settings.Normalize(), true, "");
         }
         catch (Exception exception) when (NotesStore.IsStorageError(exception))
-        { return (new(), false, "剪贴回溯设置未能读取，监听已关闭，原文件保留。请检查数据目录后恢复设置。"); }
+        { return (new(), false, "设置读取失败，监听已关闭。请检查数据目录中的原设置。"); }
     }
     internal Task SaveAsync(ClipboardHistorySettings settings) => NotesStore.AtomicWriteAsync(SettingsPath,
         JsonSerializer.Serialize(settings.Normalize(), new JsonSerializerOptions { WriteIndented = true }));

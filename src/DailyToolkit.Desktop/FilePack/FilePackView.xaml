@@ -116,7 +116,7 @@
         <CheckBox Content="每次询问保存位置" IsChecked="{Binding AskOutputEachTime}" Margin="0,0,0,12"/>
        </StackPanel>
        <StackPanel Visibility="{Binding IsExternal, Converter={StaticResource VisibleWhen}}" Margin="0,0,0,12">
-        <TextBlock Text="准备好后打开工作区，由你选择外部软件、格式和保存位置。" Style="{StaticResource MutedText}" Margin="0,0,0,10"/>
+        <TextBlock Text="打开工作区后，使用自己的压缩软件打包。" Style="{StaticResource MutedText}" Margin="0,0,0,10"/>
         <CheckBox Content="默认保留外部工作区" IsChecked="{Binding KeepExternalWorkspace}"/>
        </StackPanel>
        <Button Content="{Binding CreateButtonText}" Command="{Binding CreateTaskCommand}" Style="{StaticResource AccentButton}" HorizontalAlignment="Left"/>
