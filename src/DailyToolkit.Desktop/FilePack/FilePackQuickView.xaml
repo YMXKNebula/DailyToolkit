@@ -1,0 +1,28 @@
+<UserControl x:Class="DailyToolkit.Desktop.FilePack.FilePackQuickView"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ AllowDrop="True" PreviewDragOver="FilesDragOver" PreviewDrop="FilesDropped" PreviewKeyDown="FilesKeyDown">
+ <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <DockPanel Margin="0,0,0,10"><TextBlock Text="{Binding DraftSummary}" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/>
+   <WrapPanel HorizontalAlignment="Right"><Button Content="文件" Command="{Binding AddFilesCommand}" Padding="10,6" Margin="8,0,6,0"/><Button Content="文件夹" Command="{Binding AddFoldersCommand}" Padding="10,6"/></WrapPanel>
+  </DockPanel>
+  <Grid Grid.Row="1">
+   <ListBox x:Name="FilesList" ItemsSource="{Binding Entries}" SelectionMode="Extended" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource BorderBrush}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" AutomationProperties.Name="待打包文件">
+    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem">
+     <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="0"/>
+     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+      <Border x:Name="FileBox" Margin="5,4" Padding="10,8" CornerRadius="6" BorderThickness="1" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"><ContentPresenter/></Border>
+      <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="FileBox" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="FileBox" Property="Background" Value="{DynamicResource AccentSoftBrush}"/><Setter TargetName="FileBox" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/></Trigger><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="FileBox" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/></Trigger></ControlTemplate.Triggers>
+     </ControlTemplate></Setter.Value></Setter>
+    </Style></ListBox.ItemContainerStyle>
+    <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding ArchivePath}" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding SourcePath}" Foreground="{DynamicResource MutedBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+   </ListBox>
+   <TextBlock Text="拖入文件或文件夹" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Entries.Count}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
+  </Grid>
+  <DockPanel Grid.Row="2" Margin="0,10,0,0"><Button Content="移除" Command="{Binding RemoveSelectedCommand}" CommandParameter="{Binding SelectedItems, ElementName=FilesList}" Padding="10,6" Margin="0,0,6,0"/><Button Content="清空" Command="{Binding ClearCommand}" Padding="10,6"/><Button Content="取消收集" Command="{Binding CancelCollectionCommand}" Visibility="{Binding IsCollecting, Converter={StaticResource VisibleWhen}}" Padding="10,6" HorizontalAlignment="Right"/><TextBlock Text="{Binding Status}" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,0,0"/></DockPanel>
+  <TextBlock Grid.Row="3" Text="{Binding Notice}" Visibility="{Binding HasNotice, Converter={StaticResource VisibleWhen}}" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" Margin="0,8,0,0" MaxHeight="60"/>
+  <Grid Grid.Row="4" Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Button x:Name="DetailsButton" Content="打包" Command="{Binding OpenPackWindowCommand}" Margin="0,0,6,0" ToolTip="详细打包"/>
+   <Button x:Name="QuickPackButton" Grid.Column="1" Content="快捷打包" Command="{Binding QuickPackCommand}" Style="{StaticResource AccentButton}" Margin="6,0,0,0"/>
+  </Grid>
+ </Grid>
+</UserControl>

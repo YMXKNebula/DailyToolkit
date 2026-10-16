@@ -24,7 +24,7 @@ internal sealed class SingleInstance : IDisposable
     { get { using var identity=WindowsIdentity.GetCurrent(); return "DailyToolkit.MainWindow."+identity.User!.Value; } }
     internal static readonly uint ShowMessage=RegisterWindowMessage("DailyToolkit.ShowMainWindow");
     internal static readonly uint ExitMessage=RegisterWindowMessage("DailyToolkit.ExitApplication");
-    public bool ActivateExistingWindow(bool exit=false)
+    public bool ActivateExistingWindow(bool exit=false, bool allowForegroundOnly=false)
     {
         var activated=false;
         var ownProcess=System.Environment.ProcessId;
@@ -35,6 +35,7 @@ internal sealed class SingleInstance : IDisposable
             if (processId == ownProcess) return true;
             if (GetProp(window,WindowMarker) != IntPtr.Zero)
             {
+                if (allowForegroundOnly) { activated=AllowSetForegroundWindow(processId); return false; }
                 if (!exit) AllowSetForegroundWindow(processId);
                 activated=PostMessage(window,exit ? ExitMessage : ShowMessage,IntPtr.Zero,IntPtr.Zero);
                 if (!exit) SetForegroundWindow(window);

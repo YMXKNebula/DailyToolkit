@@ -433,6 +433,17 @@ begin
   OwnerSid := CurrentSid; Result := True;
 end;
 
+procedure RemoveFilePackMenu(Context: String);
+var Key, Owner, Command: String;
+begin
+  Key := 'Software\Classes\' + Context + '\shell\DailyToolkit.FilePack';
+  if not RegQueryStringValue(HKCU64, Key, 'DailyToolkitOwner', Owner) then Exit;
+  if Owner <> 'DailyToolkit.FilePack' then Exit;
+  if not RegQueryStringValue(HKCU64, Key + '\command', '', Command) then Exit;
+  if CompareText(Command, '"' + InstalledExecutable + '" --file-pack-load "%1"') <> 0 then Exit;
+  if not RegDeleteKeyIncludingSubkeys(HKCU64, Key) then Log('FilePack context-menu removal failed.');
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var Folder, Task: Variant; Run: String;
 begin
@@ -454,4 +465,5 @@ begin
     Log('Startup cleanup failed: ' + GetExceptionMessage);
     RaiseException(CustomMessage('CleanupFailed'));
   end;
+  RemoveFilePackMenu('*'); RemoveFilePackMenu('Directory');
 end;

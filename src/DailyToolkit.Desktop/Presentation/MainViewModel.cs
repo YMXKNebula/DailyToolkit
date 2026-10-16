@@ -47,7 +47,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly NavigationItem[] _navigation=[new("screen-lens","放大镜","\uE71E",canToggle:true),
         new("floating-notes","浮笺","\uE70B",canToggle:true),
         new("clip-recall","剪贴回溯","\uE8C8",canToggle:true),
-        new("file-pack","文件集装箱","\uE7B8")];
+        new("file-pack","文件集装箱","\uE7B8",canToggle:true)];
     private string _softwareSearch = "";
     private string _notice = "";
     private bool _isRefreshing;
@@ -84,6 +84,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ClipRecall = new(clipboardSettingsStore);
         FilePack = new(filePackStore);
         FilePack.IsFavorite = _favoriteIds.Contains("file-pack");
+        _navigation[3].IsEnabled = FilePack.IsEnabled;
         ClipRecall.IsFavorite = _favoriteIds.Contains("clip-recall");
         _navigation[2].IsEnabled = ClipRecall.IsEnabled;
         Notes.IsFavorite = _favoriteIds.Contains("floating-notes");
@@ -104,6 +105,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             if (parameter is NavigationItem { Id:"screen-lens",CanToggle:true }) Gaming.IsEnabled=!Gaming.IsEnabled;
             else if (parameter is NavigationItem { Id:"floating-notes",CanToggle:true }) Notes.IsEnabled=!Notes.IsEnabled;
             else if (parameter is NavigationItem { Id:"clip-recall",CanToggle:true }) ClipRecall.RequestEnabled(!ClipRecall.IsEnabled);
+            else if (parameter is NavigationItem { Id:"file-pack",CanToggle:true }) FilePack.ToggleEnabledCommand.Execute(null);
         });
         OpenFavoritesCommand=new(_ => OpenFavorites());
         ExitFavoritesCommand=new(_ => ExitFavorites());

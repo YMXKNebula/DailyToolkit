@@ -7,11 +7,14 @@ namespace DailyToolkit.Desktop;
 public partial class MainWindow
 {
     private ClipboardHistoryController? _clipRecall;
-    private IEnumerable<KeyboardShortcut?> ReservedClipboardShortcuts() =>
+    private IEnumerable<KeyboardShortcut?> ExistingClipboardShortcuts() =>
         [_viewModel.Gaming.ToggleShortcut, _viewModel.Notes.Preferences.ToggleShortcut, _viewModel.Notes.Preferences.FocusShortcut];
+    private IEnumerable<KeyboardShortcut?> ReservedClipboardShortcuts() =>
+        [_viewModel.Gaming.ToggleShortcut, _viewModel.Notes.Preferences.ToggleShortcut, _viewModel.Notes.Preferences.FocusShortcut,
+            _viewModel.FilePack.IsEnabled ? _viewModel.FilePack.ToggleShortcut : null];
     private void InitializeClipRecall(HwndSource source)
     {
-        _clipRecall = new(_viewModel, source, ReservedClipboardShortcuts);
+        _clipRecall = new(_viewModel, source, ExistingClipboardShortcuts);
         ClipRecallSettings.ReservedShortcuts = ReservedClipboardShortcuts;
         ClipRecallSettings.ShortcutEditing = SuspendToolShortcuts;
         NotesSettings.ClipRecallShortcut = () => _viewModel.ClipRecall.IsEnabled ? _viewModel.ClipRecall.Settings.ToggleShortcut : null;
@@ -20,5 +23,6 @@ public partial class MainWindow
     {
         if (_shortcuts is not null) UpdateShortcutNotice(_shortcuts.Suspend(suspended));
         _notes?.Suspend(suspended); _clipRecall?.Suspend(suspended);
+        _filePack?.Suspend(suspended);
     }
 }

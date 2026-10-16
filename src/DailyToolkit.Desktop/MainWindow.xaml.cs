@@ -51,6 +51,7 @@ public partial class MainWindow : Window
             InitializeLensShortcuts(source);
             InitializeNotes(source);
             InitializeClipRecall(source);
+            InitializeFilePack(source);
         };
         _viewModel.Gaming.PropertyChanged += OnGamingStateChanged;
         _viewModel.PropertyChanged += OnAppSettingsChanged;
@@ -84,6 +85,7 @@ public partial class MainWindow : Window
             _shortcuts?.Dispose();
             _notes?.Dispose();
             _clipRecall?.Dispose();
+            _filePack?.Dispose();
             _viewModel.Gaming.PropertyChanged -= OnGamingStateChanged;
             _viewModel.PropertyChanged -= OnAppSettingsChanged;
             _viewModel.Dispose();
@@ -293,6 +295,7 @@ public partial class MainWindow : Window
             _closing = false; _exitRequested = false; return;
         }
         _shortcuts?.Suspend(true);
+        _filePack?.Suspend(true);
         _viewModel.Gaming.Stop();
         _clockTimer.Stop();
         var saved = _notes is not null ? await _notes.PrepareExitAsync() : await _viewModel.Notes.FlushAsync(exiting: true);
@@ -301,7 +304,7 @@ public partial class MainWindow : Window
             _closing = false; _exitRequested = false;
             _viewModel.Notice = "浮笺尚未保存，已取消退出。请重试保存或导出笔记。";
             if (!IsVisible) Show();
-            RegisterLensHotkey(); UpdateLocalPolling(); return;
+            RegisterLensHotkey(); _filePack?.Suspend(false); UpdateLocalPolling(); return;
         }
         if (_clipRecall is not null && !await _clipRecall.PrepareExitAsync() ||
             _clipRecall is null && !await _viewModel.ClipRecall.FlushSettingsAsync())
@@ -310,7 +313,7 @@ public partial class MainWindow : Window
             _notes?.CancelExitPreparation();
             _viewModel.Notice = "剪贴回溯尚未保存完成，请完成当前编辑或重试保存后退出。";
             if (!IsVisible) Show();
-            RegisterLensHotkey(); UpdateLocalPolling(); return;
+            RegisterLensHotkey(); _filePack?.Suspend(false); UpdateLocalPolling(); return;
         }
         try { await _viewModel.FilePack.ShutdownAsync(); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -319,7 +322,7 @@ public partial class MainWindow : Window
             _notes?.CancelExitPreparation();
             _viewModel.Notice = "文件集装箱尚未保存完成，请重试退出。";
             if (!IsVisible) Show();
-            RegisterLensHotkey(); UpdateLocalPolling(); return;
+            RegisterLensHotkey(); _filePack?.Suspend(false); UpdateLocalPolling(); return;
         }
         _viewModel.CancelPending();
         await _viewModel.PendingWork;
@@ -381,6 +384,8 @@ public partial class MainWindow : Window
         { _viewModel.Notice = "此快捷键与浮笺快捷键冲突，请选择其他组合。"; return; }
         if (_viewModel.ClipRecall.IsEnabled && binding.Matches(_viewModel.ClipRecall.Settings.ToggleShortcut))
         { _viewModel.Notice = "此快捷键与剪贴回溯快捷键冲突，请选择其他组合。"; return; }
+        if (_viewModel.FilePack.IsEnabled && binding.Matches(_viewModel.FilePack.ToggleShortcut))
+        { _viewModel.Notice = "此快捷键与文件集装箱冲突，请选择其他组合。"; return; }
         _viewModel.Gaming.SetShortcut(binding);
         Keyboard.ClearFocus();
     }

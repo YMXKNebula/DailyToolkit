@@ -16,6 +16,7 @@ public partial class NotesSettingsView : UserControl
     private readonly NotesDisplayArea _displayArea;
     internal Func<KeyboardShortcut?>? LensShortcut { get; set; }
     internal Func<KeyboardShortcut?>? ClipRecallShortcut { get; set; }
+    internal Func<KeyboardShortcut?>? FilePackShortcut { get; set; }
     internal Action<bool>? ShortcutEditing { get; set; }
     internal Action? ToggleRequested { get; set; }
     public NotesSettingsView()
@@ -95,6 +96,8 @@ public partial class NotesSettingsView : UserControl
         if (modifiers.HasFlag(ModifierKeys.Windows)) labels.Add("Win");
         labels.Add(key is >= Key.D0 and <= Key.D9 ? ((int)key - (int)Key.D0).ToString() : key.ToString());
         var shortcut = new KeyboardShortcut((uint)modifiers, (uint)KeyInterop.VirtualKeyFromKey(key), string.Join(" + ", labels));
+        if (shortcut.Matches(FilePackShortcut?.Invoke()))
+        { if (_model is not null) _model.Notice = "此快捷键与文件集装箱冲突，请选择其他组合。"; return; }
         if (shortcut.Matches(ClipRecallShortcut?.Invoke()))
         { if (_model is not null) _model.Notice = "此快捷键与剪贴回溯冲突，请选择其他组合。"; return; }
         if (_model?.SetShortcut(((FrameworkElement)sender).Tag as string == "focus", shortcut, LensShortcut?.Invoke()) == true)

@@ -10,7 +10,7 @@ using Microsoft.Win32;
 
 namespace DailyToolkit.Desktop.FilePack;
 
-public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDisposable
+public sealed partial class FilePackViewModel : ObservableObject, IDisposable, IAsyncDisposable
 {
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly FileCollectionService _collection = new();
@@ -53,7 +53,7 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
         CreateTaskCommand = new(_ => Track(CreateTaskAsync()), () => CanEditDraft && Entries.Count > 0);
         CancelCollectionCommand = new(_ => _collectionCancellation?.Cancel(), () => IsCollecting);
         CancelTaskCommand = new(parameter => Act(parameter, row => Manager.CancelAsync(row.TaskId)));
-        RetryTaskCommand = new(parameter => Act(parameter, RetryTaskAsync));
+        RetryTaskCommand = new(parameter => Act(parameter, RetryTaskAsync), () => IsEnabled && !_shuttingDown && !_disposed);
         MoveUpCommand = new(parameter => MoveQueued(parameter, -1));
         MoveDownCommand = new(parameter => MoveQueued(parameter, 1));
         OpenTaskCommand = new(parameter => { if (parameter is FilePackTaskViewModel row) OpenTask(row); });
@@ -72,11 +72,13 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
             }
             Notify(nameof(DraftSummary)); RefreshCommands();
         };
+        InitializeSettings();
     }
 
     public FilePackStore Store { get; }
     public FilePackManager Manager { get; }
-    public Task Ready => _initializing ?? Task.CompletedTask;
+    public Task Ready => Task.WhenAll(SettingsReady, _initializing ?? Task.CompletedTask);
+    internal Task PendingOperations => Task.WhenAll(_operations.ToArray());
     public ObservableCollection<FilePackEntryViewModel> Entries { get; } = [];
     public ObservableCollection<FilePackTaskViewModel> Tasks { get; } = [];
     public IReadOnlyList<FilePackChoice<PackMode>> Modes { get; } = [new("内置压缩", PackMode.BuiltIn), new("外部软件", PackMode.External)];
@@ -110,6 +112,7 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
     public RelayCommand RemoveTaskCommand { get; }
 
     public bool IsLoaded => _loaded;
+    internal bool IsStopping => _shuttingDown || _disposed;
     public bool IsInitializing => _loading;
     public bool IsVisible { get => _visible; set { if (Set(ref _visible, value) && value) Track(InitializeAsync()); } }
     public bool IsFavorite { get => _favorite; set { if (Set(ref _favorite, value)) { Notify(nameof(FavoriteSymbol)); Notify(nameof(FavoriteHint)); } } }
@@ -119,9 +122,9 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
     public bool HasNotice => Notice.Length > 0;
     public bool IsCollecting { get => _collecting; private set { if (Set(ref _collecting, value)) DraftStateChanged(); } }
     public bool IsCreating { get => _creating; private set { if (Set(ref _creating, value)) DraftStateChanged(); } }
-    public bool CanEditDraft => _loaded && !_collecting && !_creating && !_shuttingDown && !_disposed;
+    public bool CanEditDraft => IsEnabled && _loaded && !_collecting && !_creating && !_shuttingDown && !_disposed;
     public bool HasUnfinishedTasks => IsInitializing || IsCollecting || IsCreating || Tasks.Any(row => row.CanCancel || row.IsExternalReady);
-    public string Status => IsInitializing ? "正在读取任务" : !_loaded ? "尚未打开" : IsCollecting ? "正在收集文件" : RunningCount > 0 ? $"正在执行 {RunningCount} 个任务" :
+    public string Status => IsInitializing ? "正在读取任务" : RunningCount > 0 ? $"正在执行 {RunningCount} 个任务" : !IsEnabled ? "已停用" : !_loaded ? "就绪" : IsCollecting ? "正在收集文件" :
         WaitingCount > 0 ? $"等待执行 {WaitingCount} 个任务" : ExternalCount > 0 ? $"等待外部操作 {ExternalCount} 个任务" : "就绪";
     public int RunningCount => Tasks.Count(row => row.IsRunning);
     public int WaitingCount => Tasks.Count(row => row.IsQueued);
@@ -162,11 +165,9 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
         _loading = true; Notify(nameof(IsInitializing)); NotifyTaskState();
         try
         {
+            await SettingsReady;
             await Manager.InitializeAsync();
             if (_disposed || _shuttingDown) return;
-            var preferences = Manager.Preferences;
-            _maximumParallel = preferences.MaximumParallel; _outputDirectory = preferences.LastOutputDirectory;
-            _askOutputEachTime = preferences.AskOutputEachTime; _keepExternalWorkspace = preferences.KeepExternalWorkspace;
             foreach (var task in Manager.Tasks) Upsert(task);
             _loaded = true;
             SortTasks();
@@ -286,11 +287,15 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
     }
 
     public Task<PackTaskInfo?> CreateTaskAsync()
+        => CreateTaskAsync(quick: false);
+    public Task<PackTaskInfo?> CreateQuickTaskAsync()
+        => CreateTaskAsync(quick: true);
+    private Task<PackTaskInfo?> CreateTaskAsync(bool quick)
     {
         if (!CanEditDraft || Entries.Count == 0) return Task.FromResult<PackTaskInfo?>(null);
-        var task = CreateTaskCoreAsync(); Track(task); return task;
+        var task = CreateTaskCoreAsync(quick); Track(task); return task;
     }
-    private async Task<PackTaskInfo?> CreateTaskCoreAsync()
+    private async Task<PackTaskInfo?> CreateTaskCoreAsync(bool quick)
     {
         IsCreating = true;
         var taskId = Guid.NewGuid();
@@ -299,12 +304,23 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
             CommitPathDrafts();
             var entries = Entries.Select(row => row.Entry with { }).ToArray();
             FilePackPaths.ValidateEntries(entries);
-            var options = DraftOptions();
-            if (IsBuiltIn)
+            var quickSettings = _quickPack;
+            var options = quick ? new PackOptions(PackMode.BuiltIn, quickSettings.Format,
+                quickSettings.Format == PackFormat.Tar ? PackCompression.Store : quickSettings.Compression,
+                quickSettings.OutputDirectory.Trim(), quickSettings.ArchiveName.Trim(), PackOutputPolicy.AutoRename) : DraftOptions();
+            var name = quick ? options.ArchiveName : string.IsNullOrWhiteSpace(TaskName) ? ArchiveName.Trim() : TaskName.Trim();
+            if (options.Mode == PackMode.BuiltIn)
             {
-                if (AskOutputEachTime || string.IsNullOrWhiteSpace(OutputDirectory))
+                if (quick && string.IsNullOrWhiteSpace(options.OutputDirectory))
+                {
+                    var chosen = SelectOutputDirectory is not null ? SelectOutputDirectory() : ChooseDirectory();
+                    if (string.IsNullOrEmpty(chosen)) return null;
+                    QuickOutputDirectory = chosen;
+                    options = options with { OutputDirectory = chosen };
+                }
+                else if (!quick && (AskOutputEachTime || string.IsNullOrWhiteSpace(OutputDirectory)))
                 { if (!PickOutputDirectory()) { Notice = ""; return null; } options = DraftOptions(); }
-                while (true)
+                while (!quick)
                 {
                     var path = FilePackPaths.GetOutputPath(options);
                     var reserved = Manager.Tasks.Any(task => task.Snapshot.Options.Mode == PackMode.BuiltIn &&
@@ -325,13 +341,13 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
                     break;
                 }
             }
-            var snapshot = new PackSnapshot(taskId, Guid.NewGuid(), string.IsNullOrWhiteSpace(TaskName) ? ArchiveName.Trim() : TaskName.Trim(),
+            var snapshot = new PackSnapshot(taskId, Guid.NewGuid(), name,
                 entries, options, DateTimeOffset.UtcNow);
             var planningSnapshot = snapshot;
             var plan = await Task.Run(() => _planner.Create(planningSnapshot), _lifetime.Token);
             if (plan.RequiresStaging)
             {
-                var message = IsExternal ? $"将复制文件到独立工作区，需要约 {FormatBytes(plan.RequiredStagingBytes)} 额外空间。" :
+                var message = options.Mode == PackMode.External ? $"将复制文件到独立工作区，需要约 {FormatBytes(plan.RequiredStagingBytes)} 额外空间。" :
                     $"此包内布局需要临时副本，额外占用约 {FormatBytes(plan.RequiredStagingBytes)}。";
                 if (!(ConfirmAction ?? FilePackDialogs.Confirm)("准备临时文件", message)) { Notice = ""; return null; }
                 snapshot = snapshot with { Options = options with { AllowStaging = true } };
@@ -390,7 +406,7 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
 
     private async Task RetryTaskAsync(FilePackTaskViewModel row)
     {
-        if (!row.CanRetry) return;
+        if (!IsEnabled || !row.CanRetry) return;
         var external = row.Info.Snapshot.Options.Mode == PackMode.External;
         if (external && row.Info.WorkspacePath.Length > 0 && !(ConfirmAction ?? FilePackDialogs.Confirm)("重新准备工作区",
             "上次工作区将被删除。请先移出要保留的文件。")) return;
@@ -525,14 +541,17 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
         catch (OperationCanceledException) { }
         catch (Exception exception) when (IsExpected(exception)) { Notice = $"操作未能完成：{exception.Message}"; }
     }
-    private void SavePreferences() => Track(SavePreferencesCoreAsync());
+    private void SavePreferences() { _settingsDirty = true; Track(SavePreferencesCoreAsync()); }
     private async Task<bool> SavePreferencesCoreAsync(bool throwOnFailure = false)
     {
         await _preferencesGate.WaitAsync();
         try
         {
-            if (!_loaded || _disposed) return true;
-            await Manager.SavePreferencesAsync(new(MaximumParallel, OutputDirectory, AskOutputEachTime, KeepExternalWorkspace));
+            if (!_settingsLoaded || _disposed) return true;
+            var preferences = CurrentPreferences();
+            if (_loaded) await Manager.SavePreferencesAsync(preferences);
+            else await Store.SavePreferencesAsync(preferences);
+            _settingsDirty = false;
             return true;
         }
         catch (Exception exception) when (IsExpected(exception))
@@ -545,6 +564,8 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
         if (!_operations.Add(operation)) return;
         _ = ObserveAsync(operation);
     }
+    internal async Task WaitForDraftAsync()
+    { while ((_collecting || _creating) && _operations.Count > 0) await Task.WhenAll(_operations.ToArray()); }
     private async Task ObserveAsync(Task operation)
     {
         try { await operation; }
@@ -558,12 +579,15 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
         Notify(nameof(FailedCount)); Notify(nameof(ExternalCount)); Notify(nameof(TaskSummary)); }
     private void RefreshCommands()
     { AddFilesCommand.Refresh(); AddFoldersCommand.Refresh(); RemoveSelectedCommand.Refresh(); ClearCommand.Refresh(); AddVirtualFolderCommand.Refresh();
-        MoveSelectedCommand.Refresh(); CheckDuplicatesCommand.Refresh(); BrowseOutputCommand.Refresh(); CreateTaskCommand.Refresh(); CancelCollectionCommand.Refresh(); }
+        MoveSelectedCommand.Refresh(); CheckDuplicatesCommand.Refresh(); BrowseOutputCommand.Refresh(); CreateTaskCommand.Refresh(); CancelCollectionCommand.Refresh();
+        QuickPackCommand?.Refresh(); OpenQuickWindowCommand?.Refresh(); RetryTaskCommand.Refresh(); }
 
     public async Task FlushAsync()
     {
+        await SettingsReady;
+        await Task.WhenAll(Appearances.Select(appearance => appearance.PendingSave));
         if (_initializing is not null) await _initializing;
-        if (_loaded && !_disposed) await SavePreferencesCoreAsync(throwOnFailure: true);
+        if ((_loaded || _settingsDirty) && !_disposed) await SavePreferencesCoreAsync(throwOnFailure: true);
     }
     public Task ShutdownAsync()
     {
@@ -576,7 +600,8 @@ public sealed class FilePackViewModel : ObservableObject, IDisposable, IAsyncDis
         while (_operations.Count > 0)
         { try { await Task.WhenAll(_operations.ToArray()); } catch (Exception exception) when (exception is OperationCanceledException || IsExpected(exception)) { }
             _operations.RemoveWhere(task => task.IsCompleted); }
-        if (_initializing is not null) { await _initializing; await FlushAsync(); await Manager.ShutdownAsync(); }
+        await FlushAsync();
+        if (_initializing is not null) { await _initializing; await Manager.ShutdownAsync(); }
         _openWhenPrepared.Clear(); NotifyTaskState();
     }
     public void Dispose()

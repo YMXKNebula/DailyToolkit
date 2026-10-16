@@ -26,7 +26,7 @@ internal static partial class Program
             return RunFilePackCrashWorkerAsync(fixture, engine).GetAwaiter().GetResult();
         try
         {
-            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _]) ClipboardTestStation.Connect();
+            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _] or ["--clipboard-native-filepack-quick-checks", _]) ClipboardTestStation.Connect();
             else if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer") ClipboardTestStation.Connect(args[1], args[2]);
         }
         catch (Exception exception) { Console.WriteLine("FAIL Clipboard test isolation: " + exception); return 1; }
@@ -58,10 +58,13 @@ internal static partial class Program
         {
             try
             {
+                if (args is ["--clipboard-native-filepack-quick-checks", var quickImages])
+                { await CheckFilePackQuickAsync(quickImages); exitCode = 0; return; }
                 if (args is ["--clipboard-native-filepack-checks", var filePackImages])
                 {
                     await CheckFilePackEngineAsync(); await CheckFilePackCrashRecoveryAsync();
                     await CheckFilePackVisualsAsync(filePackImages); await CheckFilePackExitRetryAsync();
+                    await CheckFilePackQuickAsync(Path.Combine(filePackImages, "quick"));
                     CheckFavorites(); CheckNavigation(); CheckAppSettings(); exitCode = 0; return;
                 }
                 if (args is ["--clipboard-native-checks"])

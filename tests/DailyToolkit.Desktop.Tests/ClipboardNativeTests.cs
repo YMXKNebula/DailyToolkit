@@ -287,6 +287,21 @@ internal static partial class Program
                 !clipboard.IsRegistered, "Clipboard disposal disturbed lens registration");
             using var replacement = new LensShortcutController(competingWindow, hotkeyId: 0xB033);
             Require(replacement.Configure(clipboardChord, LensActivationMode.Toggle), "Disposed clipboard shortcut remained registered");
+            using var filePack = new LensShortcutController(source, hotkeyId: FilePack.FilePackController.HotkeyId);
+            using var filePackCompetitor = new LensShortcutController(competingWindow, hotkeyId: 0xB042);
+            var filePackChord = new KeyboardShortcut(3, 0x84, "Ctrl + Alt + F21");
+            var filePackRequests = 0; filePack.ToggleRequested += () => filePackRequests++;
+            Require(filePack.Configure(filePackChord, LensActivationMode.Toggle), "FilePack shortcut ID collided with existing tools");
+            Require(PostClipboardTestHotkey(source.Handle, 0x312, new IntPtr(FilePack.FilePackController.HotkeyId),
+                new IntPtr((int)(filePackChord.VirtualKey << 16 | filePackChord.Modifiers))), "FilePack message dispatch failed");
+            await WaitClipboardAsync(() => Task.FromResult(filePackRequests == 1));
+            Require(!filePackCompetitor.Configure(filePackChord, LensActivationMode.Toggle), "FilePack chord conflict was not detected");
+            Require(filePack.Suspend(true) && filePackCompetitor.Configure(filePackChord, LensActivationMode.Toggle) &&
+                !filePack.Suspend(false), "Suspension/resume did not report a newly occupied FilePack chord");
+            filePackCompetitor.Dispose(); Require(filePack.Suspend(false), "FilePack could not resume after releasing its chord");
+            filePack.Dispose();
+            Require(lens.IsRegistered && replacement.IsRegistered, "Disposing FilePack disturbed an existing tool shortcut");
+            Console.WriteLine("PASS Native FilePack shortcut ID, dispatch, conflict, suspension/resume and disposal; message-only, no keyboard input");
             Console.WriteLine("PASS Native shared lens/clipboard hotkey IDs, independent message-only dispatch, conflict reporting, suspension/resume and disposal; no input simulation or clipboard access");
         }
         finally { clipboard.Dispose(); lens.Dispose(); }

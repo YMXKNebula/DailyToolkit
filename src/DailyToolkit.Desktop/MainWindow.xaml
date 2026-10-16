@@ -347,7 +347,7 @@
       <clip:ClipboardSettingsView x:Name="ClipRecallSettings" Grid.Row="1"
                     Visibility="{Binding DataContext.ShowClipRecall, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
                     DataContext="{Binding ClipRecall}" />
-      <filepack:FilePackView x:Name="FilePackWorkbench" Grid.Row="1"
+      <filepack:FilePackSettingsView x:Name="FilePackSettings" Grid.Row="1"
                     Visibility="{Binding DataContext.ShowFilePack, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
                     DataContext="{Binding FilePack}" />
       <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"

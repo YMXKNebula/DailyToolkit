@@ -18,6 +18,7 @@ public partial class App : Application
 {
     private readonly Stopwatch _startup = Stopwatch.StartNew();
     private SingleInstance? _instance;
+    private FilePack.FilePackRequestBroker? _filePackRequests;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -99,7 +100,17 @@ public partial class App : Application
                     _instance.Dispose(); await Task.Delay(150); _instance=new();
                 }
             }
-            if (!_instance.IsPrimary) { _instance.ActivateExistingWindow(); Shutdown(); return; }
+            if (!_instance.IsPrimary)
+            {
+                if (FilePack.FilePackRequestBroker.TryReadArguments(e.Args, out var incomingPaths))
+                {
+                    _instance.ActivateExistingWindow(allowForegroundOnly: true);
+                    if (!await FilePack.FilePackRequestBroker.SendAsync(incomingPaths))
+                        MessageBox.Show("文件未能送入文件集装箱，请稍后重试。", "文件集装箱", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                else _instance.ActivateExistingWindow();
+                Shutdown(); return;
+            }
             var preferences=new AppPreferencesStore().Load();
             var startupRegistration=new StartupRegistration();
             if (preferences.AdminStartup && !startupRegistration.IsAdministrator)
@@ -108,7 +119,13 @@ public partial class App : Application
                 {
                     if (!startupRegistration.Read().Administrator) throw new InvalidOperationException("管理员启动任务已被移除，请重新启用管理员自启。");
                     if (startupRegistration.RegisteredTaskTargetsCurrentExecutable())
-                    { startupRegistration.LaunchAdministrator(requireRegisteredTask:true); Shutdown(); return; }
+                    {
+                        startupRegistration.LaunchAdministrator(requireRegisteredTask:true);
+                        if (FilePack.FilePackRequestBroker.TryReadArguments(e.Args, out var elevatedPaths) &&
+                            !await FilePack.FilePackRequestBroker.SendAsync(elevatedPaths))
+                            MessageBox.Show("文件未能送入。请在相同权限下打开文件集装箱后重试。", "文件集装箱", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        Shutdown(); return;
+                    }
                     startupRecoveryNotice="管理员自启任务仍指向另一版本，本次以普通权限打开当前版本。请在当前版本中关闭开机自启，再重新启用开机自启和管理员启动。";
                 }
                 catch (Exception exception) when (exception is System.Runtime.InteropServices.COMException or InvalidOperationException or System.ComponentModel.Win32Exception)
@@ -150,6 +167,9 @@ public partial class App : Application
 
             var window = new MainWindow(viewModel, enableShortcuts: !preview);
             MainWindow = window;
+            if (!preview)
+                _filePackRequests = new(paths => Dispatcher.InvokeAsync(() => window.LoadFilePackPathsAsync(paths)).Task.Unwrap(),
+                    failure: message => Dispatcher.BeginInvoke(new Action(() => viewModel.FilePack.SetNotice(message))));
             if (startupRecoveryNotice is not null) window.Loaded += (_,_) => viewModel.ShowStartupRecovery(startupRecoveryNotice);
             var firstFrame = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             window.ContentRendered += (_, _) =>
@@ -173,12 +193,17 @@ public partial class App : Application
                 // capturing an animation snapshot as well as the final bitmap.
                 TextOptions.SetTextRenderingMode(window.PreviewContent,TextRenderingMode.Grayscale);
             }
-            if (!preview && startupRecoveryNotice is null && new AppPreferencesStore().Load().SilentStartup && !e.Args.Contains("--show"))
+            if (!preview && startupRecoveryNotice is null && (FilePack.FilePackRequestBroker.TryReadArguments(e.Args, out _) ||
+                new AppPreferencesStore().Load().SilentStartup && !e.Args.Contains("--show")))
             {
                 window.StartHidden(); _=LensGpuRenderer.WarmShaderAsync();
             }
             else window.Show();
-            if (!preview) return;
+            if (!preview)
+            {
+                if (FilePack.FilePackRequestBroker.TryReadArguments(e.Args, out var initialPaths)) await window.LoadFilePackPathsAsync(initialPaths);
+                return;
+            }
 
             await firstFrame.Task;
             await viewModel.CurrentProbeTask;
@@ -252,6 +277,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _filePackRequests?.Dispose(); _filePackRequests = null;
         _instance?.Dispose(); _instance=null;
         base.OnExit(e);
     }

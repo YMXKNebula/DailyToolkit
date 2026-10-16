@@ -1,3 +1,5 @@
+using DailyToolkit.Core.Gaming;
+
 namespace DailyToolkit.Core.FilePack;
 
 public enum PackMode { BuiltIn, External }
@@ -27,8 +29,31 @@ public sealed record PackPlan(IReadOnlyList<PackBatch> Batches, bool RequiresSta
 public sealed record FilePackPreferences(int MaximumParallel = 2, string LastOutputDirectory = "",
     bool AskOutputEachTime = false, bool KeepExternalWorkspace = false)
 {
+    public bool IsEnabled { get; init; } = true;
+    public KeyboardShortcut? ToggleShortcut { get; init; } = new(3, 0x50, "Ctrl + Alt + P");
+    public QuickPackPreferences QuickPack { get; init; } = new();
+    public Dictionary<string, string> SettingsColors { get; init; } = [];
+    public Dictionary<string, string> PackWindowColors { get; init; } = [];
+    public Dictionary<string, string> QuickWindowColors { get; init; } = [];
     public FilePackPreferences Normalize() => this with
     {
-        MaximumParallel = Math.Clamp(MaximumParallel, 1, 4), LastOutputDirectory = LastOutputDirectory ?? ""
+        MaximumParallel = Math.Clamp(MaximumParallel, 1, 4), LastOutputDirectory = LastOutputDirectory ?? "",
+        ToggleShortcut = ToggleShortcut is null or { IsValid: true } ? ToggleShortcut : new(3, 0x50, "Ctrl + Alt + P"),
+        QuickPack = (QuickPack ?? new()).Normalize(), SettingsColors = NormalizeColors(SettingsColors),
+        PackWindowColors = NormalizeColors(PackWindowColors), QuickWindowColors = NormalizeColors(QuickWindowColors)
+    };
+    private static Dictionary<string, string> NormalizeColors(Dictionary<string, string>? colors) =>
+        (colors ?? []).Where(pair => pair.Key.Length <= 32 && LensBorderColor.TryParse(pair.Value, out _))
+            .Take(20).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+}
+
+public sealed record QuickPackPreferences(PackFormat Format = PackFormat.Zip, PackCompression Compression = PackCompression.Standard,
+    string OutputDirectory = "", string ArchiveName = "文件集装箱")
+{
+    public QuickPackPreferences Normalize() => this with
+    {
+        Format = Enum.IsDefined(Format) ? Format : PackFormat.Zip,
+        Compression = Enum.IsDefined(Compression) ? Compression : PackCompression.Standard,
+        OutputDirectory = OutputDirectory ?? "", ArchiveName = ArchiveName ?? "文件集装箱"
     };
 }

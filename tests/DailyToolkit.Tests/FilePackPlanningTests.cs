@@ -9,6 +9,23 @@ internal static partial class Program
 {
     private static void RegisterFilePackPlanningTests()
     {
+        Test("FilePack upgrades old preferences and keeps quick-pack options and three window palettes separate", () =>
+        {
+            var old = JsonSerializer.Deserialize<FilePackPreferences>("{\"MaximumParallel\":3,\"LastOutputDirectory\":\"old-output\"}")!.Normalize();
+            Require(old.IsEnabled && old.MaximumParallel == 3 && old.LastOutputDirectory == "old-output" && old.ToggleShortcut?.IsValid == true);
+            var preferences = old with { IsEnabled = false, ToggleShortcut = null,
+                QuickPack = new(PackFormat.SevenZip, PackCompression.Maximum, "quick-output", "快速归档"),
+                SettingsColors = new() { ["Window"] = "#123456" }, PackWindowColors = new() { ["Window"] = "#234567" },
+                QuickWindowColors = new() { ["Window"] = "#345678" } };
+            var restored = JsonSerializer.Deserialize<FilePackPreferences>(JsonSerializer.Serialize(preferences))!.Normalize();
+            Require(!restored.IsEnabled && restored.ToggleShortcut is null && restored.QuickPack == preferences.QuickPack &&
+                restored.SettingsColors["Window"] == "#123456" && restored.PackWindowColors["Window"] == "#234567" &&
+                restored.QuickWindowColors["Window"] == "#345678" && restored.LastOutputDirectory == "old-output");
+            var normalized = (preferences with { QuickPack = new((PackFormat)999, (PackCompression)999, null!, null!),
+                QuickWindowColors = new() { ["Window"] = "invalid" } }).Normalize();
+            Require(normalized.QuickPack.Format == PackFormat.Zip && normalized.QuickPack.Compression == PackCompression.Standard &&
+                normalized.QuickPack.OutputDirectory == "" && normalized.QuickWindowColors.Count == 0);
+        });
         Test("FilePack rejects traversing, rooted, device and Windows ambiguous archive paths", () =>
         {
             foreach (var path in new[] { "", "../outside", "a/../b", "a/./b", "/root", "C:/root", @"\\server\share",
