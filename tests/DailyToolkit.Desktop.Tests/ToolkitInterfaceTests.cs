@@ -102,7 +102,8 @@ internal static partial class Program
                 model.Gaming.FrameHeight == 512 && !model.Gaming.IsActive,"Ratio selection overwrote manual sizes or started capture");
             window.UpdateLayout();
             var sizeCombo=Descendants(window).OfType<ComboBox>().Single(control => ReferenceEquals(control.ItemsSource,model.Gaming.FrameSizePresets));
-            Require(Descendants(sizeCombo).OfType<TextBlock>().Any(text => text.Text == "中 · 屏幕宽高的 30%") &&
+            Require(sizeCombo.SelectedItem is LensSizeOption size &&
+                Descendants(sizeCombo).OfType<TextBlock>().Any(text => text.Text == size.Label) &&
                 !Descendants(sizeCombo).OfType<TextBlock>().Any(text => text.Text.Contains("LensSizeOption")),
                 "Rounded dropdown exposed an internal record instead of its display label");
             Require(Descendants(window).OfType<Slider>().Where(control => control.IsVisible).All(control => control.Maximum == LensZoom.Maximum || control.Maximum == 100),
