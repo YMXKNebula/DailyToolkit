@@ -22,6 +22,8 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args is ["--filepack-ipc-client", var pipe, var file])
+            return RunFilePackIpcClientAsync(pipe, file).GetAwaiter().GetResult();
         if (args is ["--filepack-crash-worker", var fixture, var engine])
             return RunFilePackCrashWorkerAsync(fixture, engine).GetAwaiter().GetResult();
         try

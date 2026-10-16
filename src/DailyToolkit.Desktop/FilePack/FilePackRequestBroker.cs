@@ -56,11 +56,11 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
     {
         try
         {
+            await using var pipe = new NamedPipeServerStream(_name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            _pipe = pipe;
             while (!_stop.IsCancellationRequested)
             {
-                await using var pipe = new NamedPipeServerStream(_name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                _pipe = pipe;
                 await pipe.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token); timeout.CancelAfter(TimeSpan.FromSeconds(5));
                 try
@@ -72,14 +72,17 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
                     var valid = paths is not null && TryReadArguments(["--file-pack-load", .. paths], out var normalized) && _requests.Writer.TryWrite(normalized);
                     await pipe.WriteAsync(new byte[] { valid ? (byte)1 : (byte)0 }, timeout.Token).ConfigureAwait(false);
                     await pipe.FlushAsync(timeout.Token).ConfigureAwait(false);
+                    // The client closes after reading its acknowledgement. Keep the
+                    // instance alive until then, so a fast reconnect cannot race it.
+                    await pipe.ReadAsync(new byte[1], timeout.Token).ConfigureAwait(false);
                 }
                 catch (Exception exception) when (exception is IOException or OperationCanceledException or JsonException or ArgumentException) { }
-                finally { _pipe = null; }
+                finally { if (!_stop.IsCancellationRequested) pipe.Disconnect(); }
             }
         }
         catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException or UnauthorizedAccessException)
         { if (!_stop.IsCancellationRequested) _failure?.Invoke("文件集装箱右键入口未能启动。"); }
-        finally { _requests.Writer.TryComplete(); }
+        finally { _pipe = null; _requests.Writer.TryComplete(); }
     }
     private async Task ConsumeAsync()
     {

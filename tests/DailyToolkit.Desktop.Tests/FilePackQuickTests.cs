@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Compression;
 using System.IO.Pipes;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -340,17 +341,85 @@ internal static partial class Program
         var name = "DailyToolkit.FilePack.Tests." + Guid.NewGuid().ToString("N");
         var paths = Enumerable.Range(0, 12).Select(index => Path.GetFullPath($"fixture {index}.txt")).ToArray();
         var received = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-        await using var broker = new FilePackRequestBroker(items => { foreach (var path in items) received.TryAdd(path, true); return Task.CompletedTask; }, name);
+        var serverFailures = new ConcurrentQueue<string>();
+        await using var broker = new FilePackRequestBroker(items => { foreach (var path in items) received.TryAdd(path, true); return Task.CompletedTask; }, name,
+            failure: serverFailures.Enqueue);
         Require(FilePackRequestBroker.TryReadArguments(["--file-pack-load", paths[0], paths[0]], out var normalized) && normalized.Length == 1 &&
             !FilePackRequestBroker.TryReadArguments(["--file-pack-load", "relative.txt"], out _) &&
             !FilePackRequestBroker.TryReadArguments(["--file-pack-load", "--exit"], out _), "Explorer arguments accepted invalid paths or commands");
-        var results = await Task.WhenAll(paths.Select(path => FilePackRequestBroker.SendAsync([path], name)));
-        Require(results.All(value => value), "Concurrent Explorer requests were not acknowledged");
+        await using (var delayed = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly))
+        {
+            await delayed.ConnectAsync(2000);
+            var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new[] { paths[0] });
+            await delayed.WriteAsync(BitConverter.GetBytes(bytes.Length)); await delayed.WriteAsync(bytes); await delayed.FlushAsync();
+            await Task.Delay(250);
+            var ack = new byte[1]; await delayed.ReadExactlyAsync(ack);
+            Require(ack[0] == 1, "A delayed reader lost the accepted IPC acknowledgement");
+        }
+        // Explorer launches a separate client process per selection. Keep those
+        // blocking connection attempts out of the server's own thread pool.
+        var clients = new List<Process>();
+        try
+        {
+            foreach (var path in paths)
+            {
+                var start = new ProcessStartInfo(System.Environment.ProcessPath!)
+                    { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                if (Path.GetFileNameWithoutExtension(start.FileName).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+                    start.ArgumentList.Add(typeof(Program).Assembly.Location);
+                foreach (var argument in new[] { "--filepack-ipc-client", name, path }) start.ArgumentList.Add(argument);
+                clients.Add(Process.Start(start) ?? throw new InvalidOperationException("IPC client fixture did not start"));
+            }
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+            await Task.WhenAll(clients.Select(async client =>
+            {
+                var output = client.StandardOutput.ReadToEndAsync(); var error = client.StandardError.ReadToEndAsync();
+                await client.WaitForExitAsync(timeout.Token);
+                Require(client.ExitCode == 0, "Concurrent Explorer client failed: " + await output + await error + string.Join("; ", serverFailures));
+            }));
+        }
+        finally
+        {
+            foreach (var client in clients)
+            { try { if (!client.HasExited) { client.Kill(entireProcessTree: true); await client.WaitForExitAsync(); } } finally { client.Dispose(); } }
+        }
         await WaitForFilePackAsync(() => received.Count == paths.Length, "Explorer burst lost selected files");
         await using (var invalid = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous))
         { await invalid.ConnectAsync(2000); await invalid.WriteAsync(BitConverter.GetBytes(2 * 1024 * 1024)); await invalid.FlushAsync(); }
         Require(await FilePackRequestBroker.SendAsync([paths[0]], name), "An oversized request stopped subsequent Explorer requests");
-        Console.WriteLine("PASS FilePack same-user local IPC: argument validation, concurrent selection bursts, bounded request rejection, subsequent recovery and disposal; no Explorer or registry changes");
+        await using (var truncated = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly))
+        { await truncated.ConnectAsync(2000); await truncated.WriteAsync(BitConverter.GetBytes(32)); await truncated.WriteAsync(new byte[3]); }
+        Require(await FilePackRequestBroker.SendAsync([paths[0]], name), "A disconnected client stopped subsequent requests");
+        await using (var idle = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly))
+        {
+            await idle.ConnectAsync(2000);
+            var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new[] { paths[0] });
+            await idle.WriteAsync(BitConverter.GetBytes(bytes.Length)); await idle.WriteAsync(bytes);
+            var ack = new byte[1]; await idle.ReadExactlyAsync(ack);
+            Require(ack[0] == 1 && await FilePackRequestBroker.SendAsync([paths[0]], name).WaitAsync(TimeSpan.FromSeconds(12)),
+                "A client retaining its connection blocked subsequent requests beyond the server deadline");
+        }
+        Require(serverFailures.IsEmpty, "Recoverable clients stopped the listener: " + string.Join("; ", serverFailures));
+        Console.WriteLine("PASS FilePack same-user local IPC: 12 concurrent client processes, delayed acknowledgement read, truncated/oversized requests, bounded idle-client recovery and disposal; no Explorer or registry changes");
+    }
+    private static async Task<int> RunFilePackIpcClientAsync(string name, string path)
+    {
+        const string prefix = "DailyToolkit.FilePack.Tests.";
+        if (!name.StartsWith(prefix, StringComparison.Ordinal) || !Guid.TryParseExact(name[prefix.Length..], "N", out _) || !Path.IsPathFullyQualified(path)) return 2;
+        string? diagnostic = null;
+        EventHandler<System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs> capture = (_, args) =>
+        { if (args.Exception is IOException or UnauthorizedAccessException or OperationCanceledException) diagnostic = $"{args.Exception.GetType().Name}/0x{args.Exception.HResult:X8}"; };
+        AppDomain.CurrentDomain.FirstChanceException += capture;
+        try
+        {
+            if (await FilePackRequestBroker.SendAsync([path], name)) return 0;
+            Console.Error.WriteLine(diagnostic ?? "IPC request was not acknowledged"); return 1;
+        }
+        finally
+        {
+            AppDomain.CurrentDomain.FirstChanceException -= capture;
+            if (Directory.Exists(NotesFixtures.FullName)) NotesFixtures.Delete(recursive: true);
+        }
     }
     private sealed class FilePackMenuFake : IFilePackMenuRegistry
     {
