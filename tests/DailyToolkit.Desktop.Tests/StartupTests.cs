@@ -221,16 +221,22 @@ internal static partial class Program
             if (window.TrayAvailable)
             {
                 model.CloseToTray=true; window.Close();
-                Require(!window.IsVisible && !probe.WasCanceled && !model.PendingWork.IsCompleted,"Closing to tray canceled the app instead of retaining it");
-                window.ShowFromTray(); Require(window.IsVisible,"The tray did not restore the hidden window");
+                await model.PendingWork.WaitAsync(TimeSpan.FromSeconds(5));
+                Require(!window.IsVisible && !window.IsLocalPolling && probe.WasCanceled && ReviewIsWindow(handle),
+                    "Closing to tray did not retain the window while stopping passive computer work");
+                window.ShowFromTray();
+                Require(window.IsVisible && window.IsLocalPolling && !model.PendingWork.IsCompleted,
+                    "The tray did not restore the hidden window and restart passive computer work");
                 model.MinimizeToTray=true; window.WindowState=WindowState.Minimized;
-                Require(!window.IsVisible,"Minimize-to-tray left a visible taskbar window");
+                await model.PendingWork.WaitAsync(TimeSpan.FromSeconds(5));
+                Require(!window.IsVisible && !window.IsLocalPolling && ReviewIsWindow(handle),
+                    "Minimize-to-tray did not stop passive work while retaining its window");
                 window.ShowFromTray(); Require(window.IsVisible && window.WindowState != WindowState.Minimized,"Tray restore kept the window minimized");
             }
             else Console.WriteLine("INFO Explorer tray unavailable; native hide actions omitted, hidden startup/restore/exit still checked");
             var closed=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); window.Closed += (_,_) => closed.TrySetResult();
             window.RequestExit(); await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            Require(probe.WasCanceled && model.PendingWork.IsCompleted,"Real exit did not bypass tray mode and release local work");
+            Require(probe.WasCanceled && model.PendingWork.IsCompleted && !ReviewIsWindow(handle),"Real exit did not bypass tray mode and release local work");
             Console.WriteLine("PASS Silent startup, native tray, close/minimize hiding, hidden-window restore and true exit preserve lifecycle correctly");
         }
         finally

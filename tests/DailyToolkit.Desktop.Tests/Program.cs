@@ -102,7 +102,7 @@ internal static partial class Program
                     CheckShortcutPersistence(); CheckRenamedSettingsCompatibility(); CheckFavorites(); CheckNavigation(); CheckAppSettings();
                     await CheckNotesPersistenceAsync(); await CheckNotesStabilityAsync(); CheckNotesFocus();
                     await CheckLensStartupTimingAsync(); CheckRendererRepeatedDispose();
-                    await CheckInactiveNotesResourcesAsync(); await CheckPassiveComputerCancellationAsync(); exitCode = 0; return;
+                    await CheckInactiveNotesResourcesAsync(); await CheckPassiveComputerCancellationAsync(); await CheckTrayLifecycleAsync(); exitCode = 0; return;
                 }
                 if (args is ["--update-checks"])
                 { await CheckAppUpdatesAsync(); exitCode = 0; return; }
