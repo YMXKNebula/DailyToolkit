@@ -45,10 +45,17 @@ public partial class MainWindow
         if (_clockTimer is null || _viewModel is null) return;
         var visible=IsVisible && WindowState != WindowState.Minimized && (!_trackActivity || IsActive);
         LensPhotoPreview.SetHostActive(visible);
-        if (!_initializedRuntime || !visible || !_viewModel.IsHome) { _clockTimer.Stop(); return; }
+        var monitorComputer = _initializedRuntime && visible && _viewModel.IsHome;
+        _viewModel.SetPassiveMonitoring(monitorComputer);
+        if (!monitorComputer)
+        {
+            _clockTimer.Stop();
+            if (_viewModel.Report.Stage != Core.Environment.ProbeStage.Complete) _computerInitialized=false;
+            return;
+        }
         _viewModel.UpdateClock();
-        if (!_computerInitialized) { _computerInitialized=true; _= _viewModel.InitializeAsync(); }
-        else if (!_clockTimer.IsEnabled) _viewModel.QueueLocalRefresh();
+        if (!_computerInitialized) { _computerInitialized=true; _= _viewModel.InitializePassiveAsync(); }
+        else if (!_clockTimer.IsEnabled) _viewModel.QueueLocalRefresh(passive:true);
         _clockTimer.Start();
     }
     internal void ShowFromTray()

@@ -53,15 +53,57 @@ internal static partial class Program
                 controller.ToggleFocus(); await controller.Pending;
                 Require(model.Text.EndsWith("after cancelled exit", StringComparison.Ordinal), "Cancelled exit lost subsequent input");
             }
+            var beforeUndo = model.Text;
+            window.NoteEditor.Select(window.NoteEditor.Text.Length, 0);
+            window.NoteEditor.SelectedText = " undo survives hiding";
+            var afterUndo = model.Text;
+            Require(window.NoteEditor.CanUndo, "The note editing fixture did not create an undo action");
+            window.NoteEditor.Select(3, 4);
             controller.Toggle(); await controller.Pending;
-            Require(!model.IsVisible && MouseHook(window) == IntPtr.Zero, "Hiding retained the optional mouse hook");
+            Require(!model.IsVisible && controller.NoteWindow == window && model.IsContentLoaded &&
+                MouseHook(window) == IntPtr.Zero, "Hiding lost an active undo session or retained its optional mouse hook");
+            var savedText = await File.ReadAllTextAsync(store.ContentPath);
             controller.Toggle(); await controller.Pending;
+            Require(controller.NoteWindow == window && model.Text == savedText &&
+                window.NoteEditor.SelectionStart == 3 && window.NoteEditor.SelectionLength == 4,
+                "Reopening lost the undo session, note text or selection");
+            window.NoteEditor.Undo();
+            Require(model.Text == beforeUndo && window.NoteEditor.CanRedo, "Undo stopped working after hide/show");
+            controller.Toggle(); await controller.Pending;
+            controller.Toggle(); await controller.Pending;
+            Require(controller.NoteWindow == window && window.NoteEditor.CanRedo, "Hiding discarded a redo-only session");
+            window.NoteEditor.Redo();
+            Require(model.Text == afterUndo, "Redo stopped working after hide/show");
             for (var i = 0; i < 4; i++) controller.Toggle();
             await controller.Pending;
-            Require(model.IsVisible && controller.NoteWindow == window && await File.ReadAllTextAsync(store.ContentPath) == model.Text,
-                "Queued hide/show operations lost final input, order or window reuse");
+            Require(model.IsVisible && controller.NoteWindow is not null && await File.ReadAllTextAsync(store.ContentPath) == model.Text,
+                "Queued hide/show operations lost final input or order");
+            window = controller.NoteWindow!;
+            afterUndo += "\n" + string.Join('\n', Enumerable.Range(1, 70).Select(line => $"saved scroll fixture line {line}"));
+            window.NoteEditor.Text = afterUndo;
+            window.NoteEditor.IsUndoEnabled = false;
+            window.NoteEditor.IsUndoEnabled = true;
+            Require(!window.NoteEditor.CanUndo && !window.NoteEditor.CanRedo,
+                "Resetting the clean note fixture retained its editing history");
+            window.UpdateLayout();
+            window.NoteEditor.Select(420, 4);
+            window.NoteEditor.ScrollToVerticalOffset(160);
+            window.UpdateLayout();
+            var scrollOffset = window.NoteEditor.VerticalOffset;
+            Require(scrollOffset > 0, "The clean note fixture did not provide a scrolled document");
+            var width = window.Width; var height = window.Height;
+            controller.Toggle(); await controller.Pending;
+            Require(controller.NoteWindow is null && !model.IsContentLoaded && model.Text.Length == 0,
+                "A clean hidden note without undo/redo retained its window or document");
+            var released = window;
+            controller.Toggle(); await controller.Pending;
+            window = controller.NoteWindow!;
+            Require(window != released && model.Text == afterUndo && window.Width == width && window.Height == height &&
+                window.NoteEditor.SelectionStart == 420 && window.NoteEditor.SelectionLength == 4 &&
+                Math.Abs(window.NoteEditor.VerticalOffset - scrollOffset) < 2,
+                $"Recreating a released clean note lost state: new={window != released}, text={model.Text == afterUndo}, size={window.Width}×{window.Height}/{width}×{height}, selection={window.NoteEditor.SelectionStart}+{window.NoteEditor.SelectionLength}/420+4, scroll={window.NoteEditor.VerticalOffset}/{scrollOffset}, savedScroll={controller.SavedVerticalOffset}, focused={model.IsFocused}");
             Require(await controller.PrepareExitAsync(), "Save did not recover after releasing the file lock");
-            Console.WriteLine("PASS Notes edits during save, failed hide/exit, original/backup preservation, cancelled-exit editing and rapid queue recovery");
+            Console.WriteLine("PASS Notes edits during save, failed hide/exit, original/backup preservation, cross-hide undo/redo, clean-session release and rapid queue recovery");
 
             // Loading a damaged primary must leave both generations untouched.
             controller.Unfocus(); model.IsFocused = false;

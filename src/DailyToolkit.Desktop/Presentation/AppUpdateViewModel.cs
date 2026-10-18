@@ -85,12 +85,17 @@ internal sealed class AppUpdateViewModel : ObservableObject, IDisposable
             }
         }
         catch (OperationCanceledException)
-        { if (!_disposed) Status = operation.IsCancellationRequested ? "已取消更新。" : "连接超时，请稍后再试。"; }
+        {
+            if (!operation.IsCancellationRequested)
+                DiagnosticReportService.Shared.RecordError(DiagnosticModule.Update, new TimeoutException());
+            if (!_disposed) Status = operation.IsCancellationRequested ? "已取消更新。" : "连接超时，请稍后再试。";
+        }
         catch (Win32Exception error) when (error.NativeErrorCode == 1223)
         { Status = "已取消更新。"; }
         catch (Exception error) when (error is HttpRequestException or IOException or UnauthorizedAccessException or
             JsonException or InvalidOperationException or Win32Exception or KeyNotFoundException or ArgumentException)
         {
+            DiagnosticReportService.Shared.RecordError(DiagnosticModule.Update, error);
             Trace.WriteLine(error);
             if (!_disposed) Status = error is InvalidDataException or InvalidOperationException ? error.Message :
                 error is HttpRequestException ? "无法连接更新服务，请稍后再试。" :
@@ -113,7 +118,11 @@ internal sealed class AppUpdateViewModel : ObservableObject, IDisposable
             start.ArgumentList.Add("/select," + _downloaded);
             using var process = Process.Start(start);
         }
-        catch (Win32Exception error) { Trace.WriteLine(error); Status = "没有打开文件夹。"; }
+        catch (Win32Exception error)
+        {
+            DiagnosticReportService.Shared.RecordError(DiagnosticModule.Update, error);
+            Trace.WriteLine(error); Status = "没有打开文件夹。";
+        }
     }
 
     private void NotifyState()

@@ -59,6 +59,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private NetworkInfo _network = NetworkInfo.Unknown;
     private WeatherInfo _weather = WeatherInfo.Unavailable("正在读取 Windows 天气");
     private bool _isReadingStatus;
+    private bool _passiveMonitoring, _probeIsPassive, _localStatusIsPassive;
+    private CancellationTokenSource? _probeCancellation, _localStatusCancellation;
 
     public MainViewModel(IEnvironmentProbe probe, DisplayInfo display, ILocalStatusProbe? localStatus = null,
         TimeProvider? clock = null, FavoritesStore? favoritesStore = null, GamingPreferencesStore? gamingPreferencesStore = null,
@@ -433,34 +435,63 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _firstFrameMilliseconds = milliseconds;
     }
 
-    public Task InitializeAsync()
+    public Task InitializeAsync() => InitializeComputerAsync(passive: false);
+
+    internal async Task InitializePassiveAsync()
     {
-        if (!CurrentProbeTask.IsCompleted) return CurrentProbeTask;
+        // A rapid hide/show may return before cancellation has unwound. Wait without
+        // overlapping probes, then restart only if this page is still in use.
+        await CurrentProbeTask;
+        if (_passiveMonitoring && !_lifetime.IsCancellationRequested) await InitializeComputerAsync(passive: true);
+    }
+
+    internal void SetPassiveMonitoring(bool active)
+    {
+        _passiveMonitoring = active;
+        if (active) return;
+        if (_probeIsPassive) _probeCancellation?.Cancel();
+        if (_localStatusIsPassive) _localStatusCancellation?.Cancel();
+    }
+
+    private Task InitializeComputerAsync(bool passive)
+    {
+        if (!CurrentProbeTask.IsCompleted)
+        {
+            // An explicit Refresh keeps running if the user leaves the page.
+            if (!passive) { _probeIsPassive = false; _localStatusIsPassive = false; }
+            return CurrentProbeTask;
+        }
+        if (_lifetime.IsCancellationRequested || passive && !_passiveMonitoring) return Task.CompletedTask;
         UpdateClock();
-        QueueLocalRefresh(forceWeather: true);
-        CurrentProbeTask = Task.WhenAll(RefreshAsync(), CurrentLocalStatusTask);
+        QueueLocalRefresh(forceWeather: true, passive: passive);
+        CurrentProbeTask = Task.WhenAll(RefreshAsync(passive), CurrentLocalStatusTask);
         return CurrentProbeTask;
     }
 
     public void UpdateClock()
     {
+        var previous = _now;
         _now = _clock.GetLocalNow();
-        Notify(nameof(TimeText));
-        Notify(nameof(DateText));
-        Notify(nameof(WeatherUpdatedText));
+        if (previous.Hour != _now.Hour || previous.Minute != _now.Minute) Notify(nameof(TimeText));
+        if (previous.Date != _now.Date) Notify(nameof(DateText));
+        if (_weather is { FromCache: true, UpdatedAt: { } updated } &&
+            (previous - updated > TimeSpan.FromHours(3)) != (_now - updated > TimeSpan.FromHours(3))) Notify(nameof(WeatherUpdatedText));
     }
 
-    public void QueueLocalRefresh(bool forceWeather = false)
+    public void QueueLocalRefresh(bool forceWeather = false, bool passive = false)
     {
-        if (_isReadingStatus || _lifetime.IsCancellationRequested) return;
-        CurrentLocalStatusTask = RefreshLocalStatusAsync(forceWeather);
+        if (_isReadingStatus) { if (!passive) _localStatusIsPassive = false; return; }
+        if (_lifetime.IsCancellationRequested || passive && !_passiveMonitoring) return;
+        CurrentLocalStatusTask = RefreshLocalStatusAsync(forceWeather, passive);
     }
 
-    private async Task RefreshLocalStatusAsync(bool forceWeather)
+    private async Task RefreshLocalStatusAsync(bool forceWeather, bool passive)
     {
         _isReadingStatus = true;
         RefreshCommand.Refresh();
-        var token = _lifetime.Token;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _localStatusCancellation = cancellation; _localStatusIsPassive = passive;
+        var token = cancellation.Token;
         var readWeather = forceWeather || _lastWeatherRead is not { } last || _now < last || _now - last >= TimeSpan.FromMinutes(1);
         try
         {
@@ -471,25 +502,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             _network = await networkTask;
             _weather = await weatherTask;
             if (readWeather) _lastWeatherRead = _now;
-            foreach (var property in new[] { nameof(Network), nameof(Weather), nameof(NetworkText), nameof(NetworkDetail),
-                nameof(TrafficText), nameof(WeatherText), nameof(WeatherNote), nameof(WeatherUpdatedText) }) Notify(property);
+            foreach (var property in new[] { nameof(Network), nameof(NetworkText), nameof(NetworkDetail), nameof(TrafficText) }) Notify(property);
+            if (readWeather)
+                foreach (var property in new[] { nameof(Weather), nameof(WeatherText), nameof(WeatherNote), nameof(WeatherUpdatedText) }) Notify(property);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        finally { _isReadingStatus = false; RefreshCommand.Refresh(); }
+        finally { _localStatusCancellation = null; _isReadingStatus = false; RefreshCommand.Refresh(); }
     }
 
     private async Task<NetworkInfo> ReadNetworkSafelyAsync(CancellationToken token)
     {
         try { return await _localStatus.ReadNetworkAsync(token); }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-        catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); return NetworkInfo.Unknown; }
+        catch (Exception exception) { Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.Computer, exception); System.Diagnostics.Trace.WriteLine(exception); return NetworkInfo.Unknown; }
     }
 
     private async Task<WeatherInfo> ReadWeatherSafelyAsync(CancellationToken token)
     {
         try { return await _localStatus.ReadWeatherAsync(token); }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-        catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); return WeatherInfo.Unavailable("Windows 天气文字暂时不可读"); }
+        catch (Exception exception) { Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.Computer, exception); System.Diagnostics.Trace.WriteLine(exception); return WeatherInfo.Unavailable("Windows 天气文字暂时不可读"); }
     }
 
     public string ExportJson() => JsonSerializer.Serialize(new
@@ -499,22 +531,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Daily = new { WindowsTime = _now, Network, Weather }
     }, MachineReport.JsonOptions);
 
-    private async Task RefreshAsync()
+    private async Task RefreshAsync(bool passive)
     {
         if (IsRefreshing || _lifetime.IsCancellationRequested) return;
         IsRefreshing = true;
         Notice = "";
-        var token = _lifetime.Token;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _probeCancellation = cancellation; _probeIsPassive = passive;
+        var token = cancellation.Token;
         try
         {
             var basic = await Task.Run(() => _probe.ReadBasic(_display), token);
+            token.ThrowIfCancellationRequested();
             Apply(basic);
             var details = await Task.Run(() => _probe.ReadDetailsAsync(basic, token), token);
+            token.ThrowIfCancellationRequested();
             Apply(details);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception exception)
         {
+            Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.Computer, exception);
             System.Diagnostics.Trace.WriteLine(exception);
             Apply(Report with
             {
@@ -522,7 +559,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 Issues = Report.Issues.Concat([new ProbeIssue("检测", "部分电脑信息没有读取完成")]).ToArray()
             });
         }
-        finally { IsRefreshing = false; }
+        finally { _probeCancellation = null; IsRefreshing = false; }
     }
 
     private void Apply(MachineReport report)

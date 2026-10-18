@@ -9,10 +9,12 @@ public sealed class FilePackStore
     private readonly HashSet<Guid> _unreadableTasks = [];
     private readonly List<string> _diagnostics = [];
     private bool _unreadablePreferences;
+    private bool _unreadableDraft;
     public string RootDirectory { get; }
     public IReadOnlyList<string> Diagnostics { get { lock (_diagnostics) return _diagnostics.ToArray(); } }
     private string TasksDirectory => Path.Combine(RootDirectory, "Tasks");
     private string PreferencesPath => Path.Combine(RootDirectory, "preferences.json");
+    private string DraftPath => Path.Combine(RootDirectory, "draft.json");
 
     public FilePackStore(string rootDirectory) => RootDirectory = Path.GetFullPath(rootDirectory);
 
@@ -110,6 +112,57 @@ public sealed class FilePackStore
             await WriteAsync(PreferencesPath, preferences.Normalize(), cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
+    }
+
+    public async Task<PackDraft?> LoadDraftAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            FilePackPaths.EnsureNoReparsePoints(DraftPath);
+            if (!File.Exists(DraftPath)) return null;
+            try
+            {
+                if (new FileInfo(DraftPath).Length > 64L * 1024 * 1024) throw new InvalidDataException("草稿清单过大。");
+                await using var stream = new FileStream(DraftPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+                var draft = await JsonSerializer.DeserializeAsync<PackDraft>(stream, JsonOptions, cancellationToken).ConfigureAwait(false)
+                    ?? throw new InvalidDataException("草稿清单为空。");
+                ValidateDraft(draft);
+                return draft;
+            }
+            catch (Exception exception) when (IsStorageError(exception) || exception is ArgumentException)
+            {
+                _unreadableDraft = true;
+                Diagnose("待打包清单未能读取，原文件保留，暂时不能覆盖。");
+                throw new IOException("待打包清单未能读取，原文件已保留。", exception);
+            }
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SaveDraftAsync(PackDraft draft, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_unreadableDraft) throw new IOException("原待打包清单无法读取，已阻止覆盖。");
+            ValidateDraft(draft);
+            await WriteAsync(DraftPath, draft, cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    private static void ValidateDraft(PackDraft draft)
+    {
+        if (draft.Entries is null || draft.Entries.Count > FilePackPaths.MaximumEntries ||
+            draft.TaskName is null || draft.ArchiveName is null || draft.OutputDirectory is null ||
+            draft.NewFolderPath is null || draft.MoveTargetPath is null || !Enum.IsDefined(draft.Mode) ||
+            !Enum.IsDefined(draft.Format) || !Enum.IsDefined(draft.Compression) ||
+            draft.Entries.Any(row => row?.Entry is null || row.PathDraft is null || row.Entry.SourcePath is null ||
+                row.Entry.ArchivePath is null || row.Entry.SourceRoot is null || row.Entry.Size < 0 ||
+                !row.Entry.IsDirectory && (row.Entry.SourceStamp is null || row.Entry.SourceStamp.Length != row.Entry.Size)))
+            throw new InvalidDataException("待打包清单内容无效。");
+        FilePackPaths.ValidateEntries(draft.Entries.Select(row => row.Entry));
     }
 
     private static async Task WriteAsync<T>(string path, T value, CancellationToken cancellationToken)

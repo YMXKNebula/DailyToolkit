@@ -6,12 +6,21 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      soak_minutes:
+        description: 'Optional isolated background stability check (minutes)'
+        type: choice
+        default: '0'
+        options: ['0', '60', '180', '300']
+  schedule:
+    - cron: '0 20 * * 0'
 
 permissions:
   contents: read
 
 jobs:
   windows:
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -23,25 +32,20 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Build and check
         shell: pwsh
-        run: ./scripts/build.ps1
-      - name: Check clipboard media and native events
+        run: ./scripts/check-quality.ps1 -IsolatedCi
+      - name: Retain direct and transitive dependency audit
         shell: pwsh
-        run: |
-          $checks = './tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyToolkit.Desktop.Tests.exe'
-          & $checks --clipboard-media-checks
-          if ($LASTEXITCODE -ne 0) { throw 'Clipboard media checks failed.' }
-          & $checks --clipboard-native-checks
-          if ($LASTEXITCODE -ne 0) { throw 'Isolated clipboard event checks failed.' }
-          & $checks --clipboard-native-visuals (Join-Path $env:RUNNER_TEMP 'clipboard-panel-checks')
-          if ($LASTEXITCODE -ne 0) { throw 'Clipboard panel checks failed.' }
-          & $checks --clipboard-native-palette-checks (Join-Path $env:RUNNER_TEMP 'palette-checks')
-          if ($LASTEXITCODE -ne 0) { throw 'Isolated palette checks failed.' }
-      - name: Check FilePack packing and recovery
-        shell: pwsh
-        run: |
-          $checks = './tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyToolkit.Desktop.Tests.exe'
-          & $checks --clipboard-native-filepack-checks (Join-Path $env:RUNNER_TEMP 'filepack-checks')
-          if ($LASTEXITCODE -ne 0) { throw 'Isolated FilePack checks failed.' }
+        run: ./scripts/audit-dependencies.ps1
+      - name: Keep quality reports, logs and fixture images
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-check-diagnostics
+          path: |
+            .local/quality-checks/**
+            .local/dependency-audit/**
+          if-no-files-found: warn
+          retention-days: 14
       - name: Package portable app
         shell: pwsh
         run: ./scripts/publish.ps1
@@ -105,3 +109,30 @@ jobs:
             .local/installer-tests/*.json
           if-no-files-found: ignore
           retention-days: 7
+  background-stability:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.soak_minutes != '0')
+    runs-on: windows-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build isolated fixture checks
+        shell: pwsh
+        run: ./scripts/build.ps1 -SkipTests
+      - name: Observe repeated enable, disable and idle resource use
+        shell: pwsh
+        env:
+          SOAK_MINUTES: ${{ github.event_name == 'schedule' && '180' || inputs.soak_minutes }}
+        run: ./scripts/test-background-stability.ps1 -DurationMinutes ([int]$env:SOAK_MINUTES)
+      - name: Keep stability reports and failure logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: background-stability-diagnostics
+          path: .local/background-stability/**
+          if-no-files-found: warn
+          retention-days: 14

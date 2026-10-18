@@ -15,6 +15,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     private Task? _opening;
     private Task _settingsTask = Task.CompletedTask;
     private Task _refreshTask = Task.CompletedTask;
+    private Task _maintenanceTask = Task.CompletedTask;
     private Task _selectionTask = Task.CompletedTask, _actionTask = Task.CompletedTask;
     private Task? _disposeTask;
     private CancellationTokenSource? _searchCancellation, _selectionCancellation;
@@ -32,6 +33,8 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     public Task Ready { get; }
     internal Func<ClipboardHistoryRecord, Task<ClipboardOperationResult>>? RestoreRequested { get; set; }
     internal Action? PanelRequested { get; set; }
+    internal Func<bool>? ConfirmDisable { get; set; }
+    internal bool HasMaintenanceTimer => _cleanupTimer is not null;
     internal event Action? SettingsCommitted;
 
     public ClipboardHistoryViewModel(ClipboardSettingsStore? store = null)
@@ -145,6 +148,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     public void RequestEnabled(bool enabled)
     {
         if (!_loaded || enabled == IsEnabled) return;
+        if (!enabled && ConfirmDisable?.Invoke() == false) return;
         // The settings page gives the recording notice; the user's switch action enables capture.
         ChangeSettings(_settings with
         {
@@ -164,6 +168,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
         if (!_loaded || _disposed || _stopping) return false;
         if (!_writable) { Notice = "设置读取失败，请检查原文件或恢复默认设置。"; return false; }
         _settings = settings.Normalize(); _settingsDirty = true; Notify("");
+        if (!_settings.IsEnabled) { _cleanupTimer?.Dispose(); _cleanupTimer = null; }
         _settingsTask = FlushSettingsAsync();
         return true;
     }
@@ -260,6 +265,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
         if (_disposed || !File.Exists(Repository.DatabasePath)) return;
         try { await EnsureRepositoryAsync(); SetStatistics(await Repository.StatisticsAsync()); }
         catch (Exception exception) when (ClipboardCaptureProcessor.IsExpectedError(exception)) { Notice = "存储统计未能读取，原数据保留。"; }
+        finally { if (!IsEnabled && !IsVisible) await ReleaseRuntimeAsync(); }
     }
     private Task<bool> ActionAsync(Func<Task> action, bool initialize = true)
     {
@@ -361,15 +367,15 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     }
     private void QueueMaintenance()
     {
-        if (_disposed || !Repository.IsReady || _maintenanceQueued) return;
-        _maintenanceQueued = true; _ = ScheduleMaintenanceAsync();
+        if (_disposed || !IsEnabled || !Repository.IsReady || _maintenanceQueued) return;
+        _maintenanceQueued = true; _maintenanceTask = ScheduleMaintenanceAsync();
     }
     private async Task ScheduleMaintenanceAsync()
     {
         try
         {
             var next = await Repository.NextCleanupAsync(Settings);
-            if (_disposed) return;
+            if (_disposed || !IsEnabled) return;
             _cleanupTimer?.Dispose(); _cleanupTimer = null;
             if (next is { } at)
             {
@@ -384,7 +390,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     }
     private async Task CleanupAsync()
     {
-        if (_disposed) return;
+        if (_disposed || !IsEnabled) return;
         try { await Repository.CleanupAsync(Settings); Notify(nameof(CanUndo)); QueueMaintenance(); }
         catch (Exception exception) when (ClipboardCaptureProcessor.IsExpectedError(exception)) { Notice = "自动清理失败，请检查数据目录。"; }
     }
@@ -398,7 +404,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
         try { await Task.WhenAll(_refreshTask, _selectionTask, _imageTask); } catch (OperationCanceledException) { }
         return true;
     }
-    public void Dispose() => _ = DisposeAsync();
+    public void Dispose() => _ = DisposeAsync().AsTask();
     public ValueTask DisposeAsync()
     { _disposeTask ??= DisposeCoreAsync(); return new(_disposeTask); }
     private async Task DisposeCoreAsync()
@@ -406,7 +412,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
         if (_disposed) return;
         _disposed = true; _lifetime.Cancel(); _cleanupTimer?.Dispose(); Repository.Changed -= RepositoryChanged;
         _searchCancellation?.Cancel(); _searchCancellation?.Dispose(); _selectionCancellation?.Cancel(); _selectionCancellation?.Dispose();
-        await Task.WhenAll(_actionTask, _settingsTask, PendingAppearanceSave, _refreshTask, _selectionTask, _imageTask, Ready);
+        await Task.WhenAll(_actionTask, _settingsTask, PendingAppearanceSave, _refreshTask, _selectionTask, _imageTask, _maintenanceTask, Ready);
         ReleaseMedia(); DiscardNoteDrafts(); await Repository.DisposeAsync();
     }
 }

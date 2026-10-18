@@ -10,15 +10,16 @@ internal sealed class ClipboardMonitor : IDisposable
     private bool _disposed;
     public bool IsListening { get; private set; }
     public event Action? Updated;
-    public ClipboardMonitor(HwndSource source) { _source = source; _source.AddHook(Message); }
+    public ClipboardMonitor(HwndSource source) { _source = source; }
     public void Configure(bool listening)
     {
         if (_disposed || listening == IsListening) return;
         if (listening)
         {
             if (!AddClipboardFormatListener(_source.Handle)) throw new Win32Exception(Marshal.GetLastWin32Error(), "无法启用剪贴板监听。");
+            _source.AddHook(Message);
         }
-        else RemoveClipboardFormatListener(_source.Handle);
+        else { RemoveClipboardFormatListener(_source.Handle); _source.RemoveHook(Message); }
         IsListening = listening;
     }
     private IntPtr Message(IntPtr window, int message, IntPtr wParam, IntPtr lParam, ref bool handled)

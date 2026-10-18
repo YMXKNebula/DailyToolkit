@@ -15,10 +15,12 @@ public partial class FilePackSettingsView : UserControl
     public FilePackSettingsView()
     {
         InitializeComponent();
-        DataContextChanged += (_, _) => { Detach(); _model = DataContext as FilePackViewModel; Attach(); UpdateAppearance(); };
-        Loaded += (_, _) => { Attach(); UpdateAppearance(); RefreshContextMenu(); };
-        Unloaded += (_, _) => { Detach(); ShortcutEditing?.Invoke(false); };
+        DataContextChanged += (_, _) => { _model?.SetSettingsVisible(false); Detach(); _model = DataContext as FilePackViewModel; Attach(); UpdateAppearance(); UpdateVisibility(); };
+        Loaded += (_, _) => { Attach(); UpdateAppearance(); RefreshContextMenu(); UpdateVisibility(); };
+        IsVisibleChanged += (_, _) => UpdateVisibility();
+        Unloaded += (_, _) => { Detach(); _model?.SetSettingsVisible(false); ShortcutEditing?.Invoke(false); };
     }
+    private void UpdateVisibility() => _model?.SetSettingsVisible(IsLoaded && IsVisible);
     private void Attach()
     {
         if (_model is null) return;

@@ -17,6 +17,7 @@ public partial class LensPreview : UserControl
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Background);
     private readonly DispatcherTimer _releaseTimer = new(DispatcherPriority.Background) { Interval=TimeSpan.FromSeconds(2) };
     private bool _hostActive=true;
+    private bool CanPreview => _hostActive && IsLoaded && IsVisible && _model?.IsEnabled == true;
     internal bool HasGpuResources => _renderer is not null;
     internal bool IsRenderingScheduled => _timer.IsEnabled;
     internal Task PendingResourceRelease { get; private set; }=Task.CompletedTask;
@@ -49,11 +50,12 @@ public partial class LensPreview : UserControl
         if (_model is not null) _model.PropertyChanged += SettingsChanged;
         UpdateMovement();
         _dirty=true;
-        UpdateTimer();
+        UpdateIdleResources();
     }
 
     private void SettingsChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(GamingViewModel.IsEnabled)) { UpdateIdleResources(); return; }
         if (e.PropertyName == nameof(GamingViewModel.PositionResetVersion))
         {
             FinishDrag(); _pointerX=_pointerY=0.5;
@@ -70,15 +72,15 @@ public partial class LensPreview : UserControl
 
     private void UpdateTimer()
     {
-        if (!IsLoaded || !IsVisible || !_hostActive || _model is null) { _timer.Stop(); return; }
-        _timer.Interval=TimeSpan.FromSeconds(1d/(_model.FrameRate == 0 ? 60 : Math.Min(60,_model.FrameRate)));
+        if (!CanPreview || _model is not { } model) { _timer.Stop(); return; }
+        _timer.Interval=TimeSpan.FromSeconds(1d/(model.FrameRate == 0 ? 60 : Math.Min(60,model.FrameRate)));
         // Wake only for changes. A static photo does not need continuous rendering.
         if (_dirty) _timer.Start();
     }
 
     private async void RenderPending()
     {
-        if (!_dirty || _rendering || _model is null) return;
+        if (!_dirty || _rendering || !CanPreview || _model is null) return;
         if (_model.SelectedMonitor is not { } monitor)
         {
             _timer.Stop(); _dirty=false;
@@ -202,21 +204,31 @@ public partial class LensPreview : UserControl
         _dragging=false; Screen.ReleaseMouseCapture();
         if (_model is not null) _model.PropertyChanged -= SettingsChanged;
         _model=null;
-        var renderer=_renderer; _renderer=null;
-        if (renderer is not null) PendingResourceRelease=Task.Run(renderer.Dispose);
+        ReleaseFrameAndRenderer();
     }
     internal void SetHostActive(bool active) { if (_hostActive == active) return; _hostActive=active; UpdateIdleResources(); }
     private void UpdateIdleResources()
     {
         UpdateTimer();
-        if (_hostActive && IsVisible) { _releaseTimer.Stop(); if (_renderer is null) { _dirty=true; UpdateTimer(); } }
-        else { FinishDrag(); _releaseTimer.Start(); }
+        if (CanPreview) { _releaseTimer.Stop(); if (_renderer is null) { _dirty=true; UpdateTimer(); } }
+        else
+        {
+            FinishDrag();
+            if (_model?.IsEnabled != true) { _releaseTimer.Stop(); DropGpuResources(); }
+            else if (!_releaseTimer.IsEnabled && (_renderer is not null || _frame is not null)) _releaseTimer.Start();
+        }
     }
     private void DropGpuResources()
     {
-        if (_hostActive && IsVisible) return;
-        _generation++; var renderer=_renderer; _renderer=null; _dirty=true;
-        // Keep the last bitmap for immediate redisplay, release the idle D3D device/texture.
-        if (renderer is not null) PendingResourceRelease=Task.Run(renderer.Dispose);
+        if (CanPreview) return;
+        _generation++; _timer.Stop(); _dirty=true;
+        ReleaseFrameAndRenderer();
+    }
+    private void ReleaseFrameAndRenderer()
+    {
+        _frame=null; BackgroundPhoto.Source=FrameImage.Source=DetailImage.Source=null;
+        FrameBorder.Visibility=Visibility.Hidden;
+        var renderer=_renderer; _renderer=null;
+        if (renderer is not null) PendingResourceRelease=Task.WhenAll(PendingResourceRelease,Task.Run(renderer.Dispose));
     }
 }

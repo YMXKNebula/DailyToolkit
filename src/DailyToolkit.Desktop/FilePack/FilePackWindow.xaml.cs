@@ -4,10 +4,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Shell;
 using DailyToolkit.Desktop.Notes;
 
 namespace DailyToolkit.Desktop.FilePack;
+
+internal sealed record FilePackWindowSession(double Width, double Height, Guid[] SelectedEntries, Guid? SelectedTask,
+    double EntryVertical, double EntryHorizontal, double TaskVertical, double WorkbenchVertical, bool FolderExpanded,
+    (Guid TaskId, string Header)[] ExpandedTaskSections);
 
 public partial class FilePackWindow : Window
 {
@@ -66,6 +71,57 @@ public partial class FilePackWindow : Window
         return IntPtr.Zero;
     }
     internal void CloseRuntime() { _closingRuntime = true; Close(); }
+    internal FilePackWindowSession CaptureSession()
+    {
+        var view = (FrameworkElement)Body.Content;
+        var quickEntries = view.FindName("FilesList") as ListBox;
+        var detailEntries = view.FindName("EntriesGrid") as DataGrid;
+        var selected = quickEntries?.SelectedItems.OfType<FilePackEntryViewModel>() ??
+            detailEntries?.SelectedItems.OfType<FilePackEntryViewModel>() ?? [];
+        var entryScroll = FindScroll((FrameworkElement?)quickEntries ?? detailEntries);
+        var tasks = view.FindName("TasksList") as ListBox;
+        var taskScroll = FindScroll(tasks);
+        var outer = view is FilePackView details ? details.Content as ScrollViewer : null;
+        var expanders = Descendants(view).OfType<Expander>().ToArray();
+        return new(Width, Height, selected.Select(row => row.Id).ToArray(), (tasks?.SelectedItem as FilePackTaskViewModel)?.TaskId,
+            entryScroll?.VerticalOffset ?? 0, entryScroll?.HorizontalOffset ?? 0, taskScroll?.VerticalOffset ?? 0,
+            outer?.VerticalOffset ?? 0, expanders.Any(value => value.Header as string == "整理包内文件夹" && value.IsExpanded),
+            expanders.Where(value => value.IsExpanded && value.DataContext is FilePackTaskViewModel && value.Header is string)
+                .Select(value => (((FilePackTaskViewModel)value.DataContext).TaskId, (string)value.Header)).ToArray());
+    }
+    internal void RestoreSession(FilePackWindowSession? session)
+    {
+        if (session is null) return;
+        var view = (FrameworkElement)Body.Content;
+        var quick = view.FindName("FilesList") as ListBox;
+        var detail = view.FindName("EntriesGrid") as DataGrid;
+        var selected = session.SelectedEntries.ToHashSet();
+        if (quick is not null)
+            foreach (var row in quick.Items.OfType<FilePackEntryViewModel>().Where(row => selected.Contains(row.Id))) quick.SelectedItems.Add(row);
+        if (detail is not null)
+            foreach (var row in detail.Items.OfType<FilePackEntryViewModel>().Where(row => selected.Contains(row.Id))) detail.SelectedItems.Add(row);
+        var tasks = view.FindName("TasksList") as ListBox;
+        if (tasks is not null && session.SelectedTask is { } selectedTask)
+            tasks.SelectedItem = tasks.Items.OfType<FilePackTaskViewModel>().FirstOrDefault(row => row.TaskId == selectedTask);
+        foreach (var expander in Descendants(view).OfType<Expander>())
+        {
+            if (expander.Header as string == "整理包内文件夹") expander.IsExpanded = session.FolderExpanded;
+            else if (expander.DataContext is FilePackTaskViewModel row && expander.Header is string header)
+                expander.IsExpanded = session.ExpandedTaskSections.Contains((row.TaskId, header));
+        }
+        UpdateLayout();
+        if (FindScroll((FrameworkElement?)quick ?? detail) is { } entryScroll)
+        { entryScroll.ScrollToVerticalOffset(session.EntryVertical); entryScroll.ScrollToHorizontalOffset(session.EntryHorizontal); }
+        FindScroll(tasks)?.ScrollToVerticalOffset(session.TaskVertical);
+        if (view is FilePackView details && details.Content is ScrollViewer outer) outer.ScrollToVerticalOffset(session.WorkbenchVertical);
+        UpdateLayout();
+    }
+    private static ScrollViewer? FindScroll(FrameworkElement? root) => root is null ? null : Descendants(root).OfType<ScrollViewer>().FirstOrDefault();
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        { var child = VisualTreeHelper.GetChild(parent, index); yield return child; foreach (var nested in Descendants(child)) yield return nested; }
+    }
     private void WindowKeyDown(object sender, KeyEventArgs e)
     { if (e.Key == Key.Escape && !e.Handled) { HideRequested?.Invoke(); e.Handled = true; } }
     private void HideWindow(object sender, RoutedEventArgs e) => HideRequested?.Invoke();

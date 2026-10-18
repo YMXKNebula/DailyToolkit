@@ -559,6 +559,17 @@ public sealed partial class ClipboardHistoryRepository : IAsyncDisposable
         finally { _gate.Release(); }
         await InitializeAsync().ConfigureAwait(false); Changed?.Invoke();
     }
+    internal async Task ReleaseSessionAsync()
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            IsReady = false;
+            if (_hashKey is not null) CryptographicOperations.ZeroMemory(_hashKey);
+            _hashKey = null;
+        }
+        finally { _gate.Release(); }
+    }
     public async ValueTask DisposeAsync()
     {
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -567,6 +578,7 @@ public sealed partial class ClipboardHistoryRepository : IAsyncDisposable
             if (_disposed) return;
             _disposed = true; IsReady = false;
             if (_hashKey is not null) CryptographicOperations.ZeroMemory(_hashKey);
+            _hashKey = null;
         }
         finally { _gate.Release(); }
     }

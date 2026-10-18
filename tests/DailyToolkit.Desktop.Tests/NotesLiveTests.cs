@@ -153,6 +153,7 @@ internal static partial class Program
             window.NoteEditor.Text = "alpha bravo\n中文编辑与跨屏测试";
             window.UpdateLayout(); await Task.Delay(80);
             await CheckNotesMouseGesturesAsync(model, controller, window, companion);
+            window = controller.NoteWindow!;
             await CheckNotesCrossProcessAsync(model, controller, window, directory.FullName);
             companion.Activate(); await Task.Delay(80);
             PressNotesTestHotkey(true); await Task.Delay(100); await controller.Pending;

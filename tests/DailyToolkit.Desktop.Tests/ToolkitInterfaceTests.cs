@@ -418,12 +418,12 @@ internal static partial class Program
             window.TrackActivity=false;
             window.Hide(); await Task.Delay(2300); await preview.PendingResourceRelease;
             Require(!window.IsLocalPolling && !preview.IsRenderingScheduled && !preview.HasGpuResources && window.IsLensHotkeyRegistered &&
-                !model.Gaming.HasCaptureResources,"Idle hidden UI retained polling/render resources or lost its hotkey");
+                preview.CurrentFrame is null && !model.Gaming.HasCaptureResources,"Idle hidden UI retained polling/render resources, bitmaps or lost its hotkey");
             window.Show(); model.Page="screen-lens"; window.UpdateLayout();
-            Require(!window.IsLocalPolling && preview.CurrentFrame is not null,"Returning to tools lost the immediate cached preview or restarted computer polling");
+            Require(!window.IsLocalPolling,"Returning to tools restarted computer polling");
             await WaitFor(() => preview.HasGpuResources,"The preview did not recreate its GPU resources when visible");
             Require(!model.Gaming.IsActive && window.IsLensHotkeyRegistered,"Returning from idle auto-started capture or lost hotkeys");
-            Console.WriteLine("PASS Inactive/hidden/minimized UI suspends computer polling and releases idle preview GPU resources; cached redisplay and hotkeys remain ready");
+            Console.WriteLine("PASS Inactive/hidden/minimized UI suspends computer polling and releases idle preview GPU/bitmap resources; redisplay and hotkeys recover");
         }
         finally
         {

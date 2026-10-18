@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -53,7 +54,12 @@ internal partial class NotesWindow : Window
         TextCompositionManager.AddPreviewTextInputStartHandler(Editor, (_, _) => _composing = true);
         TextCompositionManager.AddPreviewTextInputHandler(Editor, (_, _) => _composing = false);
         Closing += (_, e) => { if (!_closing) { e.Cancel = true; HideRequested?.Invoke(); } };
-        Closed += (_, _) => { StopPress(); _mouse.Dispose(); _source?.RemoveHook(Message); _model.PropertyChanged -= Changed; };
+        Closed += (_, _) =>
+        {
+            StopPress(); _mouse.Dispose(); _source?.RemoveHook(Message); _model.PropertyChanged -= Changed;
+            BindingOperations.ClearBinding(Editor, TextBox.TextProperty);
+            Editor.IsUndoEnabled = false; Editor.Clear(); DataContext = null;
+        };
     }
 
     private void Changed(object? sender, PropertyChangedEventArgs e)

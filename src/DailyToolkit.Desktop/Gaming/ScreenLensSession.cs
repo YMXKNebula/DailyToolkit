@@ -184,6 +184,7 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
         }
         catch (Exception exception)
         {
+            Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.ScreenLens, exception);
             System.Diagnostics.Trace.WriteLine(exception);
             Stop();
             Status = "没有开启成功。请使用窗口或无边框模式，并确认 Windows 允许屏幕捕获。";
@@ -234,6 +235,7 @@ internal sealed class ScreenLensSession(bool nativePointer=true) : IDisposable
         }
         catch (Exception exception)
         {
+            Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.ScreenLens, exception);
             System.Diagnostics.Trace.WriteLine(exception);
             if (generation != _generation) return;
             Stop();

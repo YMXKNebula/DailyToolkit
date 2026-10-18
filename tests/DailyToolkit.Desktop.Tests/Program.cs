@@ -28,11 +28,12 @@ internal static partial class Program
             return RunFilePackCrashWorkerAsync(fixture, engine).GetAwaiter().GetResult();
         try
         {
-            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _] or ["--clipboard-native-filepack-quick-checks", _]) ClipboardTestStation.Connect();
+            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _] or ["--clipboard-native-filepack-quick-checks", _]
+                or ["--background-resource-checks", _] or ["--background-resource-soak", _, _]) ClipboardTestStation.Connect();
             else if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer") ClipboardTestStation.Connect(args[1], args[2]);
         }
         catch (Exception exception) { Console.WriteLine("FAIL Clipboard test isolation: " + exception); return 1; }
-        if (args.Length > 0 && args[0].StartsWith("--clipboard-native-", StringComparison.Ordinal))
+        if (args.Length > 0 && (args[0].StartsWith("--clipboard-native-", StringComparison.Ordinal) || args[0].StartsWith("--background-resource-", StringComparison.Ordinal)))
         {
             var result = 1;
             var isolatedThread = new Thread(() =>
@@ -60,6 +61,12 @@ internal static partial class Program
         {
             try
             {
+                if (args is ["--diagnostic-checks"])
+                { await CheckDiagnosticReportsAsync(); exitCode = 0; return; }
+                if (args is ["--background-resource-checks", var backgroundReport])
+                { await CheckBackgroundResourcesAsync(backgroundReport); exitCode = 0; return; }
+                if (args is ["--background-resource-soak", var soakReport, var soakMinutes])
+                { await CheckBackgroundResourcesAsync(soakReport, double.Parse(soakMinutes, System.Globalization.CultureInfo.InvariantCulture)); exitCode = 0; return; }
                 if (args is ["--clipboard-native-filepack-quick-checks", var quickImages])
                 { await CheckFilePackQuickAsync(quickImages); exitCode = 0; return; }
                 if (args is ["--clipboard-native-filepack-checks", var filePackImages])
@@ -67,6 +74,7 @@ internal static partial class Program
                     await CheckFilePackEngineAsync(); await CheckFilePackCrashRecoveryAsync();
                     await CheckFilePackVisualsAsync(filePackImages); await CheckFilePackExitRetryAsync();
                     await CheckFilePackQuickAsync(Path.Combine(filePackImages, "quick"));
+                    await CheckFilePackDisabledResourcesAsync();
                     CheckFavorites(); CheckNavigation(); CheckAppSettings(); exitCode = 0; return;
                 }
                 if (args is ["--clipboard-native-checks"])
@@ -93,7 +101,8 @@ internal static partial class Program
                 {
                     CheckShortcutPersistence(); CheckRenamedSettingsCompatibility(); CheckFavorites(); CheckNavigation(); CheckAppSettings();
                     await CheckNotesPersistenceAsync(); await CheckNotesStabilityAsync(); CheckNotesFocus();
-                    await CheckLensStartupTimingAsync(); CheckRendererRepeatedDispose(); exitCode = 0; return;
+                    await CheckLensStartupTimingAsync(); CheckRendererRepeatedDispose();
+                    await CheckInactiveNotesResourcesAsync(); await CheckPassiveComputerCancellationAsync(); exitCode = 0; return;
                 }
                 if (args is ["--update-checks"])
                 { await CheckAppUpdatesAsync(); exitCode = 0; return; }
@@ -125,7 +134,7 @@ internal static partial class Program
                     await RunDragBenchmarkAsync(output); exitCode=0; return;
                 }
                 if (args is ["--interface-checks",var images])
-                { await CheckToolkitInterfaceAsync(images); exitCode=0; return; }
+                { await CheckToolkitInterfaceAsync(images); await CheckDiagnosticReportLayoutAsync(Path.Combine(images, "diagnostics")); exitCode=0; return; }
                 if (args is ["--lens-upgrade-live",var outputPath])
                 {await CheckLiveImageUpgradeAsync(outputPath);exitCode=0;return;}
                 if (args is ["--lens-upgrade-live",var matrixPath,var monitorIndex])
@@ -157,6 +166,7 @@ internal static partial class Program
     {
         await CheckWeatherCacheAsync();
         await CheckAppUpdatesAsync();
+        await CheckDiagnosticReportsAsync();
         await CheckClipboardRepositoryAsync(); await CheckClipboardProcessorAsync(); await CheckClipboardViewModelAsync();
         CheckShortcutPersistence();
         CheckRenamedSettingsCompatibility();

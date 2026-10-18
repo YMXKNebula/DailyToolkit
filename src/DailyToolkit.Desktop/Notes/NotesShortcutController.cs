@@ -9,13 +9,14 @@ internal sealed class NotesShortcutController : IDisposable
     internal const int ToggleId = 0xB021, FocusId = 0xB022;
     private readonly HwndSource _source;
     private KeyboardShortcut? _toggle, _focus;
-    private bool _suspended, _disposed;
+    private bool _suspended, _disposed, _hookAttached;
+    internal bool HasMessageHook => _hookAttached;
     public bool ToggleRegistered { get; private set; }
     public bool FocusRegistered { get; private set; }
     public event Action? ToggleRequested;
     public event Action? FocusRequested;
     public string Error { get; private set; } = "";
-    public NotesShortcutController(HwndSource source) { _source = source; source.AddHook(Message); }
+    public NotesShortcutController(HwndSource source) => _source = source;
     public bool Configure(KeyboardShortcut? toggle, KeyboardShortcut? focus)
     {
         Unregister(); _toggle = toggle; _focus = focus;
@@ -30,6 +31,7 @@ internal sealed class NotesShortcutController : IDisposable
         { Error = "浮笺快捷键无效或相互冲突，请重新设置。"; return false; }
         if (_toggle is not null) ToggleRegistered = RegisterHotKey(_source.Handle, ToggleId, _toggle.Modifiers | 0x4000, _toggle.VirtualKey);
         if (_focus is not null) FocusRegistered = RegisterHotKey(_source.Handle, FocusId, _focus.Modifiers | 0x4000, _focus.VirtualKey);
+        if (ToggleRegistered || FocusRegistered) { _source.AddHook(Message); _hookAttached = true; }
         if (_toggle is not null && !ToggleRegistered || _focus is not null && !FocusRegistered)
         { Error = "浮笺快捷键注册失败，可能已被其他程序占用；请更换快捷键。"; return false; }
         return true;
@@ -39,6 +41,7 @@ internal sealed class NotesShortcutController : IDisposable
         if (ToggleRegistered) UnregisterHotKey(_source.Handle, ToggleId);
         if (FocusRegistered) UnregisterHotKey(_source.Handle, FocusId);
         ToggleRegistered = FocusRegistered = false;
+        if (_hookAttached) { _source.RemoveHook(Message); _hookAttached = false; }
     }
     private IntPtr Message(IntPtr window, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -52,7 +55,7 @@ internal sealed class NotesShortcutController : IDisposable
         if (id == ToggleId) ToggleRequested?.Invoke(); else FocusRequested?.Invoke();
         return IntPtr.Zero;
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; Unregister(); _source.RemoveHook(Message); }
+    public void Dispose() { if (_disposed) return; _disposed = true; Unregister(); }
     [DllImport("user32.dll", SetLastError = true)] private static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint key);
     [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr window, int id);
 }

@@ -108,7 +108,7 @@ internal static partial class Program
         using var controller = new NotesController(model, source, () => null);
         try
         {
-            await controller.Ready; model.Text = "alpha bravo\n跨进程输入检查";
+            await controller.Ready; await model.EnsureContentLoadedAsync(); model.Text = "alpha bravo\n跨进程输入检查";
             controller.Toggle(); await controller.Pending;
             for (var i = 0; i < 12; i++)
             {

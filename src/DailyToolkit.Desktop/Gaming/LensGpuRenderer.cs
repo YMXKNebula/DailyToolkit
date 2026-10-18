@@ -16,9 +16,25 @@ internal sealed class LensGpuRenderer : IDisposable
 {
     private sealed record ShaderCode(byte[] Vertex,byte[] Pixel);
     private sealed record QualityShaderCode(byte[] Scale,byte[] Resolve);
-    private static readonly Lazy<ShaderCode> CompiledShader=new(() => CompileShader(null));
-    private static readonly Lazy<QualityShaderCode> CompiledQualityShader=new(() => CompileQualityShader(ReadShader()));
-    internal static Task WarmShaderAsync() => Task.Run(() => { try { _=CompiledShader.Value; _=CompiledQualityShader.Value; } catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); } });
+    private static readonly object ShaderCacheGate = new();
+    private static WeakReference<ShaderCode>? _compiledShader;
+    private static WeakReference<QualityShaderCode>? _compiledQualityShader;
+    private static ShaderCode GetShader()
+    {
+        lock (ShaderCacheGate)
+        {
+            if (_compiledShader?.TryGetTarget(out var cached) == true) return cached;
+            var shader = CompileShader(null); _compiledShader = new(shader); return shader;
+        }
+    }
+    private static QualityShaderCode GetQualityShader()
+    {
+        lock (ShaderCacheGate)
+        {
+            if (_compiledQualityShader?.TryGetTarget(out var cached) == true) return cached;
+            var shader = CompileQualityShader(ReadShader()); _compiledQualityShader = new(shader); return shader;
+        }
+    }
     private static string ReadShader()
     {
         using var resource=typeof(LensGpuRenderer).Assembly.GetManifestResourceStream("DailyToolkit.Desktop.Gaming.Lens.hlsl")!;
@@ -68,7 +84,7 @@ internal sealed class LensGpuRenderer : IDisposable
                 DeviceCreationFlags.BgraSupport, new[] { FeatureLevel.Level_11_0 },
                 out var device, out _, out var context).CheckError();
             Device = device; _context = context;
-            var shader=shaderSource is null ? CompiledShader.Value : CompileShader(shaderSource);
+            var shader=shaderSource is null ? GetShader() : CompileShader(shaderSource);
             _vertex=Device.CreateVertexShader(shader.Vertex);
             _pixel=Device.CreatePixelShader(shader.Pixel);
             _parameters = Device.CreateBuffer(new BufferDescription(80, BindFlags.ConstantBuffer, ResourceUsage.Default));
@@ -107,7 +123,7 @@ internal sealed class LensGpuRenderer : IDisposable
     {
         if (_qualityScale is null)
         {
-            var shader=_customShader is null ? CompiledQualityShader.Value : CompileQualityShader(_customShader);
+            var shader=_customShader is null ? GetQualityShader() : CompileQualityShader(_customShader);
             _qualityScale=Device.CreatePixelShader(shader.Scale);
             _qualityResolve=Device.CreatePixelShader(shader.Resolve);
         }

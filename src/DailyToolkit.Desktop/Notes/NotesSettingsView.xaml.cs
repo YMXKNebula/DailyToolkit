@@ -25,14 +25,14 @@ public partial class NotesSettingsView : UserControl
         _displayArea = new(AppearancePreview, PreviewText);
         DataContextChanged += (_, _) =>
         {
-            if (_model is not null) _model.PropertyChanged -= Changed;
+            if (_model is not null) { _model.PropertyChanged -= Changed; _model.ReleaseFontList(); }
             _model = DataContext as NotesViewModel;
             if (_model is not null) _model.PropertyChanged += Changed;
             if (IsVisible) _model?.LoadFontList();
             UpdatePreview();
         };
-        IsVisibleChanged += (_, _) => { if (IsVisible) { _model?.LoadFontList(); UpdatePreview(); } };
-        Unloaded += (_, _) => { if (_model is not null) _model.PropertyChanged -= Changed; };
+        IsVisibleChanged += (_, _) => { if (IsVisible) { _model?.LoadFontList(); UpdatePreview(); } else _model?.ReleaseFontList(); };
+        Unloaded += (_, _) => { if (_model is not null) { _model.PropertyChanged -= Changed; _model.ReleaseFontList(); } };
         Loaded += (_, _) =>
         {
             if (_model is not null) { _model.PropertyChanged -= Changed; _model.PropertyChanged += Changed; }
@@ -40,7 +40,12 @@ public partial class NotesSettingsView : UserControl
         };
     }
     private void Changed(object? sender, PropertyChangedEventArgs e)
-    { if (IsVisible && e.PropertyName is "" or nameof(NotesViewModel.PreviewPreferences)) UpdatePreview(); }
+    {
+        if (!IsVisible) return;
+        if (e.PropertyName is "" or nameof(NotesViewModel.Preferences))
+        { if (_model?.IsEnabled == true) _model.LoadFontList(); else _model?.ReleaseFontList(); }
+        if (e.PropertyName is "" or nameof(NotesViewModel.PreviewPreferences)) UpdatePreview();
+    }
     private void SettingsSizeChanged(object sender, SizeChangedEventArgs e)
     {
         AppearanceCard.Height = Math.Max(160, e.NewSize.Height - 12);
@@ -140,8 +145,14 @@ public partial class NotesSettingsView : UserControl
         if (_model is null || !_model.ContentWritable) return;
         var dialog = new SaveFileDialog { Title = "导出浮笺", Filter = "文本文件|*.txt", FileName = "浮笺.txt", DefaultExt = ".txt" };
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
-        try { await NotesStore.AtomicWriteAsync(dialog.FileName, _model.Text); _model.Notice = ""; }
+        try
+        {
+            await _model.EnsureContentLoadedAsync();
+            if (!_model.ContentWritable) return;
+            await NotesStore.AtomicWriteAsync(dialog.FileName, _model.Text); _model.Notice = "";
+        }
         catch (Exception exception) when (NotesStore.IsStorageError(exception)) { _model.Notice = "导出失败，请检查所选文件夹是否可写。"; }
+        finally { _model.ReleaseInactiveContent(); }
     }
     private async void OpenDirectory(object sender, RoutedEventArgs e)
     {

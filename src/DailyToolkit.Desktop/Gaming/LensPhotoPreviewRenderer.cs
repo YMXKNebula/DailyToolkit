@@ -17,8 +17,8 @@ internal sealed record LensPreviewFrame(BitmapSource Photo, BitmapSource Magnifi
 // A local photo uses the same shader and layout as the live lens. No screen capture is opened here.
 internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposable
 {
-    private static readonly Lazy<BitmapSource> Photo = new(LoadPhoto);
     private readonly object _gate = new();
+    private BitmapSource? _photo;
     private LensGpuRenderer? _renderer;
     private ID3D11Texture2D? _texture;
     private bool _disposed;
@@ -38,7 +38,7 @@ internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposa
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed,this);
-            var photo = Photo.Value;
+            var photo = _photo ??= LoadPhoto();
             var monitor = new PixelBounds(0,0,settings.ScreenWidth,settings.ScreenHeight);
             var centerX = (int)Math.Round(settings.PointerX*monitor.Width);
             var centerY = (int)Math.Round(settings.PointerY*monitor.Height);
@@ -86,7 +86,7 @@ internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposa
             if (_disposed) return;
             _disposed=true;
             _texture?.Dispose(); _renderer?.Dispose();
-            _texture=null; _renderer=null;
+            _texture=null; _renderer=null; _photo=null;
         }
     }
 }

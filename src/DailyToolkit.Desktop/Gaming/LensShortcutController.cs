@@ -14,7 +14,9 @@ internal sealed class LensShortcutController : IDisposable
     private readonly DispatcherTimer _releaseTimer;
     private KeyboardShortcut? _shortcut;
     private LensActivationMode _mode;
-    private bool _holding, _suspended, _disposed;
+    private bool _holding, _suspended, _disposed, _hookAttached;
+    internal bool HasMessageHook => _hookAttached;
+    internal bool IsReleasePolling => _releaseTimer.IsEnabled;
 
     public LensShortcutController(HwndSource source, Func<uint, bool>? keyDown = null, int hotkeyId = HotkeyId)
     {
@@ -26,7 +28,6 @@ internal sealed class LensShortcutController : IDisposable
             Interval = TimeSpan.FromMilliseconds(16)
         };
         _releaseTimer.Tick += (_, _) => CheckRelease();
-        _source.AddHook(WindowMessage);
     }
 
     public event Action? ToggleRequested;
@@ -58,6 +59,7 @@ internal sealed class LensShortcutController : IDisposable
         if (_suspended || _shortcut is null) return true;
         if (!_shortcut.IsValid || _mode is not (LensActivationMode.Toggle or LensActivationMode.Hold)) return false;
         IsRegistered = RegisterHotKey(_source.Handle, _hotkeyId, _shortcut.Modifiers | 0x4000, _shortcut.VirtualKey);
+        if (IsRegistered) { _source.AddHook(WindowMessage); _hookAttached = true; }
         return IsRegistered;
     }
 
@@ -65,6 +67,7 @@ internal sealed class LensShortcutController : IDisposable
     {
         if (IsRegistered) UnregisterHotKey(_source.Handle, _hotkeyId);
         IsRegistered = false;
+        if (_hookAttached) { _source.RemoveHook(WindowMessage); _hookAttached = false; }
     }
 
     private IntPtr WindowMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -111,7 +114,6 @@ internal sealed class LensShortcutController : IDisposable
         _disposed = true;
         ReleaseHold();
         Unregister();
-        _source.RemoveHook(WindowMessage);
     }
 
     [DllImport("user32.dll", SetLastError = true)]

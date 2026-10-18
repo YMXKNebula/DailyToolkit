@@ -86,6 +86,7 @@ internal sealed class ClipboardCaptureProcessor : IAsyncDisposable
             catch (OperationCanceledException) { }
             catch (Exception exception) when (IsExpectedError(exception))
             {
+                Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.ClipRecall, exception);
                 Status?.Invoke(exception is InvalidDataException or InvalidOperationException ? exception.Message :
                     "文件缓存失败，已保留路径。请检查文件、空间或权限。");
             }
@@ -103,7 +104,7 @@ internal sealed class ClipboardCaptureProcessor : IAsyncDisposable
                 await ProcessAsync(await ReadAsync(settings).ConfigureAwait(false), settings, epoch).ConfigureAwait(false);
             }
             catch (Exception exception) when (IsExpectedError(exception))
-            { Status?.Invoke("剪贴内容保存失败，请检查空间、目录权限或数据库占用。"); }
+            { Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.ClipRecall, exception); Status?.Invoke("剪贴内容保存失败，请检查空间、目录权限或数据库占用。"); }
             finally { _operation.Release(); }
         }
     }

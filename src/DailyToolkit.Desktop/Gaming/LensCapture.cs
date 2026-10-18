@@ -112,6 +112,7 @@ internal sealed class LensCapture : IDisposable
             }
             catch (Exception exception)
             {
+                Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.ScreenLens, exception);
                 Trace.WriteLine(exception);
                 _failed = true;
                 Failed?.Invoke("画面读取已中断，请重新开启放大框。显示器、全屏模式或显卡状态可能发生了变化。");
@@ -149,7 +150,7 @@ internal sealed class LensCapture : IDisposable
                     }
                 }
             }
-            catch (Exception exception) { Trace.WriteLine(exception); Failed?.Invoke("画面更新已中断，请重新开启放大框。"); }
+            catch (Exception exception) { Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.ScreenLens, exception); Trace.WriteLine(exception); Failed?.Invoke("画面更新已中断，请重新开启放大框。"); }
             finally
             {
                 Interlocked.Exchange(ref _refreshWorker,0);

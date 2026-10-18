@@ -8,19 +8,41 @@ public sealed partial class FilePackManager : IAsyncDisposable
     private readonly Dictionary<Guid, Job> _jobs = [];
     private readonly Dictionary<string, Guid> _outputs = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<Guid> _pendingTasks = [], _pendingSessions = [];
+    private readonly HashSet<Task> _submissions = [];
     private readonly FilePackStore _store;
     private readonly SevenZipAdapter _engine;
     private readonly FilePackWorkspaceManager _workspace;
     private FilePackPreferences _preferences = new();
-    private Task? _initialization, _shutdown;
+    private Task? _initialization, _shutdown, _suspension;
     private Task _queueSave = Task.CompletedTask;
     private long _queueOrder;
     private int _builtInRunning, _externalCopying;
-    private bool _shuttingDown;
+    private bool _shuttingDown, _suspended;
     public event Action<PackTaskInfo>? TaskChanged;
     public Task Ready { get { lock (_sync) return _initialization ?? Task.CompletedTask; } }
     public FilePackPreferences Preferences { get { lock (_sync) return _preferences; } }
     public IReadOnlyList<PackTaskInfo> Tasks { get { lock (_sync) return _jobs.Values.Select(job => job.Info).OrderBy(task => task.QueueOrder).ToArray(); } }
+    public bool IsSuspended { get { lock (_sync) return _suspended; } }
+    public bool IsInitialized { get { lock (_sync) return _initialization?.IsCompletedSuccessfully == true; } }
+    public bool TryGetTask(Guid taskId, out PackTaskInfo? task)
+    { lock (_sync) { task = _jobs.TryGetValue(taskId, out var job) ? job.Info : null; return task is not null; } }
+    public PackTaskCounts GetTaskCounts()
+    {
+        lock (_sync)
+        {
+            var running = 0; var queued = 0; var completed = 0; var failed = 0; var external = 0;
+            foreach (var job in _jobs.Values)
+                switch (job.Info.State)
+                {
+                    case PackState.Collecting: case PackState.Copying: case PackState.Compressing: case PackState.Verifying: running++; break;
+                    case PackState.Queued: queued++; break;
+                    case PackState.Completed: completed++; break;
+                    case PackState.Failed: case PackState.Interrupted: failed++; break;
+                    case PackState.AwaitingExternal: external++; break;
+                }
+            return new(running, queued, completed, failed, external);
+        }
+    }
     public int MaximumParallel
     {
         get { lock (_sync) return _preferences.MaximumParallel; }
@@ -32,7 +54,7 @@ public sealed partial class FilePackManager : IAsyncDisposable
 
     public Task InitializeAsync()
     {
-        lock (_sync) return _initialization ??= Task.Run(InitializeCoreAsync);
+        lock (_sync) { ThrowIfStopping(); return _initialization ??= Task.Run(InitializeCoreAsync); }
     }
     private async Task InitializeCoreAsync()
     {
@@ -60,7 +82,25 @@ public sealed partial class FilePackManager : IAsyncDisposable
         }
     }
 
-    public async Task<PackTaskInfo> EnqueueAsync(PackSnapshot snapshot, CancellationToken cancellationToken = default)
+    public Task<PackTaskInfo> EnqueueAsync(PackSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        Task<PackTaskInfo> operation;
+        lock (_sync)
+        {
+            ThrowIfStopping();
+            operation = EnqueueCoreAsync(snapshot, cancellationToken);
+            _submissions.Add(operation);
+        }
+        _ = ForgetSubmissionAsync(operation);
+        return operation;
+    }
+    private async Task ForgetSubmissionAsync(Task operation)
+    {
+        try { await operation.ConfigureAwait(false); }
+        catch (Exception) { /* The submitting caller observes the original failure. */ }
+        finally { lock (_sync) _submissions.Remove(operation); }
+    }
+    private async Task<PackTaskInfo> EnqueueCoreAsync(PackSnapshot snapshot, CancellationToken cancellationToken)
     {
         await InitializeAsync().ConfigureAwait(false);
         var frozen = Freeze(snapshot);
@@ -106,7 +146,7 @@ public sealed partial class FilePackManager : IAsyncDisposable
     {
         lock (_sync)
         {
-            if (_shuttingDown) return;
+            if (_shuttingDown || _suspended) return;
             foreach (var job in _jobs.Values.Where(job => !job.Active && job.Info.State == PackState.Queued).OrderBy(job => job.Info.QueueOrder))
             {
                 var external = job.Info.Snapshot.Options.Mode == PackMode.External;
@@ -185,6 +225,7 @@ public sealed partial class FilePackManager : IAsyncDisposable
                 }
                 if (job.Info.State != PackState.AwaitingExternal) ReleaseOutputLocked(job.Info);
                 job.Cancellation?.Dispose(); job.Cancellation = null;
+                job.Worker = Task.CompletedTask;
             }
             Pump();
         }
@@ -202,7 +243,11 @@ public sealed partial class FilePackManager : IAsyncDisposable
         catch (Exception exception) when (IsExpectedError(exception))
         {
             PackTaskInfo failed;
-            lock (_sync) failed = job.Info = job.Info with { State = state, Error = error + " 任务状态未能保存：" + exception.Message, FinishedAt = DateTimeOffset.UtcNow };
+            lock (_sync)
+            {
+                job.Unsaved = true;
+                failed = job.Info = job.Info with { State = state, Error = error + " 任务状态未能保存：" + exception.Message, FinishedAt = DateTimeOffset.UtcNow };
+            }
             Publish(failed);
         }
     }
@@ -218,6 +263,7 @@ public sealed partial class FilePackManager : IAsyncDisposable
             lock (_sync)
             {
                 job.Info = next;
+                job.Unsaved = false;
                 if (releaseExternalSlot && job.Active) { job.Active = false; _externalCopying--; }
             }
             Publish(next);
@@ -243,7 +289,11 @@ public sealed partial class FilePackManager : IAsyncDisposable
             try { handler(task); } catch (Exception exception) { System.Diagnostics.Trace.WriteLine(exception); }
     }
     private Job GetJob(Guid taskId) { lock (_sync) return _jobs.TryGetValue(taskId, out var job) ? job : throw new KeyNotFoundException("任务不存在。"); }
-    private void ThrowIfStopping() { if (_shuttingDown) throw new InvalidOperationException("文件集装箱正在退出。"); }
+    private void ThrowIfStopping()
+    {
+        if (_shuttingDown) throw new InvalidOperationException("文件集装箱正在退出。");
+        if (_suspended) throw new InvalidOperationException("文件集装箱已停用，请先开启。");
+    }
     private static PackSnapshot Freeze(PackSnapshot snapshot) => snapshot with { Entries = Array.AsReadOnly(snapshot.Entries.Select(entry => entry with { }).ToArray()), Options = snapshot.Options with { } };
     private static bool IsExpectedError(Exception exception) => FilePackStore.IsStorageError(exception) || exception is ArgumentException
         or InvalidOperationException or System.ComponentModel.Win32Exception or OverflowException;
@@ -253,7 +303,7 @@ public sealed partial class FilePackManager : IAsyncDisposable
         public readonly SemaphoreSlim Gate = new(1, 1);
         public CancellationTokenSource? Cancellation;
         public Task Worker = Task.CompletedTask;
-        public bool Active;
+        public bool Active, Unsaved;
     }
     private sealed class TaskProgress(Action<PackProgress> report) : IProgress<PackProgress>
     { public void Report(PackProgress value) => report(value); }

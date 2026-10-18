@@ -480,6 +480,15 @@
               <TextBlock Text="作者：YMXKNebula" Style="{StaticResource MutedText}" Margin="0,0,0,8" />
               <TextBlock Text="代码许可证：MIT" Style="{StaticResource MutedText}" />
               <TextBlock Margin="0,14,0,0"><Hyperlink NavigateUri="https://github.com/YMXKNebula/DailyToolkit" RequestNavigate="OpenRepository" Foreground="{DynamicResource AccentBrush}">项目主页</Hyperlink></TextBlock>
+              <Expander x:Name="DiagnosticsSection" Header="诊断报告" Foreground="{DynamicResource MutedBrush}" Margin="0,14,0,0">
+                <StackPanel Margin="0,10,0,0">
+                  <TextBlock Text="仅含版本、功能开关、错误类别和资源概况，保存到本地。" Style="{StaticResource MutedText}" />
+                  <WrapPanel Margin="0,10,0,0">
+                    <Button x:Name="ExportDiagnosticsButton" Content="导出诊断报告" Click="ExportDiagnostics" Padding="10,6" Margin="0,0,8,8" />
+                    <Button Content="清除诊断记录" Click="ClearDiagnostics" Padding="10,6" Margin="0,0,0,8" />
+                  </WrapPanel>
+                </StackPanel>
+              </Expander>
               <Expander Header="第三方许可" Foreground="{DynamicResource MutedBrush}" Margin="0,14,0,0">
                 <StackPanel Margin="0,10,0,0">
                   <TextBlock Text="7-Zip Extra 26.04" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" />

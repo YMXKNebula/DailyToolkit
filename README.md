@@ -2,7 +2,7 @@
 
 Windows 桌面工具集：放大镜、浮笺、剪贴回溯、文件集装箱和电脑信息。
 
-[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [更新说明](docs/RELEASE_083.md)
+[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [更新说明](docs/RELEASE_084.md)
 
 ## 下载
 
@@ -24,6 +24,8 @@ Windows 桌面工具集：放大镜、浮笺、剪贴回溯、文件集装箱和
 
 快捷键均可修改。工具可收藏、排序和单独开关；支持托盘运行、开机自启和自定义配色。
 
+工具停用后释放运行资源，闲置界面和预览按需回收。关闭文件集装箱会停止运行和排队任务，保留记录供重新开始；仅关闭窗口时，已提交任务继续。
+
 配色预设点击即保存；自定义颜色只改变预览，保存后应用。剪贴历史面板、文件集装箱快速窗口和详细打包窗口可分别配色。
 
 剪贴回溯默认关闭，开启后持续记录剪贴板，仅在本机加密保存。复制敏感内容前请暂停记录或排除来源应用，无法自动识别所有密码。文件默认只记路径，开启缓存后可保存文件副本。
@@ -41,5 +43,7 @@ Windows 桌面工具集：放大镜、浮笺、剪贴回溯、文件集装箱和
 ## 反馈与源码
 
 [提交问题或建议](https://github.com/YMXKNebula/DailyToolkit/issues)时，请附版本和复现步骤。
+
+“设置 → 关于”可导出本地诊断报告，不包含笔记、剪贴正文或文件路径。报告不会自动上传。
 
 [源码构建与贡献](CONTRIBUTING.md) · [MIT 许可证](LICENSE) · [第三方声明](THIRD_PARTY_NOTICES.txt)

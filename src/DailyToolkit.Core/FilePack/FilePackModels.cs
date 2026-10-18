@@ -24,6 +24,11 @@ public sealed record PackTaskInfo(PackSnapshot Snapshot, PackState State, double
     public Guid TaskId => Snapshot.TaskId;
 }
 public sealed record PackCollectionResult(IReadOnlyList<PackEntry> Entries, IReadOnlyList<string> Warnings);
+public readonly record struct PackTaskCounts(int Running, int Queued, int Completed, int Failed, int External);
+public sealed record PackDraftEntry(PackEntry Entry, string PathDraft);
+public sealed record PackDraft(IReadOnlyList<PackDraftEntry> Entries, string TaskName, string ArchiveName,
+    string OutputDirectory, PackMode Mode, PackFormat Format, PackCompression Compression,
+    string NewFolderPath = "新建文件夹", string MoveTargetPath = "");
 public sealed record PackBatch(string WorkingDirectory, IReadOnlyList<PackEntry> Entries);
 public sealed record PackPlan(IReadOnlyList<PackBatch> Batches, bool RequiresStaging, long RequiredStagingBytes, string Reason);
 public sealed record FilePackPreferences(int MaximumParallel = 2, string LastOutputDirectory = "",

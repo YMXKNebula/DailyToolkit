@@ -59,7 +59,7 @@ public partial class MainWindow : Window
         _clockTimer.Tick += (_, _) =>
         {
             _viewModel.UpdateClock();
-            if (++_ticks % 3 == 0) _viewModel.QueueLocalRefresh();
+            if (++_ticks % 3 == 0) _viewModel.QueueLocalRefresh(passive: true);
         };
         Loaded += (_, _) => StartLocalRuntime();
         IsVisibleChanged += (_,_) => UpdateLocalPolling();

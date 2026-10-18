@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using DailyToolkit.Core.Gaming;
 using DailyToolkit.Core.Notes;
 using DailyToolkit.Desktop.Presentation;
+using DailyToolkit.Desktop.Runtime;
 
 namespace DailyToolkit.Desktop.Notes;
 
@@ -17,6 +18,10 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
     private string _text = "", _notice = "";
     private bool _contentDirty, _settingsDirty, _settingsWritable = true, _visible, _focused, _favorite, _disposed, _loaded;
     private long _contentRevision, _settingsRevision;
+    private bool _contentLoaded;
+    private Task? _contentLoadTask;
+    internal bool IsContentLoaded => _contentLoaded;
+    internal bool IsSaveScheduled => _saveTimer.IsEnabled;
     public NotesStore Store { get; }
     public Task Ready { get; }
     public bool ContentWritable { get; private set; } = true;
@@ -39,11 +44,19 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
     public IReadOnlyList<NotesPreset<NotesFont>> FontPresets { get; } =
     [new("默认正文", new()), new("大字", new(Size: 24)), new("粗体", new(Bold: true)),
         new("等宽文字", new("Consolas", Size: 18))];
-    private static readonly Lazy<IReadOnlyList<string>> SystemFonts = new(() => Fonts.SystemFontFamilies.Select(font => font.Source)
-        .Order(StringComparer.CurrentCultureIgnoreCase).ToArray());
     private IReadOnlyList<string> _installedFonts = [];
     public IReadOnlyList<string> InstalledFonts => _installedFonts;
-    public void LoadFontList() { if (_installedFonts.Count == 0) { _installedFonts = SystemFonts.Value; Notify(nameof(InstalledFonts)); } }
+    public void LoadFontList()
+    {
+        if (_disposed || !IsEnabled || _installedFonts.Count > 0) return;
+        _installedFonts = Fonts.SystemFontFamilies.Select(font => font.Source).Order(StringComparer.CurrentCultureIgnoreCase).ToArray();
+        Notify(nameof(InstalledFonts));
+    }
+    internal void ReleaseFontList()
+    {
+        if (_installedFonts.Count == 0) return;
+        _installedFonts = []; Notify(nameof(InstalledFonts));
+    }
 
     public NotesViewModel(NotesStore? store = null)
     {
@@ -60,14 +73,41 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
     {
         var result = await Store.LoadAsync();
         if (_disposed) return;
-        _preferences = result.Preferences; _text = result.Document.Text; ContentWritable = result.ContentWritable;
+        _preferences = result.Preferences; _text = result.Document.Text; ContentWritable = result.ContentWritable; _contentLoaded = true;
         _settingsWritable = result.SettingsWritable; _loaded = true; Notice = result.Notice; Notify("");
     }
 
     public string Text
     {
         get => _text;
-        set { if (!_loaded || !ContentWritable || !Set(ref _text, value)) return; _contentDirty = true; _contentRevision++; ScheduleSave(); }
+        set { if (!_loaded || !_contentLoaded || !ContentWritable || !Set(ref _text, value)) return; _contentDirty = true; _contentRevision++; ScheduleSave(); }
+    }
+    internal Task EnsureContentLoadedAsync()
+    {
+        if (_contentLoaded || _disposed) return Task.CompletedTask;
+        return _contentLoadTask ??= ReloadContentAsync();
+    }
+    private async Task ReloadContentAsync()
+    {
+        try
+        {
+            await Ready;
+            var result = await Store.LoadContentAsync();
+            if (_disposed) return;
+            _text = result.Text; ContentWritable = result.ContentWritable; _contentLoaded = true;
+            if (result.Notice.Length > 0) Notice = result.Notice;
+            Notify(nameof(Text)); Notify(nameof(ContentWritable));
+        }
+        finally { _contentLoadTask = null; }
+    }
+    // Only clean, hidden content can be dropped. Failed saves retain the live document.
+    internal bool ReleaseInactiveContent()
+    {
+        if (IsVisible || _contentDirty || _saving.CurrentCount == 0 || _contentLoadTask is { IsCompleted: false }) return false;
+        _text = ""; _contentLoaded = false; _contentLoadTask = null;
+        Notify(nameof(Text));
+        if (!IsEnabled) ReleaseFontList();
+        return true;
     }
     public string Notice { get => _notice; set => Set(ref _notice, value); }
     public bool IsVisible { get => _visible; internal set { if (Set(ref _visible, value)) Notify(nameof(Status)); } }
@@ -161,7 +201,7 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
         Update(_preferences with { ToggleShortcut = defaults.ToggleShortcut, FocusShortcut = defaults.FocusShortcut }); return true;
     }
 
-    private void ScheduleSave() { if (!_disposed) { _saveTimer.Stop(); _saveTimer.Start(); } }
+    private void ScheduleSave() { if (!_disposed && (_contentDirty || _settingsDirty)) { _saveTimer.Stop(); _saveTimer.Start(); } }
     private async void SaveTick(object? sender, EventArgs e) { _saveTimer.Stop(); await FlushAsync(); }
     public async Task<bool> FlushAsync(bool exiting = false)
     {
@@ -190,8 +230,8 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
             return !_contentDirty && !_settingsDirty;
         }
         catch (Exception exception) when (NotesStore.IsStorageError(exception))
-        { Notice = "保存失败，请检查空间或权限。重试保存或导出后再退出。"; return false; }
+        { DiagnosticReportService.Shared.RecordError(DiagnosticModule.FloatingNotes, exception); Notice = "保存失败，请检查空间或权限。重试保存或导出后再退出。"; return false; }
         finally { _saving.Release(); }
     }
-    public void Dispose() { _disposed = true; _saveTimer.Stop(); _saveTimer.Tick -= SaveTick; }
+    public void Dispose() { _disposed = true; _saveTimer.Stop(); _saveTimer.Tick -= SaveTick; ReleaseFontList(); }
 }

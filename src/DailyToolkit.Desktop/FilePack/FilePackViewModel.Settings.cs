@@ -45,7 +45,7 @@ public sealed partial class FilePackViewModel
         Appearances = [PackAppearance, QuickAppearance]; _selectedAppearance = QuickAppearance;
         ToggleEnabledCommand = new(_ => Track(SetEnabledAsync(!IsEnabled)));
         OpenQuickWindowCommand = new(_ => QuickWindowRequested?.Invoke(), () => IsEnabled && !_shuttingDown);
-        OpenPackWindowCommand = new(_ => PackWindowRequested?.Invoke());
+        OpenPackWindowCommand = new(_ => PackWindowRequested?.Invoke(), () => IsEnabled && !_shuttingDown);
         QuickPackCommand = new(_ => Track(CreateQuickTaskAsync()), () => CanEditDraft && Entries.Count > 0);
         BrowseQuickOutputCommand = new(_ =>
         {
@@ -74,13 +74,41 @@ public sealed partial class FilePackViewModel
     public async Task<bool> SetEnabledAsync(bool enabled)
     {
         await SettingsReady;
-        if (_disposed || _shuttingDown) return false;
-        if (_enabled == enabled) return true;
-        _enabled = enabled;
-        if (!enabled) _collectionCancellation?.Cancel();
-        Notify(nameof(IsEnabled)); DraftStateChanged();
-        _settingsDirty = true;
-        return await SavePreferencesCoreAsync();
+        CancelIdleRelease();
+        await _enabledGate.WaitAsync();
+        try
+        {
+            if (_disposed || _shuttingDown) return false;
+            if (enabled)
+            {
+                if (_enabled) return true;
+                if (Manager.IsSuspended) await ReleaseRuntimeAsync();
+                Manager.Resume();
+                _activity.Dispose(); _activity = new();
+                _enabled = true; _settingsDirty = true;
+                Notify(nameof(IsEnabled)); DraftStateChanged();
+                var saved = await SavePreferencesCoreAsync();
+                if (_visible) await InitializeAsync();
+                return saved;
+            }
+            _enabled = false; _settingsDirty = true;
+            _activity.Cancel(); _collectionCancellation?.Cancel();
+            Notify(nameof(IsEnabled)); DraftStateChanged();
+            var preferencesSaved = await SavePreferencesCoreAsync();
+            // Stop compression even when saving a draft fails; keep the draft and
+            // the stopped records in memory until the save can be retried.
+            while (_runtimeOperations.Count > 0)
+            {
+                try { await Task.WhenAll(_runtimeOperations.ToArray()); }
+                catch (Exception exception) when (IsExpected(exception) || exception is OperationCanceledException) { }
+                _runtimeOperations.RemoveWhere(task => task.IsCompleted);
+            }
+            await ReleaseRuntimeAsync();
+            return preferencesSaved;
+        }
+        catch (Exception exception) when (IsExpected(exception))
+        { RecordDiagnostic(exception); Notice = $"文件集装箱已停止，清单或记录未能保存，已保留在内存中：{exception.Message}"; return false; }
+        finally { _enabledGate.Release(); }
     }
     public bool SetShortcut(KeyboardShortcut? shortcut, IEnumerable<KeyboardShortcut?> reserved)
     {
@@ -106,7 +134,7 @@ public sealed partial class FilePackViewModel
             var next = CurrentPreferences();
             next = target switch { 1 => next with { PackWindowColors = colors },
                 _ => next with { QuickWindowColors = colors } };
-            if (_loaded) await Manager.SavePreferencesAsync(next); else await Store.SavePreferencesAsync(next);
+            if (Manager.IsInitialized && !Manager.IsSuspended) await Manager.SavePreferencesAsync(next); else await Store.SavePreferencesAsync(next);
             // Commit persisted colors under the same gate as ordinary preferences;
             // a queued preference write must not race the appearance notification.
             if (target == 1) _packColors = colors; else _quickColors = colors;

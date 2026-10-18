@@ -10,3 +10,12 @@ indent_size = 4
 
 [*.{md,json,yml,yaml}]
 indent_size = 2
+
+[*.cs]
+# Guard asynchronous cleanup and preserve the original exception stack.
+dotnet_diagnostic.CA2012.severity = warning
+dotnet_diagnostic.CA2200.severity = warning
+
+[src/DailyToolkit.Desktop/Runtime/DiagnosticReportService.cs]
+# New export code must release process/file handles on every failure path.
+dotnet_diagnostic.CA2000.severity = warning

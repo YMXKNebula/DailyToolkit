@@ -2,6 +2,73 @@ namespace DailyToolkit.Core.FilePack;
 
 public sealed partial class FilePackManager
 {
+    public bool TryUnloadIdle()
+    {
+        lock (_sync)
+        {
+            if (_shuttingDown || _suspended || _initialization is { IsCompleted: false } || !_queueSave.IsCompleted ||
+                _submissions.Any(task => !task.IsCompleted) || _pendingTasks.Count > 0 ||
+                _jobs.Values.Any(job => job.Active || job.Unsaved || job.Info.State == PackState.Queued)) return false;
+            foreach (var job in _jobs.Values) job.Gate.Dispose();
+            _jobs.Clear(); _outputs.Clear(); _queueOrder = 0;
+            _queueSave = Task.CompletedTask; _initialization = null;
+            return true;
+        }
+    }
+    public Task SuspendAsync()
+    {
+        lock (_sync)
+        {
+            if (_shuttingDown) return _shutdown ?? Task.CompletedTask;
+            _suspended = true;
+            if (_suspension is { IsFaulted: true } or { IsCanceled: true }) _suspension = null;
+            return _suspension ??= Task.Run(SuspendCoreAsync);
+        }
+    }
+    public void Resume()
+    {
+        lock (_sync)
+        {
+            if (_shuttingDown) throw new InvalidOperationException("文件集装箱正在退出。");
+            if (_suspension is { IsCompleted: false }) throw new InvalidOperationException("文件集装箱正在停止任务。");
+            // A failed state save must be retried before its in-memory record is released.
+            if (_suspension is { IsFaulted: true } or { IsCanceled: true })
+                throw new InvalidOperationException("任务状态尚未保存，请先重试停用。");
+            _suspended = false; _suspension = null;
+        }
+    }
+    private async Task SuspendCoreAsync()
+    {
+        Task? initialization; Task[] submissions;
+        lock (_sync) { initialization = _initialization; submissions = _submissions.ToArray(); }
+        if (initialization is not null) await initialization.ConfigureAwait(false);
+        try { await Task.WhenAll(submissions).ConfigureAwait(false); }
+        catch (Exception exception) when (IsExpectedError(exception) || exception is OperationCanceledException) { }
+        Job[] active; Job[] queued; Task queueSave;
+        lock (_sync)
+        {
+            active = _jobs.Values.Where(job => job.Active).ToArray();
+            queued = _jobs.Values.Where(job => !job.Active && job.Info.State == PackState.Queued).ToArray();
+            foreach (var job in queued) job.Info = job.Info with { State = PackState.Cancelled,
+                Error = "停用时已取消，可重新开始。", FinishedAt = DateTimeOffset.UtcNow };
+            queueSave = _queueSave;
+        }
+        foreach (var job in active) try { job.Cancellation?.Cancel(); } catch (ObjectDisposedException) { }
+        await Task.WhenAll(active.Select(job => job.Worker)).ConfigureAwait(false);
+        await queueSave.ConfigureAwait(false);
+        // Worker failure recording can retain an unsaved terminal state. Persist all
+        // cancelled jobs again before releasing snapshots; a denied save keeps the cache.
+        Job[] cancelled;
+        lock (_sync) cancelled = _jobs.Values.Where(job => job.Unsaved || job.Info.State == PackState.Cancelled).ToArray();
+        foreach (var job in cancelled)
+            await ChangeAsync(job, info => info with { Error = info.State == PackState.Cancelled && info.Error.Length == 0 ? "停用时已取消，可重新开始。" : info.Error }).ConfigureAwait(false);
+        lock (_sync)
+        {
+            foreach (var job in _jobs.Values) job.Gate.Dispose();
+            _jobs.Clear(); _outputs.Clear(); _pendingTasks.Clear(); _pendingSessions.Clear();
+            _queueOrder = 0; _queueSave = Task.CompletedTask; _initialization = null;
+        }
+    }
     public async Task CancelAsync(Guid taskId)
     {
         await InitializeAsync().ConfigureAwait(false);
@@ -74,7 +141,7 @@ public sealed partial class FilePackManager
             try { await ChangeAsync(job, info => info).ConfigureAwait(false); }
             catch (Exception exception) when (IsExpectedError(exception))
             {
-                PackTaskInfo updated; lock (_sync) updated = job.Info = job.Info with { Error = "队列顺序未能保存：" + exception.Message };
+                PackTaskInfo updated; lock (_sync) { job.Unsaved = true; updated = job.Info = job.Info with { Error = "队列顺序未能保存：" + exception.Message }; }
                 Publish(updated);
             }
     }
@@ -125,7 +192,11 @@ public sealed partial class FilePackManager
     }
     private async Task ShutdownCoreAsync()
     {
-        Task? initialization; lock (_sync) { _shuttingDown = true; initialization = _initialization; }
+        Task? suspension; lock (_sync) { _shuttingDown = true; suspension = _suspension; }
+        if (suspension is not null)
+            try { await suspension.ConfigureAwait(false); }
+            catch (Exception exception) when (IsExpectedError(exception)) { /* Retry retained terminal records below. */ }
+        Task? initialization; lock (_sync) initialization = _initialization;
         if (initialization is null) return;
         await initialization.ConfigureAwait(false);
         Job[] active; Job[] queued; Task queueSave;
@@ -143,7 +214,7 @@ public sealed partial class FilePackManager
         catch (Exception exception) when (IsExpectedError(exception))
         { lock (_sync) if (ReferenceEquals(_queueSave, queueSave)) _queueSave = Task.CompletedTask; }
         // Retry a failed exit save without leaving queued jobs or owned processes running.
-        Job[] interrupted; lock (_sync) interrupted = _jobs.Values.Where(job => job.Info.State == PackState.Interrupted).ToArray();
+        Job[] interrupted; lock (_sync) interrupted = _jobs.Values.Where(job => job.Unsaved || job.Info.State is PackState.Interrupted or PackState.Cancelled).ToArray();
         foreach (var job in interrupted)
         {
             await ChangeAsync(job, info => info).ConfigureAwait(false);

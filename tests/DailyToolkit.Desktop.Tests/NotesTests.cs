@@ -130,10 +130,10 @@ internal static partial class Program
         Require(shortcuts.Configure(replacement, b) && blocker.Configure(a, null), "Rebinding did not release the old hotkey");
         await Press(NotesShortcutController.ToggleId, a); Require(toggles == 7, "Queued old hotkey still activated");
         await Press(NotesShortcutController.ToggleId, replacement); Require(toggles == 8, "Replacement shortcut did not activate");
-        Require(shortcuts.Suspend(true) && !shortcuts.ToggleRegistered && !shortcuts.FocusRegistered, "Editing failed to unregister both hotkeys");
+        Require(shortcuts.Suspend(true) && !shortcuts.ToggleRegistered && !shortcuts.FocusRegistered && !shortcuts.HasMessageHook, "Editing failed to unregister both hotkeys and its native hook");
         await Press(NotesShortcutController.FocusId, b); Require(focuses == 1, "Suspended hotkey activated");
         Require(shortcuts.Suspend(false) && shortcuts.ToggleRegistered && shortcuts.FocusRegistered, "Leaving editing did not re-register");
-        Require(shortcuts.Configure(null, null) && !shortcuts.ToggleRegistered && !shortcuts.FocusRegistered, "Disabled tool retained hotkeys");
+        Require(shortcuts.Configure(null, null) && !shortcuts.ToggleRegistered && !shortcuts.FocusRegistered && !shortcuts.HasMessageHook, "Disabled tool retained hotkeys or a native hook");
         Require(shortcuts.Configure(replacement, b), "Re-enabled tool failed");
         shortcuts.Dispose(); Require(blocker.Configure(replacement, b), "Disposal leaked registrations");
         Require(!blocker.Configure(a, a), "Equal notes hotkeys were accepted");
@@ -343,6 +343,7 @@ internal static partial class Program
         try
         {
             await controller.Ready;
+            await model.EnsureContentLoadedAsync();
             model.Text = "首行\n" + string.Join('\n', Enumerable.Range(1, 42).Select(line => $"初次显示第 {line} 行"));
             model.SetShortcut(false, new(3, 0x83, "Ctrl + Alt + F20"), null);
             model.SetShortcut(true, new(7, 0x83, "Ctrl + Alt + Shift + F20"), null);
@@ -392,15 +393,20 @@ internal static partial class Program
             Require(model.IsVisible && !model.IsFocused && foreground.Current == new WindowInteropHelper(companion).Handle, "Escape did not restore previous window");
             controller.ToggleFocus(); await controller.Pending;
             await CheckNotesMouseGesturesAsync(model, controller, window, companion);
+            window = controller.NoteWindow!;
             companion.Activate(); await Task.Delay(80);
             Require(model.IsVisible && !model.IsFocused && foreground.Current == new WindowInteropHelper(companion).Handle,
                 "External deactivation hid note or stole focus");
             controller.Toggle(); await controller.Pending;
-            Require(!model.IsVisible && foreground.Current == new WindowInteropHelper(companion).Handle && controller.NoteWindow == window,
-                "Hiding an unfocused note switched the active app or destroyed the reusable window");
+            Require(!model.IsVisible && foreground.Current == new WindowInteropHelper(companion).Handle &&
+                (controller.NoteWindow is null || controller.NoteWindow == window && (window.NoteEditor.CanUndo || window.NoteEditor.CanRedo)),
+                "Hiding an unfocused note switched the active app or retained a session without undo/redo");
             for (var i = 0; i < 6; i++) controller.Toggle();
-            await controller.Pending; Require(!model.IsVisible && ReferenceEquals(window, controller.NoteWindow), "Rapid toggle leaked windows or lost parity");
+            await controller.Pending; Require(!model.IsVisible &&
+                (controller.NoteWindow is null && !model.IsContentLoaded || controller.NoteWindow == window && model.IsContentLoaded),
+                "Rapid toggle leaked windows/content or lost the editing session/parity");
             controller.Toggle(); await controller.Pending; await Task.Delay(80);
+            window = controller.NoteWindow!;
             model.BackgroundOpacity = .3; model.FontOpacity = .4; model.FocusBorderColor = "#4285F4";
             var noteBackground = (Border)window.FindName("NoteBackground");
             var writingFrame = (Border)window.FindName("EditorFrame");
@@ -531,14 +537,16 @@ internal static partial class Program
             controller.ToggleFocus(); await controller.Pending;
             Require(model.IsFocused && !model.Notice.StartsWith("先前窗口已关闭", StringComparison.Ordinal), "Successful focus retained a stale restore failure");
             WindowImage("floating-notes-window");
+            var beforeDisable = model.Text;
             model.IsEnabled = false; await controller.Pending;
-            Require(!model.IsVisible && controller.NoteWindow is null && model.Text == window.NoteEditor.Text, "Disable did not release window or preserve text");
+            Require(!model.IsVisible && controller.NoteWindow is null && !model.IsContentLoaded &&
+                await File.ReadAllTextAsync(model.Store.ContentPath) == beforeDisable, "Disable did not release window or preserve text on disk");
             model.IsEnabled = true; controller.Toggle(); await controller.Pending;
             Require(model.IsVisible && controller.NoteWindow != window, "Re-enable did not recreate a released window");
             controller.NoteWindow!.NoteEditor.Text += " last input";
             Require(await controller.PrepareExitAsync() && await File.ReadAllTextAsync(model.Store.ContentPath) == model.Text, "Exit flush lost final edit");
             controller.Dispose(); Require(!model.IsVisible && controller.NoteWindow is null, "Exit leaked note window");
-            Console.WriteLine("PASS Actual notes window focus/restore, external deactivation, selection, rapid hide/reuse, brush alpha, recovery, disable and exit flush");
+            Console.WriteLine("PASS Actual notes window focus/restore, external deactivation, selection, rapid hide/reload, brush alpha, recovery, disable and exit flush");
         }
         finally { controller.Dispose(); companion.Close(); model.Dispose(); if (foreground.IsValid(original)) foreground.Activate(original); directory.Delete(true); }
     }

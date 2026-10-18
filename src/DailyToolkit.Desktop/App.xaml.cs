@@ -18,7 +18,15 @@ public partial class App : Application
 {
     private readonly Stopwatch _startup = Stopwatch.StartNew();
     private SingleInstance? _instance;
-    private FilePack.FilePackRequestBroker? _filePackRequests;
+    private Runtime.FilePackRequestRuntime? _filePackRequests;
+
+    public App()
+    {
+        DispatcherUnhandledException += (_, args) => Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.Application, args.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, args) => Runtime.DiagnosticReportService.Shared.RecordError(
+            Runtime.DiagnosticModule.Application, args.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, args) => Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.Application, args.Exception);
+    }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -168,8 +176,19 @@ public partial class App : Application
             var window = new MainWindow(viewModel, enableShortcuts: !preview);
             MainWindow = window;
             if (!preview)
-                _filePackRequests = new(paths => Dispatcher.InvokeAsync(() => window.LoadFilePackPathsAsync(paths)).Task.Unwrap(),
-                    failure: message => Dispatcher.BeginInvoke(new Action(() => viewModel.FilePack.SetNotice(message))));
+            {
+                _filePackRequests = new(() => new FilePack.FilePackRequestBroker(
+                    paths => Dispatcher.InvokeAsync(() => window.LoadFilePackPathsAsync(paths)).Task.Unwrap(),
+                    failure: message => Dispatcher.BeginInvoke(new Action(() => viewModel.FilePack.SetNotice(message)))),
+                    error => { Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.FilePack, error);
+                        viewModel.FilePack.SetNotice("文件装载入口未能启动，请用窗口选择文件或拖入。"); });
+                viewModel.FilePack.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName is "" or nameof(FilePack.FilePackViewModel.IsEnabled))
+                        _filePackRequests?.Configure(viewModel.FilePack.SettingsLoaded && viewModel.FilePack.IsEnabled);
+                };
+                _filePackRequests.Configure(viewModel.FilePack.SettingsLoaded && viewModel.FilePack.IsEnabled);
+            }
             if (startupRecoveryNotice is not null) window.Loaded += (_,_) => viewModel.ShowStartupRecovery(startupRecoveryNotice);
             var firstFrame = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             window.ContentRendered += (_, _) =>
@@ -177,7 +196,6 @@ public partial class App : Application
                 if (firstFrame.TrySetResult())
                 {
                     viewModel.SetFirstFrameTime(_startup.Elapsed.TotalMilliseconds);
-                    if (!preview) _ = LensGpuRenderer.WarmShaderAsync();
                 }
             };
             if (preview)
@@ -196,7 +214,7 @@ public partial class App : Application
             if (!preview && startupRecoveryNotice is null && (FilePack.FilePackRequestBroker.TryReadArguments(e.Args, out _) ||
                 new AppPreferencesStore().Load().SilentStartup && !e.Args.Contains("--show")))
             {
-                window.StartHidden(); _=LensGpuRenderer.WarmShaderAsync();
+                window.StartHidden();
             }
             else window.Show();
             if (!preview)

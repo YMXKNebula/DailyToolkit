@@ -24,6 +24,7 @@ internal static partial class Program
         });
         var keys = new HashSet<uint>();
         using var controller = new LensShortcutController(source,keys.Contains);
+        Require(!controller.HasMessageHook && !controller.IsReleasePolling, "An unconfigured lens installed a native hook or release polling");
         var toggle=0; var shown=0; var hidden=0;
         controller.ToggleRequested += () => toggle++;
         controller.StartRequested += () => shown++;
@@ -35,7 +36,7 @@ internal static partial class Program
                 new IntPtr((long)shortcut.VirtualKey << 16 | shortcut.Modifiers)),"Could not route a native hotkey message");
             await Application.Current.Dispatcher.InvokeAsync(() => { },DispatcherPriority.ContextIdle);
         }
-        Require(controller.Configure(binding,LensActivationMode.Toggle) && controller.IsRegistered,
+        Require(controller.Configure(binding,LensActivationMode.Toggle) && controller.IsRegistered && controller.HasMessageHook,
             "The background shortcut was not registered before capture starts");
         await PressAsync(binding); await PressAsync(binding);
         Require(toggle==2 && shown==0,"The same background shortcut did not toggle twice");
@@ -49,11 +50,11 @@ internal static partial class Program
         keys.Add(0x10);
         await PressAsync(binding);
         Require(shown==2,"Hold mode could not show again after release");
-        Require(controller.Suspend(true) && !controller.IsRegistered && hidden==2,"Editing did not release the hold and shortcut");
+        Require(controller.Suspend(true) && !controller.IsRegistered && !controller.HasMessageHook && !controller.IsReleasePolling && hidden==2,"Editing did not release the hold, shortcut, native hook or polling");
         await PressAsync(binding);
         Require(shown==2,"Editing still activated the shortcut");
         Require(controller.Suspend(false) && controller.IsRegistered,"Leaving the editor did not restore the shortcut");
-        Require(controller.Configure(null,LensActivationMode.Hold) && !controller.IsRegistered,"Empty shortcut still reserved a key");
+        Require(controller.Configure(null,LensActivationMode.Hold) && !controller.IsRegistered && !controller.HasMessageHook && !controller.IsReleasePolling,"Empty shortcut still retained a key, hook or polling");
         await PressAsync(binding);
         Require(shown==2,"A queued message for a cleared shortcut still activated the lens");
         var replacement=new KeyboardShortcut(6,0x86,"Ctrl + Shift + F23");
@@ -63,7 +64,7 @@ internal static partial class Program
         await PressAsync(replacement);
         Require(toggle==3,"The replacement shortcut did not activate");
         controller.Dispose();
-        Require(!controller.IsRegistered,"Exit retained the global shortcut");
+        Require(!controller.IsRegistered && !controller.HasMessageHook && !controller.IsReleasePolling,"Exit retained the global shortcut, hook or polling");
         Console.WriteLine("PASS Native background shortcut registration, single-key toggle, held release, rebinding, empty choice and cleanup");
     }
 

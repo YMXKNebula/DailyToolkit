@@ -58,13 +58,22 @@ internal static partial class Program
             var input = Path.Combine(fixture.FullName, "中文 空格.txt"); await File.WriteAllTextAsync(input, "quick packaging fixture");
             await model.AddPathsAsync([input]);
             Require(quick.Content is not null && model.Entries.Count == 1, "Quick loading did not use the shared collector");
+            await model.FlushAsync();
+            using (File.OpenHandle(Path.Combine(module, "draft.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                controller.ToggleQuick();
+                await WaitForFilePackAsync(() => model.HasNotice, "A denied close-time draft save did not explain the failure");
+                Require(quick.IsVisible && controller.QuickWindow == quick && model.Entries.Count == 1,
+                    "A failed close-time save discarded the window or draft");
+            }
             controller.OpenDetails();
             await WaitForFilePackAsync(() => controller.PackWindow?.IsVisible == true, "Detailed packaging window did not open");
             var detail = controller.PackWindow!;
             Require(!quick.IsVisible && detail != quick && detail.Handle != quick.Handle && model.Entries.Count == 1,
                 "Detailed packaging reused the quick HWND or lost its files");
             CheckFilePackChrome(detail); detail.Hide();
-            controller.ToggleQuick(); await WaitForFilePackAsync(() => quick.IsVisible, "Quick window did not reopen");
+            controller.ToggleQuick(); await WaitForFilePackAsync(() => controller.QuickWindow?.IsVisible == true, "Quick window did not reopen");
+            quick = controller.QuickWindow!;
             CheckFilePackChrome(quick);
             foreach (var area in DailyToolkit.Desktop.Notes.NotesPositionService.WorkAreas())
             {
@@ -191,15 +200,18 @@ internal static partial class Program
                 task.Snapshot.Options.OutputPolicy == PackOutputPolicy.AutoRename, "Quick pack ignored its saved configuration");
             Require(model.Format == PackFormat.Tar && model.ArchiveName == "详细设置" && model.OutputDirectory.EndsWith("detail-output"),
                 "Quick pack overwrote the detailed settings");
-            await model.SetEnabledAsync(false);
-            Require(!quick.IsVisible && !model.CanEditDraft && !model.OpenQuickWindowCommand.CanExecute(null), "Disabled FilePack still accepted quick loading");
             await WaitForFilePackAsync(() => model.Tasks.Single(row => row.TaskId == task!.TaskId).Info.State is PackState.Completed or PackState.Failed,
-                "Disabling FilePack stopped a submitted task");
+                "Quick packing did not finish");
             var finished = model.Tasks.Single(row => row.TaskId == task!.TaskId).Info;
             Require(finished.State == PackState.Completed && finished.OutputPath != occupied && await File.ReadAllTextAsync(occupied) == "keep existing output",
                 "Quick packing failed or replaced an existing output: " + finished.Error);
             using (var archive = ZipFile.OpenRead(finished.OutputPath)) Require(archive.Entries.Single().FullName == "中文 空格.txt", "Quick ZIP manifest changed");
             Require(await File.ReadAllTextAsync(input) == "quick packaging fixture", "Quick pack modified its source");
+            await model.SetEnabledAsync(false);
+            Require(!quick.IsVisible && !model.CanEditDraft && !model.OpenQuickWindowCommand.CanExecute(null) &&
+                !model.OpenPackWindowCommand.CanExecute(null) && controller.QuickWindow is null && controller.PackWindow is null &&
+                !controller.IsHotkeyRegistered && model.Tasks.Count == 0 && model.Manager.Tasks.Count == 0,
+                "Disabled FilePack retained windows, a shortcut, task rows or task snapshots");
             await model.FlushAsync();
             await using (var restored = new FilePackViewModel(new FilePackStore(module)))
             {
@@ -228,6 +240,41 @@ internal static partial class Program
                 Console.WriteLine("PASS Older settings-page colors no longer override the application theme and remain preserved in storage");
             }
             Require(await model.SetEnabledAsync(true), "FilePack could not be re-enabled");
+            controller.ToggleQuick();
+            await WaitForFilePackAsync(() => controller.QuickWindow?.IsVisible == true, "Quick session fixture did not open");
+            quick = controller.QuickWindow!; quick.Width = 537; quick.Height = 461;
+            for (var index = 0; index < 100; index++) Require(model.AddVirtualFolder($"session-{index:000}"), "Quick session fixture could not add a folder");
+            var sessionView = (FilePackQuickView)((ContentControl)quick.FindName("Body")).Content;
+            var sessionList = (ListBox)sessionView.FindName("FilesList");
+            quick.UpdateLayout();
+            await quick.Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Loaded);
+            sessionList.SelectedIndex = 70; sessionList.ScrollIntoView(sessionList.SelectedItem); quick.UpdateLayout();
+            // VirtualizingStackPanel defers BringIntoView until its item generator
+            // has completed. Let that queued layout/scroll command finish before
+            // recording the state whose restoration is being checked.
+            await quick.Dispatcher.InvokeAsync(() => quick.UpdateLayout(), System.Windows.Threading.DispatcherPriority.ContextIdle);
+            var beforeClose = quick.CaptureSession();
+            var sessionScroll = FilePackDescendants(sessionList).OfType<ScrollViewer>().FirstOrDefault();
+            Require(beforeClose.EntryVertical > 0 && beforeClose.SelectedEntries.Length == 1,
+                $"Quick session fixture did not scroll/select: offset={beforeClose.EntryVertical}, selected={beforeClose.SelectedEntries.Length}, " +
+                $"items={sessionList.Items.Count}, generator={sessionList.ItemContainerGenerator.Status}, height={sessionList.ActualHeight}, " +
+                $"extent={sessionScroll?.ExtentHeight}, viewport={sessionScroll?.ViewportHeight}");
+            controller.ToggleQuick();
+            await WaitForFilePackAsync(() => controller.QuickWindow is null, "Closing quick did not release its HWND");
+            await model.IdleWork;
+            Require(model.IsEnabled && !model.IsLoaded && model.Entries.Count == 0 && model.Manager.Tasks.Count == 0,
+                "Closing quick left idle draft or task snapshots resident");
+            controller.ToggleQuick();
+            await WaitForFilePackAsync(() => controller.QuickWindow?.IsVisible == true, "Quick session did not reload");
+            var reopenedQuick = controller.QuickWindow!;
+            await reopenedQuick.Dispatcher.InvokeAsync(() => reopenedQuick.UpdateLayout(), System.Windows.Threading.DispatcherPriority.ContextIdle);
+            var afterClose = reopenedQuick.CaptureSession();
+            Require(Math.Abs(afterClose.Width - beforeClose.Width) < 1 && Math.Abs(afterClose.Height - beforeClose.Height) < 1 &&
+                afterClose.SelectedEntries.SequenceEqual(beforeClose.SelectedEntries) && Math.Abs(afterClose.EntryVertical - beforeClose.EntryVertical) < 1 &&
+                model.Entries.Count == 100,
+                $"Closing/rebuilding quick changed its dimensions, selection, scroll or draft: size={beforeClose.Width}x{beforeClose.Height}->{afterClose.Width}x{afterClose.Height}, " +
+                $"selected={beforeClose.SelectedEntries.Length}->{afterClose.SelectedEntries.Length}, offset={beforeClose.EntryVertical}->{afterClose.EntryVertical}, entries={model.Entries.Count}");
+            model.ClearDraft();
             await model.ShutdownAsync();
             Console.WriteLine("PASS FilePack switch, separate quick/detail/settings views, shared draft, independent saved quick ZIP settings, auto-rename, source preservation, two window palette drafts/presets/failure/restart, application-themed settings and native chrome");
         }

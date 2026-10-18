@@ -9,6 +9,7 @@ namespace DailyToolkit.Desktop.Notes;
 public sealed record NotesDocument(string Id, string Title, string Text, string? Category = null);
 public sealed record NotesLoadResult(NotesDocument Document, NotesPreferences Preferences, string Notice,
     bool ContentWritable = true, bool SettingsWritable = true);
+internal sealed record NotesContentLoadResult(string Text, bool ContentWritable, string Notice);
 
 public sealed class NotesStore
 {
@@ -23,24 +24,35 @@ public sealed class NotesStore
 
     public async Task<NotesLoadResult> LoadAsync()
     {
-        var text = ""; var preferences = new NotesPreferences(); var notices = new List<string>();
-        var contentWritable = true; var settingsWritable = true;
-        try { if (File.Exists(ContentPath)) text = await File.ReadAllTextAsync(ContentPath, Utf8).ConfigureAwait(false); }
-        catch (Exception exception) when (IsStorageError(exception))
-        { contentWritable = false; notices.Add("笔记读取失败，请在数据目录检查 default.txt 和 .bak 备份。"); }
+        var content = await LoadContentAsync().ConfigureAwait(false);
+        var preferences = new NotesPreferences(); var notices = new List<string>();
+        if (content.Notice.Length > 0) notices.Add(content.Notice);
+        var settingsWritable = true;
         try
         {
-            if (File.Exists(SettingsPath))
-            {
-                preferences = JsonSerializer.Deserialize<NotesPreferences>(await File.ReadAllTextAsync(SettingsPath, Utf8).ConfigureAwait(false))
-                    ?? throw new JsonException();
-                if (preferences.SchemaVersion > 1) throw new JsonException();
-                preferences = preferences.Normalize();
-            }
+            var loadedPreferences = JsonSerializer.Deserialize<NotesPreferences>(await File.ReadAllTextAsync(SettingsPath, Utf8).ConfigureAwait(false))
+                ?? throw new JsonException();
+            if (loadedPreferences.SchemaVersion > 1) throw new JsonException();
+            preferences = loadedPreferences.Normalize();
         }
+        catch (FileNotFoundException) { }
+        catch (DirectoryNotFoundException) { }
         catch (Exception exception) when (IsStorageError(exception))
         { settingsWritable = false; notices.Add("设置读取失败，暂用默认值。原文件保留，恢复默认设置后可重新保存。"); }
-        return new(new("default", "浮笺", text), preferences, string.Join(" ", notices), contentWritable, settingsWritable);
+        return new(new("default", "浮笺", content.Text), preferences, string.Join(" ", notices), content.ContentWritable, settingsWritable);
+    }
+
+    internal async Task<NotesContentLoadResult> LoadContentAsync()
+    {
+        try
+        {
+            var text = await File.ReadAllTextAsync(ContentPath, Utf8).ConfigureAwait(false);
+            return new(text, true, "");
+        }
+        catch (FileNotFoundException) { return new("", true, ""); }
+        catch (DirectoryNotFoundException) { return new("", true, ""); }
+        catch (Exception exception) when (IsStorageError(exception))
+        { return new("", false, "笔记读取失败，请在数据目录检查 default.txt 和 .bak 备份。"); }
     }
 
     public Task SaveContentAsync(string text) => AtomicWriteAsync(ContentPath, text);

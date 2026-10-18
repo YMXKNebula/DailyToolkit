@@ -20,6 +20,8 @@ internal sealed class FilePackController : IDisposable
     private readonly NotesFocusManager _focus;
     private readonly Func<(int X, int Y)> _cursor;
     private bool _disposed, _opening, _cancelShow, _readyForRegistration;
+    private readonly HashSet<FilePackWindow> _closingWindows = [];
+    private FilePackWindowSession? _quickSession, _detailsSession;
     private FilePackWindow? _quick, _details;
     internal FilePackWindow? QuickWindow => _quick;
     internal FilePackWindow? PackWindow => _details;
@@ -36,6 +38,8 @@ internal sealed class FilePackController : IDisposable
         _shortcut = new(source, hotkeyId: HotkeyId); _shortcut.ToggleRequested += ToggleQuick;
         _model.QuickWindowRequested = ToggleQuick; _model.PackWindowRequested = OpenDetails;
         _model.PropertyChanged += Changed;
+        _model.RuntimeReleased += CloseAllWindows;
+        _model.SetToolWindowsVisible(false);
         _host.Gaming.PropertyChanged += ReservedChanged; _host.Notes.PropertyChanged += ReservedChanged; _host.ClipRecall.PropertyChanged += ReservedChanged;
         Ready = InitializeAsync();
     }
@@ -61,7 +65,7 @@ internal sealed class FilePackController : IDisposable
         { shortcut = null; notice = "此快捷键与其他工具冲突。"; }
         if (!_shortcut.Configure(shortcut, LensActivationMode.Toggle)) notice = ShortcutInUseNotice;
         _model.SetShortcutNotice(notice);
-        if (!_model.IsEnabled) { _cancelShow = true; Hide(_quick, true); }
+        if (!_model.IsEnabled) _cancelShow = true;
     }
     public void Suspend(bool suspended)
     {
@@ -72,7 +76,7 @@ internal sealed class FilePackController : IDisposable
     {
         if (_disposed || _model.IsStopping || !_model.IsEnabled) return;
         if (_opening) { _cancelShow = !_cancelShow; return; }
-        if (_quick?.IsVisible == true && _quick.WindowState != WindowState.Minimized) { Hide(_quick, true); return; }
+        if (_quick?.IsVisible == true && _quick.WindowState != WindowState.Minimized) { await CloseWindowAsync(_quick, true); return; }
         _opening = true; _cancelShow = false;
         try { await _model.InitializeAsync(); if (_disposed || _model.IsStopping || _cancelShow || !_model.IsEnabled) return; ShowQuick(); }
         catch (Exception exception) when (FilePackViewModel.IsExpected(exception)) { _model.SetNotice("快速窗口未能打开。"); }
@@ -83,17 +87,25 @@ internal sealed class FilePackController : IDisposable
     private void ShowQuick()
     {
         CaptureFocus();
-        if (_quick is null) { _quick = new(_model, quick: true); _quick.HideRequested += () => Hide(_quick, true); }
+        var created = _quick is null;
+        if (_quick is null) _quick = CreateWindow(quick: true);
         _quick.ShowNearPoint(_cursor());
+        if (created) _quick.RestoreSession(_quickSession);
+        UpdateWindowVisibility();
     }
     public async void OpenDetails()
     {
+        if (_disposed || _model.IsStopping || !_model.IsEnabled) return;
         try
         {
-            await _model.InitializeAsync(); if (_disposed || _model.IsStopping) return;
-            CaptureFocus(); Hide(_quick, false);
-            if (_details is null) { _details = new(_model, quick: false); _details.HideRequested += () => Hide(_details, true); }
+            await _model.InitializeAsync(); if (_disposed || _model.IsStopping || !_model.IsEnabled) return;
+            CaptureFocus(); if (!await CloseWindowAsync(_quick, false)) return;
+            if (_disposed || _model.IsStopping || !_model.IsEnabled) return;
+            var created = _details is null;
+            if (_details is null) _details = CreateWindow(quick: false);
             if (_details.IsVisible && _details.WindowState != WindowState.Minimized) _details.Activate(); else _details.ShowNearPoint(_cursor());
+            if (created) _details.RestoreSession(_detailsSession);
+            UpdateWindowVisibility();
         }
         catch (Exception exception) when (FilePackViewModel.IsExpected(exception)) { _model.SetNotice("打包窗口未能打开。"); }
     }
@@ -109,18 +121,50 @@ internal sealed class FilePackController : IDisposable
         if (!_model.CanEditDraft) { _model.SetNotice("正在收集或提交文件，请稍后重试。"); return false; }
         ShowQuick(); await _model.AddPathsAsync(paths); return true;
     }
-    private void Hide(FilePackWindow? window, bool restore)
+    private FilePackWindow CreateWindow(bool quick)
     {
-        if (window?.IsVisible != true) return;
-        var ownsFocus = _foreground.Current == window.Handle; window.Hide();
-        if (restore && ownsFocus) _focus.Restore();
+        var window = new FilePackWindow(_model, quick);
+        var size = quick ? _quickSession : _detailsSession;
+        if (size is { } saved) { window.Width = saved.Width; window.Height = saved.Height; }
+        window.HideRequested += () => _ = CloseWindowAsync(window, true);
+        window.IsVisibleChanged += (_, _) => UpdateWindowVisibility();
+        return window;
+    }
+    private void UpdateWindowVisibility() => _model.SetToolWindowsVisible(_quick?.IsVisible == true || _details?.IsVisible == true);
+    private async Task<bool> CloseWindowAsync(FilePackWindow? window, bool restore)
+    {
+        if (window is null) return true;
+        if (!_closingWindows.Add(window)) return false;
+        try
+        {
+            if (!await _model.SaveBeforeClosingWindowAsync()) return false;
+            if (!ReferenceEquals(window, _quick) && !ReferenceEquals(window, _details)) return true;
+            var ownsFocus = _foreground.Current == window.Handle;
+            ReleaseWindow(window);
+            if (restore && ownsFocus) _focus.Restore();
+            return true;
+        }
+        finally { _closingWindows.Remove(window); }
+    }
+    private void ReleaseWindow(FilePackWindow window)
+    {
+        if (ReferenceEquals(window, _quick)) { _quickSession = window.CaptureSession(); _quick = null; }
+        if (ReferenceEquals(window, _details)) { _detailsSession = window.CaptureSession(); _details = null; }
+        window.CloseRuntime(); UpdateWindowVisibility();
+    }
+    private void CloseAllWindows()
+    {
+        var quick = _quick; var details = _details;
+        if (quick is not null) ReleaseWindow(quick);
+        if (details is not null) ReleaseWindow(details);
     }
     public void Dispose()
     {
         if (_disposed) return; _disposed = true;
         _shortcut.Dispose(); _model.PropertyChanged -= Changed;
+        _model.RuntimeReleased -= CloseAllWindows;
         _host.Gaming.PropertyChanged -= ReservedChanged; _host.Notes.PropertyChanged -= ReservedChanged; _host.ClipRecall.PropertyChanged -= ReservedChanged;
         _model.QuickWindowRequested = null; _model.PackWindowRequested = null;
-        _quick?.CloseRuntime(); _details?.CloseRuntime();
+        CloseAllWindows();
     }
 }
