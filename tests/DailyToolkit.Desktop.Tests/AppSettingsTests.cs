@@ -25,7 +25,7 @@ internal static partial class Program
                 model.Page="screen-lens"; model.Gaming.Zoom=4; model.Gaming.WheelZoomEnabled=false;
                 model.OpenSettingsCommand.Execute(null);
                 Require(model.IsSettings && !model.IsFavorites && !model.ShowFavoritesEmpty && !model.ShowRefresh &&
-                    model.PageTitle == "主题配色" && model.NavigationItems.Count == 4 &&
+                    model.PageTitle == "主题配色" && model.NavigationItems.Count == 5 &&
                     model.NavigationItems.Single(item => item.IsSelected).Id == "settings-theme" &&
                     !model.RefreshCommand.CanExecute(null) && !model.MoveNavigationItem("settings","computer") &&
                     model.Gaming.Zoom == 4 && !model.Gaming.IsActive,"Opening settings changed tool state or kept unrelated navigation");
@@ -41,7 +41,7 @@ internal static partial class Program
                 Require(model.ShowRuntimeSettings && model.PageTitle == "软件运行" && !model.ShowThemeSettings && model.NavigationItems.Single(item => item.IsSelected).Id == "settings-runtime",
                     "Selecting a settings category exited settings or lost its selection");
                 model.Page="settings-background";
-                Require(model.ShowRuntimeSettings && model.NavigationItems.Count == 4,"The old background route did not resolve to software runtime");
+                Require(model.ShowRuntimeSettings && model.NavigationItems.Count == 5,"The old background route did not resolve to software runtime");
                 model.ExitSettingsCommand.Execute(null);
                 Require(!model.IsFavorites && !model.IsSettings && model.ShowAllTools && model.ShowScreenLens,
                     "Closing settings after switching from favorites returned to another panel");

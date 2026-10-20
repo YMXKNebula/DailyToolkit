@@ -151,7 +151,7 @@ public static class FilePackPaths
     {
         if (!Enum.IsDefined(options.Format) || !Enum.IsDefined(options.Mode) || !Enum.IsDefined(options.Compression) ||
             !Enum.IsDefined(options.OutputPolicy)) throw new ArgumentException("打包选项无效。");
-        var name = NormalizeArchivePath(options.ArchiveName);
+        var name = NormalizeArchivePath(options.UseCompletionTimeName ? PackArchiveNaming.DefaultName : options.ArchiveName);
         if (name.Contains('/')) throw new ArgumentException("压缩包名称不能包含目录。");
         var extension = options.Format switch { PackFormat.Zip => ".zip", PackFormat.SevenZip => ".7z", _ => ".tar" };
         foreach (var known in new[] { ".zip", ".7z", ".tar" })

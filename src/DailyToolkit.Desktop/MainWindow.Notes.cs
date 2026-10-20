@@ -9,6 +9,6 @@ public partial class MainWindow
     private bool _exitPrepared;
     private void InitializeNotes(HwndSource source)
     {
-        _notes = new(_viewModel.Notes, source, () => _viewModel.Gaming.ToggleShortcut);
+        _notes = new(_viewModel.Notes, source, () => _viewModel.Gaming.ToggleShortcut, shortcuts: _viewModel.Shortcuts);
     }
 }

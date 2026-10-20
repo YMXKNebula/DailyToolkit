@@ -12,6 +12,7 @@ public sealed partial class FilePackManager : IAsyncDisposable
     private readonly FilePackStore _store;
     private readonly SevenZipAdapter _engine;
     private readonly FilePackWorkspaceManager _workspace;
+    private readonly TimeProvider _timeProvider;
     private FilePackPreferences _preferences = new();
     private Task? _initialization, _shutdown, _suspension;
     private Task _queueSave = Task.CompletedTask;
@@ -49,8 +50,8 @@ public sealed partial class FilePackManager : IAsyncDisposable
         set { lock (_sync) _preferences = _preferences with { MaximumParallel = Math.Clamp(value, 1, 4) }; Pump(); }
     }
 
-    public FilePackManager(FilePackStore store, SevenZipAdapter engine, FilePackWorkspaceManager? workspace = null)
-    { _store = store; _engine = engine; _workspace = workspace ?? new(store.RootDirectory); }
+    public FilePackManager(FilePackStore store, SevenZipAdapter engine, FilePackWorkspaceManager? workspace = null, TimeProvider? timeProvider = null)
+    { _store = store; _engine = engine; _workspace = workspace ?? new(store.RootDirectory); _timeProvider = timeProvider ?? TimeProvider.System; }
 
     public Task InitializeAsync()
     {
@@ -185,6 +186,9 @@ public sealed partial class FilePackManager : IAsyncDisposable
             await ChangeAsync(job, info => info with { State = PackState.Compressing }).ConfigureAwait(false);
             await _engine.ExecuteAsync(snapshot, plan, workspacePath, temporaryOutput, MaximumParallel, progress, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
+            var finishedAt = _timeProvider.GetUtcNow();
+            if (snapshot.Options.UseCompletionTimeName) await SetCompletionOutputAsync(job, finishedAt, token).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
             CommitOutput(job.Info, temporaryOutput);
             var cleanupError = "";
             try
@@ -196,7 +200,7 @@ public sealed partial class FilePackManager : IAsyncDisposable
             catch (Exception exception) when (IsExpectedError(exception)) { cleanupError = "压缩包已保存，临时文件未能清理：" + exception.Message; }
             await ChangeAsync(job, info => info with { State = PackState.Completed, Percent = 100,
                 ProcessedBytes = snapshot.Entries.Sum(entry => entry.Size), ProcessedFiles = snapshot.Entries.Count(entry => !entry.IsDirectory),
-                WorkspacePath = workspacePath, Error = cleanupError, FinishedAt = DateTimeOffset.UtcNow }).ConfigureAwait(false);
+                WorkspacePath = workspacePath, Error = cleanupError, FinishedAt = finishedAt }).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

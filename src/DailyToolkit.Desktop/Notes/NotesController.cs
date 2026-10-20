@@ -4,6 +4,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using DailyToolkit.Core.Gaming;
 using DailyToolkit.Desktop.Runtime;
+using DailyToolkit.Desktop.Presentation;
 
 namespace DailyToolkit.Desktop.Notes;
 
@@ -27,9 +28,10 @@ internal sealed class NotesController : IDisposable
     internal double SavedVerticalOffset => _verticalOffset;
 
     public NotesController(NotesViewModel model, WindowMessageSource source, Func<KeyboardShortcut?> lensShortcut,
-        INotesForeground? foreground = null)
+        INotesForeground? foreground = null, ShortcutCatalog? shortcuts = null)
     {
         _model = model; _lensShortcut = lensShortcut; _shortcuts = new(source);
+        shortcuts?.ObserveRegistration(_shortcuts);
         _focus = new(foreground ?? new NotesForeground(), () => _window?.Handle ?? IntPtr.Zero);
         _shortcuts.ToggleRequested += Toggle;
         _shortcuts.FocusRequested += ToggleFocus;

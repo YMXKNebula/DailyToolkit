@@ -19,6 +19,9 @@
      <TextBox Grid.Column="1" IsReadOnly="True" Text="{Binding ShortcutText, Mode=OneWay}" PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" Margin="12,0,6,0" ToolTip="按下组合键，Esc 取消。" AutomationProperties.Name="剪贴回溯全局快捷键"/>
      <Button Grid.Column="2" Content="清空" Click="ClearShortcut" Padding="8,6"/>
     </Grid>
+    <TextBlock Text="{Binding DataContext.Shortcuts.ClipboardNotice, RelativeSource={RelativeSource AncestorType=Window}}"
+     Visibility="{Binding DataContext.Shortcuts.HasClipboardNotice, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
+     Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" FontSize="13" Margin="0,0,0,12"/>
     <Button Content="恢复默认快捷键" Click="ResetShortcut" HorizontalAlignment="Left"/>
     <CheckBox Content="重新复制时加入 Win+V 历史" IsChecked="{Binding IncludeRestoredInWindowsHistory}" Margin="0,16,0,0"/>
     <TextBlock Text="是否收录取决于 Windows；不允许云同步。" Style="{StaticResource MutedText}" Margin="0,8,0,0"/>

@@ -6,6 +6,8 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shell;
+using DailyToolkit.Core.FilePack;
+using DailyToolkit.Core.Notes;
 using DailyToolkit.Desktop.Notes;
 
 namespace DailyToolkit.Desktop.FilePack;
@@ -17,6 +19,8 @@ internal sealed record FilePackWindowSession(double Width, double Height, Guid[]
 public partial class FilePackWindow : Window
 {
     private readonly FilePackAppearance _appearance;
+    private readonly FilePackViewModel _model;
+    private readonly bool _quick;
     private readonly double _minimumWidth, _minimumHeight;
     private HwndSource? _source;
     private bool _closingRuntime;
@@ -24,10 +28,12 @@ public partial class FilePackWindow : Window
     internal IntPtr Handle => new WindowInteropHelper(this).Handle;
     public FilePackWindow(FilePackViewModel model, bool quick)
     {
-        InitializeComponent(); DataContext = model; _appearance = quick ? model.QuickAppearance : model.PackAppearance;
+        InitializeComponent(); DataContext = model; _model = model; _quick = quick;
+        _appearance = quick ? model.QuickAppearance : model.PackAppearance;
         Width = quick ? 480 : 1080; Height = quick ? 440 : 780;
         MinWidth = _minimumWidth = quick ? 380 : 680; MinHeight = _minimumHeight = quick ? 320 : 540;
-        Title = quick ? "文件集装箱 · 快速装载" : "文件集装箱 · 详细打包"; WindowTitle.Text = Title;
+        if (!quick && model.DetailedWindowPlacement is { } saved) { Width = saved.Width; Height = saved.Height; }
+        Title = quick ? "文件集装箱 · 快速装载" : "文件集装箱"; WindowTitle.Text = quick ? "—" : Title;
         if (quick)
         {
             var header = (Grid)WindowTitle.Parent;
@@ -38,10 +44,17 @@ public partial class FilePackWindow : Window
         Body.Content = quick ? new FilePackQuickView() : new FilePackView();
         _appearance.Apply(Resources); _appearance.PropertyChanged += AppearanceChanged;
         SystemParameters.StaticPropertyChanged += SystemAppearanceChanged;
-        SourceInitialized += (_, _) => { _source = HwndSource.FromHwnd(Handle); _source?.AddHook(Message); };
+        SourceInitialized += (_, _) =>
+        {
+            _source = HwndSource.FromHwnd(Handle); _source?.AddHook(Message);
+        };
         SizeChanged += (_, _) => WindowChrome.GetWindowChrome(this).CaptionHeight = Math.Max(0, ActualHeight - 12);
         Closing += (_, e) => { if (!_closingRuntime) { e.Cancel = true; HideRequested?.Invoke(); } };
-        Closed += (_, _) => { _appearance.PropertyChanged -= AppearanceChanged; SystemParameters.StaticPropertyChanged -= SystemAppearanceChanged; _source?.RemoveHook(Message); _source = null; };
+        Closed += (_, _) =>
+        {
+            _appearance.PropertyChanged -= AppearanceChanged; SystemParameters.StaticPropertyChanged -= SystemAppearanceChanged;
+            _source?.RemoveHook(Message); _source = null;
+        };
     }
     private void AppearanceChanged(object? sender, PropertyChangedEventArgs e)
     { if (e.PropertyName == nameof(FilePackAppearance.Applied)) _appearance.Apply(Resources); }
@@ -52,8 +65,8 @@ public partial class FilePackWindow : Window
     {
         WindowState = WindowState.Normal; new WindowInteropHelper(this).EnsureHandle();
         var areas = NotesPositionService.WorkAreas();
-        var area = areas.OrderBy(value => Math.Pow(Math.Max(value.X - point.X, Math.Max(0, point.X - value.X - value.Width)), 2) +
-            Math.Pow(Math.Max(value.Y - point.Y, Math.Max(0, point.Y - value.Y - value.Height)), 2)).First();
+        var saved = _quick ? null : _model.DetailedWindowPlacement;
+        var area = NearestArea(saved?.X ?? point.X, saved?.Y ?? point.Y, areas);
         NotesPositionService.Move(Handle, area.X + 8, area.Y + 8);
         var dpi = Math.Max(1, GetDpiForWindow(Handle)) / 96d;
         var width = Math.Max(1, area.Width / dpi - 16); var height = Math.Max(1, area.Height / dpi - 16);
@@ -61,16 +74,67 @@ public partial class FilePackWindow : Window
         Width = Math.Min(Width, width); Height = Math.Min(Height, height);
         Show(); UpdateLayout();
         var bounds = NotesPositionService.Bounds(Handle);
-        NotesPositionService.Move(Handle, Math.Clamp(point.X + 12d, area.X, Math.Max(area.X, area.X + area.Width - bounds.Width)),
-            Math.Clamp(point.Y + 12d, area.Y, Math.Max(area.Y, area.Y + area.Height - bounds.Height)));
+        double left, top;
+        if (_quick)
+        {
+            // Place the title under the pointer without changing the pointer position.
+            var title = WindowTitle.PointToScreen(new Point(WindowTitle.ActualWidth / 2, WindowTitle.ActualHeight / 2));
+            left = bounds.X + point.X - title.X; top = bounds.Y + point.Y - title.Y;
+        }
+        else
+        {
+            left = saved?.X ?? area.X + (area.Width - bounds.Width) / 2;
+            top = saved?.Y ?? area.Y + (area.Height - bounds.Height) / 2;
+        }
+        var position = ClampToArea(bounds with { X = left, Y = top }, area);
+        NotesPositionService.Move(Handle, position.X, position.Y);
         Activate(); Keyboard.Focus(WindowFrame);
+    }
+    internal async Task<bool> SavePlacementAsync()
+    {
+        if (_quick || Handle == IntPtr.Zero || WindowState != WindowState.Normal) return true;
+        try
+        {
+            var bounds = NotesPositionService.Bounds(Handle);
+            return await _model.SaveDetailedWindowPlacementAsync(new(bounds.X, bounds.Y, Width, Height));
+        }
+        catch (Exception exception) when (FilePackViewModel.IsExpected(exception))
+        { _model.SetNotice("窗口位置未能保存，请稍后重试。"); return false; }
+    }
+    internal static NotesRect ClampToArea(NotesRect bounds, NotesRect area) => bounds with
+    {
+        X = Math.Clamp(bounds.X, area.X, Math.Max(area.X, area.X + area.Width - bounds.Width)),
+        Y = Math.Clamp(bounds.Y, area.Y, Math.Max(area.Y, area.Y + area.Height - bounds.Height))
+    };
+    private static NotesRect NearestArea(double x, double y, IReadOnlyList<NotesRect> areas) => areas.OrderBy(area =>
+        Math.Pow(Math.Max(area.X - x, Math.Max(0, x - area.X - area.Width)), 2) +
+        Math.Pow(Math.Max(area.Y - y, Math.Max(0, y - area.Y - area.Height)), 2)).First();
+    private async void RecoverPosition()
+    {
+        if (!IsVisible || _closingRuntime) return;
+        try
+        {
+            var bounds = NotesPositionService.Bounds(Handle);
+            var area = NearestArea(bounds.X, bounds.Y, NotesPositionService.WorkAreas());
+            var initial = ClampToArea(bounds, area);
+            if (initial != bounds) NotesPositionService.Move(Handle, initial.X, initial.Y);
+            var dpi = Math.Max(1, GetDpiForWindow(Handle)) / 96d;
+            var width = Math.Max(1, area.Width / dpi - 16); var height = Math.Max(1, area.Height / dpi - 16);
+            MinWidth = Math.Min(_minimumWidth, width); MinHeight = Math.Min(_minimumHeight, height);
+            Width = Math.Min(Width, width); Height = Math.Min(Height, height); UpdateLayout();
+            var position = ClampToArea(NotesPositionService.Bounds(Handle) with { X = bounds.X, Y = bounds.Y }, area);
+            if (NotesPositionService.Bounds(Handle) != position) NotesPositionService.Move(Handle, position.X, position.Y);
+            await SavePlacementAsync();
+        }
+        catch (Exception exception) when (FilePackViewModel.IsExpected(exception)) { _model.SetNotice("窗口位置未能恢复，请稍后重试。"); }
     }
     private IntPtr Message(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (IsVisible && message is 0x007E or 0x001A) Dispatcher.BeginInvoke(new Action(() => { if (IsVisible) NotesPositionService.Recover(Handle); }));
+        if (IsVisible && message is 0x007E or 0x001A) Dispatcher.BeginInvoke(new Action(RecoverPosition));
+        if (message == 0x0232) _ = SavePlacementAsync(); // WM_EXITSIZEMOVE: one save after a move/resize gesture.
         return IntPtr.Zero;
     }
-    internal void CloseRuntime() { _closingRuntime = true; Close(); }
+    internal void CloseRuntime() { _ = SavePlacementAsync(); _closingRuntime = true; Close(); }
     internal FilePackWindowSession CaptureSession()
     {
         var view = (FrameworkElement)Body.Content;

@@ -39,7 +39,7 @@ internal static partial class Program
                 model.MoveDownCommand.Execute(model.NavigationItems[0]);
                 Require(model.NavigationItems[0].Id == "floating-notes" && model.ShowScreenLens && model.MoveDownCommand.CanExecute(null),"Tool sorting changed selection or failed with two tools");
                 model.Page="computer";
-                Require(model.IsHome && model.IsSettings && model.PageTitle == "电脑详情" && model.NavigationItems.Count == 4,
+                Require(model.IsHome && model.IsSettings && model.PageTitle == "电脑详情" && model.NavigationItems.Count == 5,
                     "Computer details were not moved into settings");
             }
             using (var reopened=Create())

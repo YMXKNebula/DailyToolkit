@@ -7,9 +7,14 @@ public sealed partial class FilePackManager
     private sealed record OutputOwner(int Version, Guid TaskId, Guid SessionId);
     private string ReserveOutput(PackSnapshot snapshot)
     {
-        var output = FilePackPaths.GetOutputPath(snapshot.Options);
+        var options = snapshot.Options.UseCompletionTimeName ? snapshot.Options with
+        {
+            ArchiveName = PackArchiveNaming.AtCompletion(_timeProvider.GetUtcNow()),
+            UseCompletionTimeName = false, OutputPolicy = PackOutputPolicy.AutoRename, ApprovedOverwriteStamp = null
+        } : snapshot.Options;
+        var output = FilePackPaths.GetOutputPath(options);
         FilePackPaths.EnsureNoReparsePoints(output);
-        if (snapshot.Options.OutputPolicy == PackOutputPolicy.AutoRename)
+        if (options.OutputPolicy == PackOutputPolicy.AutoRename)
         {
             var directory = Path.GetDirectoryName(output)!; var stem = Path.GetFileNameWithoutExtension(output); var extension = Path.GetExtension(output);
             for (var index = 2; File.Exists(output) || Directory.Exists(output) || _outputs.ContainsKey(output); index++)
@@ -45,6 +50,40 @@ public sealed partial class FilePackManager
     private void ReleaseOutput(PackTaskInfo task) { lock (_sync) ReleaseOutputLocked(task); }
     private void ReleaseOutputLocked(PackTaskInfo task)
     { if (task.OutputPath.Length > 0 && _outputs.TryGetValue(task.OutputPath, out var owner) && owner == task.TaskId) _outputs.Remove(task.OutputPath); }
+    private async Task SetCompletionOutputAsync(Job job, DateTimeOffset finishedAt, CancellationToken cancellationToken)
+    {
+        await job.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            PackTaskInfo next;
+            lock (_sync)
+            {
+                var previous = job.Info;
+                ReleaseOutputLocked(previous);
+                string output;
+                try
+                {
+                    var options = previous.Snapshot.Options with
+                    {
+                        ArchiveName = PackArchiveNaming.AtCompletion(finishedAt), UseCompletionTimeName = false,
+                        OutputPolicy = PackOutputPolicy.AutoRename, ApprovedOverwriteStamp = null
+                    };
+                    output = ReserveOutput(previous.Snapshot with { Options = options });
+                }
+                catch { _outputs[previous.OutputPath] = previous.TaskId; throw; }
+                // Keep the final destination in memory even if its state write fails,
+                // so failure handling and reservation cleanup use the same path.
+                next = job.Info = previous with { OutputPath = output };
+                job.Unsaved = true;
+            }
+            // Record the chosen name before publishing the archive. Recovery must
+            // never point only at a name guessed before compression completed.
+            await _store.SaveTaskAsync(next, cancellationToken).ConfigureAwait(false);
+            lock (_sync) job.Unsaved = false;
+            Publish(next);
+        }
+        finally { job.Gate.Release(); }
+    }
     private static string TemporaryDirectory(PackSnapshot snapshot) => Path.Combine(FilePackPaths.NormalizeSourcePath(snapshot.Options.OutputDirectory),
         ".dailytoolkit-filepack-" + snapshot.TaskId.ToString("N") + "-" + snapshot.SessionId.ToString("N"));
     private static async Task<string> PrepareTemporaryOutputAsync(PackTaskInfo task, CancellationToken cancellationToken)
@@ -73,7 +112,7 @@ public sealed partial class FilePackManager
         FilePackPaths.EnsureNoReparsePoints(task.OutputPath); FilePackPaths.EnsureNoReparsePoints(temporaryOutput);
         ProtectSources(snapshot, task.OutputPath);
         if (!File.Exists(temporaryOutput)) throw new IOException("校验后的临时压缩包不存在。");
-        if (snapshot.Options.OutputPolicy == PackOutputPolicy.Overwrite && snapshot.Options.ApprovedOverwriteStamp is { } approved)
+        if (!snapshot.Options.UseCompletionTimeName && snapshot.Options.OutputPolicy == PackOutputPolicy.Overwrite && snapshot.Options.ApprovedOverwriteStamp is { } approved)
         {
             if (!File.Exists(task.OutputPath) || FilePackPaths.CaptureSourceStamp(task.OutputPath) != approved)
                 throw new IOException("原压缩包在执行期间发生变化，已阻止覆盖。");

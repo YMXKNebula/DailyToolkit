@@ -37,6 +37,12 @@ internal static partial class Program
             var model = host.FilePack; await model.SettingsReady;
             Require(!model.IsLoaded && !Directory.Exists(module), "Reading tool preferences eagerly recovered tasks or created storage");
             Require(model.IsEnabled && model.ToggleShortcut?.Matches(new(3, 0x50, "P")) == true, "FilePack defaults changed old tool availability");
+            Require(model.ShortcutWindow == FilePackShortcutWindow.Quick && ReferenceEquals(model.QuickAppearance, model.PackAppearance),
+                "FilePack did not default to the quick shortcut window and shared window palette");
+            model.ShortcutWindow = FilePackShortcutWindow.Detailed;
+            await model.PendingOperations;
+            Require((await model.Store.LoadPreferencesAsync()).ShortcutWindow == FilePackShortcutWindow.Detailed,
+                "Shortcut window selection was not saved");
             var globalPalette = host.Theme;
             using var source = ClipboardTestWindow();
             var foreground = new FakeNotesForeground { Current = new IntPtr(9999) }; foreground.Windows.Add(foreground.Current);
@@ -49,6 +55,7 @@ internal static partial class Program
             await WaitForFilePackAsync(() => controller.QuickWindow?.IsVisible == true, "Quick loading window did not open");
             var quick = controller.QuickWindow!;
             quick.UpdateLayout();
+            CheckFilePackCursorPlacement(quick);
             var minimize = (Button)quick.FindName("MinimizeButton"); var close = (Button)quick.FindName("CloseButton");
             var header = (Grid)minimize.Parent;
             var minimizePosition = minimize.TranslatePoint(new Point(), header); var closePosition = close.TranslatePoint(new Point(), header);
@@ -71,13 +78,32 @@ internal static partial class Program
             var detail = controller.PackWindow!;
             Require(!quick.IsVisible && detail != quick && detail.Handle != quick.Handle && model.Entries.Count == 1,
                 "Detailed packaging reused the quick HWND or lost its files");
-            CheckFilePackChrome(detail); detail.Hide();
+            CheckFilePackChrome(detail);
+            var detailArea = DailyToolkit.Desktop.Notes.NotesPositionService.WorkAreas()[0];
+            var detailBounds = DailyToolkit.Desktop.Notes.NotesPositionService.Bounds(detail.Handle);
+            var savedLeft = detailArea.X + Math.Max(0, (detailArea.Width - detailBounds.Width) / 3);
+            var savedTop = detailArea.Y + Math.Max(0, (detailArea.Height - detailBounds.Height) / 3);
+            DailyToolkit.Desktop.Notes.NotesPositionService.Move(detail.Handle, savedLeft, savedTop);
+            using (File.OpenHandle(Path.Combine(module, "preferences.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
+                Require(!await detail.SavePlacementAsync() && model.DetailedWindowPlacement is not null && model.HasNotice,
+                    "A denied window-position write pretended success or lost its in-memory retry state");
+            Require(await detail.SavePlacementAsync(), "Detailed window placement could not be saved");
+            var remembered = DailyToolkit.Desktop.Notes.NotesPositionService.Bounds(detail.Handle);
+            ((Button)detail.FindName("CloseButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await WaitForFilePackAsync(() => controller.PackWindow is null, "Detailed close did not release the old window");
+            controller.OpenDetails();
+            await WaitForFilePackAsync(() => controller.PackWindow?.IsVisible == true, "Detailed window did not reopen");
+            detail = controller.PackWindow!;
+            var restoredBounds = DailyToolkit.Desktop.Notes.NotesPositionService.Bounds(detail.Handle);
+            Require(Math.Abs(restoredBounds.X - remembered.X) <= 1 && Math.Abs(restoredBounds.Y - remembered.Y) <= 1,
+                "Detailed window followed the pointer instead of restoring its saved position");
+            detail.Hide();
             controller.ToggleQuick(); await WaitForFilePackAsync(() => controller.QuickWindow?.IsVisible == true, "Quick window did not reopen");
             quick = controller.QuickWindow!;
             CheckFilePackChrome(quick);
             foreach (var area in DailyToolkit.Desktop.Notes.NotesPositionService.WorkAreas())
             {
-                foreach (var window in new[] { quick, detail })
+                foreach (var window in new[] { quick })
                 {
                     window.ShowNearPoint(((int)(area.X + area.Width - 1), (int)(area.Y + area.Height - 1)));
                     var bounds = DailyToolkit.Desktop.Notes.NotesPositionService.Bounds(window.Handle);
@@ -85,6 +111,13 @@ internal static partial class Program
                         bounds.Y + bounds.Height <= area.Y + area.Height, "A FilePack window overflowed the target monitor work area");
                 }
             }
+            await model.SaveDetailedWindowPlacementAsync(new(-900_000, -900_000, detail.Width, detail.Height));
+            detail.ShowNearPoint((0, 0));
+            var recoveredBounds = DailyToolkit.Desktop.Notes.NotesPositionService.Bounds(detail.Handle);
+            Require(DailyToolkit.Desktop.Notes.NotesPositionService.WorkAreas().Any(area =>
+                recoveredBounds.X >= area.X && recoveredBounds.Y >= area.Y && recoveredBounds.X + recoveredBounds.Width <= area.X + area.Width &&
+                recoveredBounds.Y + recoveredBounds.Height <= area.Y + area.Height), "Detailed window was not recovered from a missing monitor");
+            Require(await detail.SavePlacementAsync(), "Recovered detailed position could not be saved");
             detail.Hide();
             Require(model.Entries.Count == 1, "Closing/reopening cleared the shared draft");
             var quickView = (FilePackQuickView)((ContentControl)quick.FindName("Body")).Content;
@@ -104,8 +137,8 @@ internal static partial class Program
                 host.ApplyTheme(settingsWindow.Resources); globalPalette = host.Theme;
                 settingsWindow.UpdateLayout();
                 CheckFilePackSettingsTheme(settingsView, globalPalette);
-                Require(model.Appearances.Count == 2 && model.Appearances.All(value => value == model.QuickAppearance || value == model.PackAppearance),
-                    "Settings page still exposed a palette overriding the application theme");
+                Require(model.Appearances.Count == 1 && model.Appearances[0] == model.QuickAppearance && ReferenceEquals(model.QuickAppearance, model.PackAppearance),
+                    "Settings page did not expose one shared palette for both tool windows");
                 foreach (var appearance in model.Appearances)
                 { appearance.PresetCommand.Execute(appearance.Presets.Single(value => value.Name == "深海")); await appearance.PendingSave; }
                 foreach (var (width, height) in new[] { (380d, 320d), (480d, 440d), (720d, 600d) })
@@ -157,8 +190,9 @@ internal static partial class Program
                 model.SelectedAppearance = model.QuickAppearance;
                 model.QuickAppearance.PresetCommand.Execute(model.QuickAppearance.Presets.Single(value => value.Name == "薄荷"));
                 await model.QuickAppearance.PendingSave;
-                Require(model.PackAppearance.Applied.Window == "#372349",
-                    "Selecting one window preset changed the other windows");
+                Require(model.PackAppearance.Applied == model.QuickAppearance.Applied &&
+                    ((SolidColorBrush)quick.Resources["WindowBrush"]).Color == ((SolidColorBrush)detail.Resources["WindowBrush"]).Color,
+                    "Selecting a window preset did not synchronize both windows");
                 CheckFilePackSettingsTheme(settingsView, globalPalette);
                 SaveFilePackFrame(quick, images, "filepack-quick");
                 detail.Show(); detail.UpdateLayout(); SaveFilePackFrame(detail, images, "filepack-detail"); detail.Hide();
@@ -182,6 +216,7 @@ internal static partial class Program
                 await model.QuickAppearance.PendingSave; await model.PendingOperations;
                 var concurrent = await model.Store.LoadPreferencesAsync();
                 Require(concurrent.QuickWindowColors["Window"] == model.QuickAppearance.Applied.Window &&
+                    concurrent.PackWindowColors["Window"] == model.QuickAppearance.Applied.Window &&
                     concurrent.QuickPack.Compression == PackCompression.Maximum && concurrent.MaximumParallel == 3,
                     "A concurrent preference write reverted a saved palette");
                 model.QuickAppearance.Options.Single(option => option.Key == "Window").Value = savedWindow;
@@ -218,15 +253,21 @@ internal static partial class Program
                 await restored.SettingsReady;
                 Require(!restored.IsEnabled && restored.QuickFormat == PackFormat.Zip && restored.QuickArchiveName == "快速归档" &&
                     restored.QuickOutputDirectory == model.QuickOutputDirectory && restored.QuickAppearance.Applied.Window == "#110022" &&
-                    restored.PackAppearance.Applied.Window == "#372349",
-                    "Tool switch, quick options or independent palettes did not survive restart");
+                    restored.PackAppearance.Applied.Window == "#110022" && restored.ShortcutWindow == FilePackShortcutWindow.Detailed &&
+                    restored.DetailedWindowPlacement == model.DetailedWindowPlacement,
+                    "Tool switch, quick options, shared palette, shortcut target or window position did not survive restart");
             }
             var legacyStore = new FilePackStore(Path.Combine(fixture.FullName, "legacy-colors"));
             await legacyStore.SavePreferencesAsync(new FilePackPreferences(2, "")
-                { SettingsColors = new() { ["Window"] = "#FFFFFF", ["Text"] = "#000000" } });
+                { SettingsColors = new() { ["Window"] = "#FFFFFF", ["Text"] = "#000000" },
+                    QuickWindowColors = new() { ["Window"] = "#101D32" }, PackWindowColors = new() { ["Window"] = "#DDEFE4" } });
             await using (var legacyModel = new FilePackViewModel(legacyStore))
             {
                 await legacyModel.SettingsReady;
+                Require(legacyModel.QuickAppearance.Applied.Window == "#101D32" && ReferenceEquals(legacyModel.PackAppearance, legacyModel.QuickAppearance),
+                    "Older independent colors did not migrate using the quick window's palette");
+                Require((await legacyStore.LoadPreferencesAsync()).PackWindowColors["Window"] == "#DDEFE4",
+                    "Loading older colors unexpectedly rewrote preferences");
                 var legacyView = new FilePackSettingsView { DataContext = legacyModel };
                 var legacyWindow = new Window { Content = legacyView, Width = 800, Height = 800, ShowInTaskbar = false };
                 host.ApplyTheme(legacyWindow.Resources); legacyWindow.Show(); legacyWindow.UpdateLayout();
@@ -237,6 +278,8 @@ internal static partial class Program
                 var legacyPreferences = await legacyStore.LoadPreferencesAsync();
                 Require(legacyPreferences.SettingsColors["Window"] == "#FFFFFF" && legacyPreferences.SettingsColors["Text"] == "#000000",
                     "Saving a window palette destroyed older settings-page color data");
+                Require(legacyPreferences.PackWindowColors["Window"] == legacyPreferences.QuickWindowColors["Window"],
+                    "Saving migrated colors did not persist the same palette in both legacy fields");
                 Console.WriteLine("PASS Older settings-page colors no longer override the application theme and remain preserved in storage");
             }
             Require(await model.SetEnabledAsync(true), "FilePack could not be re-enabled");
@@ -276,11 +319,38 @@ internal static partial class Program
                 $"selected={beforeClose.SelectedEntries.Length}->{afterClose.SelectedEntries.Length}, offset={beforeClose.EntryVertical}->{afterClose.EntryVertical}, entries={model.Entries.Count}");
             model.ClearDraft();
             await model.ShutdownAsync();
-            Console.WriteLine("PASS FilePack switch, separate quick/detail/settings views, shared draft, independent saved quick ZIP settings, auto-rename, source preservation, two window palette drafts/presets/failure/restart, application-themed settings and native chrome");
+            Console.WriteLine("PASS FilePack switch, separate quick/detail/settings views, shared draft, independent saved quick ZIP settings, auto-rename, source preservation, shared window palette drafts/presets/failure/restart, shortcut target, fixed detailed position, pointer-centered quick title, application-themed settings and native chrome");
         }
         finally { FilePackPaths.EnsureNoReparsePoints(fixture.FullName); fixture.Delete(recursive: true); }
         await CheckFilePackBrokerAsync();
         CheckFilePackContextMenu();
+    }
+    private static void CheckFilePackCursorPlacement(FilePackWindow window)
+    {
+        var area = DailyToolkit.Desktop.Notes.NotesPositionService.WorkAreas()[0];
+        static (int X, int Y)? ReadCursor()
+        {
+            try { return DailyToolkit.Desktop.Notes.NotesPositionService.Cursor(); }
+            catch (System.ComponentModel.Win32Exception exception) when (exception.NativeErrorCode == 1459) { return null; }
+        }
+        var cursorBefore = ReadCursor();
+        var anchor = ((int)(area.X + area.Width / 2), (int)(area.Y + 80));
+        window.ShowNearPoint(anchor); window.UpdateLayout();
+        var title = (TextBlock)window.FindName("WindowTitle");
+        var center = title.PointToScreen(new Point(title.ActualWidth / 2, title.ActualHeight / 2));
+        Require(Math.Abs(center.X - anchor.Item1) <= 2 && Math.Abs(center.Y - anchor.Item2) <= 2,
+            "Quick title did not align with the requested pointer point");
+        foreach (var point in new[] { ((int)area.X, (int)area.Y), ((int)(area.X + area.Width - 1), (int)(area.Y + area.Height - 1)) })
+        {
+            window.ShowNearPoint(point);
+            var bounds = DailyToolkit.Desktop.Notes.NotesPositionService.Bounds(window.Handle);
+            Require(bounds.X >= area.X && bounds.Y >= area.Y && bounds.X + bounds.Width <= area.X + area.Width + 1 &&
+                bounds.Y + bounds.Height <= area.Y + area.Height + 1, "Quick window escaped the monitor work area near an edge");
+        }
+        var cursorAfter = cursorBefore.HasValue ? ReadCursor() : null;
+        if (cursorBefore.HasValue && cursorAfter.HasValue)
+            Require(cursorAfter == cursorBefore, "Opening the quick window moved the real pointer");
+        else Console.WriteLine("SKIP Real pointer position comparison: private non-interactive station returned Win32 1459; simulated title anchor and work-area bounds checks still passed");
     }
     private static void CheckFilePackSettingsTheme(FilePackSettingsView view, ThemePalette palette)
     {

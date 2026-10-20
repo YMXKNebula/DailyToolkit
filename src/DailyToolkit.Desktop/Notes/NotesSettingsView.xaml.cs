@@ -101,15 +101,32 @@ public partial class NotesSettingsView : UserControl
         if (modifiers.HasFlag(ModifierKeys.Windows)) labels.Add("Win");
         labels.Add(key is >= Key.D0 and <= Key.D9 ? ((int)key - (int)Key.D0).ToString() : key.ToString());
         var shortcut = new KeyboardShortcut((uint)modifiers, (uint)KeyInterop.VirtualKeyFromKey(key), string.Join(" + ", labels));
+        var shortcutId = ((FrameworkElement)sender).Tag as string == "focus" ? Presentation.ShortcutIds.NotesFocus : Presentation.ShortcutIds.NotesToggle;
+        var catalog = (Window.GetWindow(this)?.DataContext as Presentation.MainViewModel)?.Shortcuts;
         if (shortcut.Matches(FilePackShortcut?.Invoke()))
-        { if (_model is not null) _model.Notice = "此快捷键与文件集装箱冲突，请选择其他组合。"; return; }
+        { catalog?.ReportAssignmentAttempt(shortcutId, shortcut, false); if (_model is not null) _model.Notice = "此快捷键与文件集装箱冲突，请选择其他组合。"; return; }
         if (shortcut.Matches(ClipRecallShortcut?.Invoke()))
-        { if (_model is not null) _model.Notice = "此快捷键与剪贴回溯冲突，请选择其他组合。"; return; }
-        if (_model?.SetShortcut(((FrameworkElement)sender).Tag as string == "focus", shortcut, LensShortcut?.Invoke()) == true)
+        { catalog?.ReportAssignmentAttempt(shortcutId, shortcut, false); if (_model is not null) _model.Notice = "此快捷键与剪贴回溯冲突，请选择其他组合。"; return; }
+        var accepted = _model?.SetShortcut(((FrameworkElement)sender).Tag as string == "focus", shortcut, LensShortcut?.Invoke()) == true;
+        catalog?.ReportAssignmentAttempt(shortcutId, shortcut, accepted);
+        if (accepted)
             Keyboard.ClearFocus();
     }
-    private void ClearShortcut(object sender, RoutedEventArgs e) => _model?.SetShortcut(((FrameworkElement)sender).Tag as string == "focus", null, LensShortcut?.Invoke());
-    private void ResetShortcuts(object sender, RoutedEventArgs e) => _model?.ResetShortcuts(LensShortcut?.Invoke());
+    private void ClearShortcut(object sender, RoutedEventArgs e)
+    {
+        var focus = ((FrameworkElement)sender).Tag as string == "focus";
+        var accepted = _model?.SetShortcut(focus, null, LensShortcut?.Invoke()) == true;
+        (Window.GetWindow(this)?.DataContext as Presentation.MainViewModel)?.Shortcuts.ReportAssignmentAttempt(
+            focus ? Presentation.ShortcutIds.NotesFocus : Presentation.ShortcutIds.NotesToggle, null, accepted);
+    }
+    private void ResetShortcuts(object sender, RoutedEventArgs e)
+    {
+        var accepted = _model?.ResetShortcuts(LensShortcut?.Invoke()) == true;
+        var catalog = (Window.GetWindow(this)?.DataContext as Presentation.MainViewModel)?.Shortcuts;
+        var defaults = new NotesPreferences();
+        catalog?.ReportAssignmentAttempt(Presentation.ShortcutIds.NotesToggle, defaults.ToggleShortcut, accepted);
+        catalog?.ReportAssignmentAttempt(Presentation.ShortcutIds.NotesFocus, defaults.FocusShortcut, accepted);
+    }
     private void ToggleNote(object sender, RoutedEventArgs e) => ToggleRequested?.Invoke();
     private void ResetPosition(object sender, RoutedEventArgs e) => _model?.ResetPosition();
     private void ResetBackground(object sender, RoutedEventArgs e) => _model?.ResetBackground();

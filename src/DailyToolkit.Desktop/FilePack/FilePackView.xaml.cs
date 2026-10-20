@@ -26,14 +26,18 @@ public partial class FilePackView : UserControl
     }
     private void FilesDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = Model?.CanEditDraft == true && e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        e.Effects = Model?.CanEditDraft == true && (e.AllowedEffects & DragDropEffects.Copy) != 0 ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
     private async void FilesDropped(object sender, DragEventArgs e)
     {
-        e.Handled = true;
-        if (Model?.CanEditDraft != true || e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
-        await Model.AddPathsAsync(paths);
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        e.Handled = true; e.Effects = DragDropEffects.None;
+        if (Model is not { CanEditDraft: true } model || (e.AllowedEffects & DragDropEffects.Copy) == 0 ||
+            e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } paths) return;
+        e.Effects = DragDropEffects.Copy;
+        await model.AddPathsAsync(paths);
     }
     private void EntriesKeyDown(object sender, KeyEventArgs e)
     {

@@ -3,6 +3,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using DailyToolkit.Core.Gaming;
 using DailyToolkit.Desktop.Runtime;
+using DailyToolkit.Desktop.Presentation;
 
 namespace DailyToolkit.Desktop.Gaming;
 
@@ -34,6 +35,7 @@ internal sealed class LensShortcutController : IDisposable
     public event Action? ToggleRequested;
     public event Action? StartRequested;
     public event Action? StopRequested;
+    internal event Action<KeyboardShortcut?, ShortcutRegistrationState, int>? RegistrationChanged;
     public bool IsRegistered { get; private set; }
 
     public bool Configure(KeyboardShortcut? shortcut, LensActivationMode mode)
@@ -57,12 +59,18 @@ internal sealed class LensShortcutController : IDisposable
 
     private bool Register()
     {
-        if (_suspended || _shortcut is null) return true;
-        if (!_shortcut.IsValid || _mode is not (LensActivationMode.Toggle or LensActivationMode.Hold)) return false;
+        if (_suspended || _shortcut is null)
+        { Report(_suspended ? ShortcutRegistrationState.Paused : ShortcutRegistrationState.NotRegistered); return true; }
+        if (!_shortcut.IsValid || _mode is not (LensActivationMode.Toggle or LensActivationMode.Hold))
+        { Report(ShortcutRegistrationState.Failed); return false; }
         IsRegistered = RegisterHotKey(_source.Handle, _hotkeyId, _shortcut.Modifiers | 0x4000, _shortcut.VirtualKey);
+        var error = IsRegistered ? 0 : Marshal.GetLastWin32Error();
         if (IsRegistered) { _source.AddHook(WindowMessage); _hookAttached = true; }
+        Report(IsRegistered ? ShortcutRegistrationState.Registered : ShortcutRegistrationState.Failed, error);
         return IsRegistered;
     }
+
+    private void Report(ShortcutRegistrationState state, int error = 0) => RegistrationChanged?.Invoke(_shortcut, state, error);
 
     private void Unregister()
     {

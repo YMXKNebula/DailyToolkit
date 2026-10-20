@@ -361,6 +361,7 @@ public partial class MainWindow : Window
     internal void InitializeLensShortcuts(HwndSource source)
     {
         _shortcuts?.Dispose(); _shortcuts=new(source);
+        _viewModel.Shortcuts.ObserveRegistration(ShortcutIds.LensToggle, _shortcuts);
         _shortcuts.ToggleRequested += _viewModel.Gaming.Toggle;
         _shortcuts.StartRequested += _viewModel.Gaming.Start;
         _shortcuts.StopRequested += _viewModel.Gaming.Stop;
@@ -396,16 +397,16 @@ public partial class MainWindow : Window
         var binding=new KeyboardShortcut((uint)modifiers,(uint)KeyInterop.VirtualKeyFromKey(key),string.Join(" + ",labels));
         if (!binding.IsValid) return;
         if (binding.Matches(_viewModel.Notes.Preferences.ToggleShortcut) || binding.Matches(_viewModel.Notes.Preferences.FocusShortcut))
-        { _viewModel.Notice = "快捷键与浮笺冲突，请更换组合。"; return; }
+        { _viewModel.Shortcuts.ReportAssignmentAttempt(ShortcutIds.LensToggle, binding, false); _viewModel.Notice = "快捷键与浮笺冲突，请更换组合。"; return; }
         if (_viewModel.ClipRecall.IsEnabled && binding.Matches(_viewModel.ClipRecall.Settings.ToggleShortcut))
-        { _viewModel.Notice = "快捷键与剪贴回溯冲突，请更换组合。"; return; }
+        { _viewModel.Shortcuts.ReportAssignmentAttempt(ShortcutIds.LensToggle, binding, false); _viewModel.Notice = "快捷键与剪贴回溯冲突，请更换组合。"; return; }
         if (_viewModel.FilePack.IsEnabled && binding.Matches(_viewModel.FilePack.ToggleShortcut))
-        { _viewModel.Notice = "快捷键与文件集装箱冲突，请更换组合。"; return; }
-        _viewModel.Gaming.SetShortcut(binding);
+        { _viewModel.Shortcuts.ReportAssignmentAttempt(ShortcutIds.LensToggle, binding, false); _viewModel.Notice = "快捷键与文件集装箱冲突，请更换组合。"; return; }
+        _viewModel.Shortcuts.ReportAssignmentAttempt(ShortcutIds.LensToggle, binding, _viewModel.Gaming.SetShortcut(binding));
         Keyboard.ClearFocus();
     }
     private void ClearShortcut(object sender,RoutedEventArgs e) =>
-        _viewModel.Gaming.SetShortcut(null);
+        _viewModel.Shortcuts.ReportAssignmentAttempt(ShortcutIds.LensToggle, null, _viewModel.Gaming.SetShortcut(null));
 
     private async void SaveReport(object sender, RoutedEventArgs e)
     {

@@ -8,14 +8,19 @@
  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
   <StackPanel Margin="0,0,8,0" IsEnabled="{Binding SettingsLoaded}">
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
-    <DockPanel Margin="0,0,0,12"><controls:FeatureSwitch DockPanel.Dock="Right" IsOn="{Binding IsEnabled}" Command="{Binding ToggleEnabledCommand}" Style="{StaticResource FeatureSwitchStyle}" AutomationProperties.Name="文件集装箱功能开关"
-      AnimationSpeed="{Binding DataContext.AnimationSpeed, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=1}" AnimationsEnabled="{Binding DataContext.PageAnimationsEnabled, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=False}"/><TextBlock Text="文件集装箱" Style="{StaticResource SectionTitle}" Margin="0" VerticalAlignment="Center"/></DockPanel>
+    <TextBlock Text="文件集装箱" Style="{StaticResource SectionTitle}"/>
     <WrapPanel><Button Content="快速装载" Command="{Binding OpenQuickWindowCommand}" Margin="0,0,8,8"/><Button Content="详细打包" Command="{Binding OpenPackWindowCommand}" Margin="0,0,0,8"/></WrapPanel>
     <Grid Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-     <TextBlock Text="快速窗口快捷键" VerticalAlignment="Center"/>
+     <TextBlock Text="打开窗口快捷键" VerticalAlignment="Center"/>
      <TextBox Grid.Column="1" IsReadOnly="True" Text="{Binding ShortcutText, Mode=OneWay}" PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" Margin="12,0,8,0" AutomationProperties.Name="文件集装箱快捷键"/>
      <Button Grid.Column="2" Content="清空" Click="ClearShortcut" Padding="10,6"/>
     </Grid>
+    <TextBlock Text="{Binding DataContext.Shortcuts.FilePackNotice, RelativeSource={RelativeSource AncestorType=Window}}" Visibility="{Binding DataContext.Shortcuts.HasFilePackNotice, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+    <TextBlock Text="快捷键打开" Margin="0,14,0,4"/>
+    <WrapPanel>
+     <RadioButton x:Name="QuickShortcutChoice" Content="快速装载" Tag="Quick" GroupName="FilePackShortcutWindow" Style="{StaticResource NavButton}" Checked="SelectShortcutWindow" Margin="0,0,8,0" AutomationProperties.Name="快捷键打开快速装载"/>
+     <RadioButton x:Name="DetailedShortcutChoice" Content="详细打包" Tag="Detailed" GroupName="FilePackShortcutWindow" Style="{StaticResource NavButton}" Checked="SelectShortcutWindow" AutomationProperties.Name="快捷键打开详细打包"/>
+    </WrapPanel>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="快捷打包" Style="{StaticResource SectionTitle}"/>
@@ -25,7 +30,7 @@
      <StackPanel Margin="0,0,0,12"><TextBlock Text="压缩级别"/><ComboBox ItemsSource="{Binding CompressionLevels}" SelectedValue="{Binding QuickCompression}" SelectedValuePath="Value" DisplayMemberPath="Name" Width="110" IsEnabled="{Binding QuickCanChooseCompression}" Margin="0,6,0,0"/></StackPanel>
     </WrapPanel>
     <TextBlock Text="保存位置"/><Grid Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding QuickOutputDirectory, UpdateSourceTrigger=LostFocus}"/><Button Grid.Column="1" Content="选择" Command="{Binding BrowseQuickOutputCommand}" Margin="8,0,0,0"/></Grid>
-    <TextBlock Text="同名文件自动更名。" Style="{StaticResource MutedText}" Margin="0,8,0,0"/>
+    <TextBlock Text="默认按压缩完成时间命名，精确到分钟。同名文件自动更名。" Style="{StaticResource MutedText}" Margin="0,8,0,0"/>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="右键菜单" Style="{StaticResource SectionTitle}"/>
@@ -33,7 +38,8 @@
     <TextBlock Text="Windows 11 第一层菜单暂不支持。" Style="{StaticResource MutedText}" Margin="0,8,0,0"/>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}"><StackPanel>
-    <DockPanel Margin="0,0,0,12"><ComboBox DockPanel.Dock="Right" ItemsSource="{Binding Appearances}" SelectedItem="{Binding SelectedAppearance}" DisplayMemberPath="Name" Width="130"/><TextBlock Text="窗口配色" Style="{StaticResource SectionTitle}" Margin="0" VerticalAlignment="Center"/></DockPanel>
+    <TextBlock Text="窗口配色" Style="{StaticResource SectionTitle}" Margin="0,0,0,6"/>
+    <TextBlock Text="快速装载与详细打包共用此配色。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
     <StackPanel DataContext="{Binding SelectedAppearance}">
      <ItemsControl ItemsSource="{Binding Presets}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate>
       <Button Command="{Binding DataContext.PresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" Margin="0,0,8,8" Padding="8,6" ToolTip="{Binding Name}" AutomationProperties.Name="{Binding Name}">
@@ -44,7 +50,7 @@
      <Border x:Name="PalettePreview" Background="{DynamicResource WindowBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,4,0,12">
       <StackPanel><TextBlock Text="{Binding Name}" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
        <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="8" Padding="12" Margin="0,12,0,0"><StackPanel><TextBlock Text="旅行照片" Foreground="{DynamicResource TextBrush}"/><TextBlock Text="12 项 · 48 MB" Foreground="{DynamicResource MutedBrush}" Margin="0,4,0,0"/></StackPanel></Border>
-       <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Button Content="打包" IsHitTestVisible="False" Focusable="False" Margin="0,0,6,0"/><Button Grid.Column="1" Content="快捷打包" Style="{StaticResource AccentButton}" IsHitTestVisible="False" Focusable="False" Margin="6,0,0,0"/></Grid>
+       <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="3*"/></Grid.ColumnDefinitions><Button Content="详细设置" IsHitTestVisible="False" Focusable="False" Margin="0,0,6,0"/><Button Grid.Column="1" Content="开始打包" Style="{StaticResource AccentButton}" IsHitTestVisible="False" Focusable="False" Margin="6,0,0,0"/></Grid>
       </StackPanel>
      </Border>
      <WrapPanel><Button Content="保存配色" Command="{Binding SaveCommand}" Margin="0,0,8,8"/><Button Content="撤销修改" Command="{Binding DiscardCommand}" Margin="0,0,0,8"/></WrapPanel>

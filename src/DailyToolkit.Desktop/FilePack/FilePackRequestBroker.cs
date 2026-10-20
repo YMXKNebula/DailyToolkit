@@ -1,8 +1,11 @@
 using System.IO;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Threading.Channels;
+using Microsoft.Win32.SafeHandles;
 
 namespace DailyToolkit.Desktop.FilePack;
 
@@ -11,6 +14,7 @@ namespace DailyToolkit.Desktop.FilePack;
 internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
 {
     private const int MaximumBytes = 128 * 1024;
+    private static readonly uint SessionId = ReadSessionId();
     private readonly string _name;
     private readonly Func<IReadOnlyList<string>, Task> _receive;
     private readonly Action<string>? _failure;
@@ -21,7 +25,7 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
     private int _disposed;
     internal static string PipeName
     {
-        get { using var identity = WindowsIdentity.GetCurrent(); return $"DailyToolkit.FilePack.{identity.User!.Value}.{System.Diagnostics.Process.GetCurrentProcess().SessionId}"; }
+        get { using var identity = WindowsIdentity.GetCurrent(); return $"DailyToolkit.FilePack.{identity.User!.Value}.{SessionId}"; }
     }
     internal FilePackRequestBroker(Func<IReadOnlyList<string>, Task> receive, string? name = null, Action<string>? failure = null)
     { _receive = receive; _failure = failure; _name = name ?? PipeName; _server = ListenAsync(); _consumer = ConsumeAsync(); }
@@ -43,8 +47,17 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         try
         {
-            await using var client = new NamedPipeClientStream(".", name ?? PipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            // CurrentUserOnly compares the token's default owner, which changes
+            // from the user SID to Administrators when the same user elevates.
+            // Compare the actual user instead, without giving the server a token
+            // it can use to impersonate this Explorer invocation.
+            await using var client = new NamedPipeClientStream(".", name ?? PipeName, PipeDirection.InOut,
+                PipeOptions.Asynchronous, TokenImpersonationLevel.Identification);
             await client.ConnectAsync(timeout.Token).ConfigureAwait(false);
+            using var identity = WindowsIdentity.GetCurrent();
+            if (client.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) is not SecurityIdentifier owner || owner != identity.User ||
+                !GetNamedPipeServerSessionId(client.SafePipeHandle, out var session) || session != SessionId)
+                return false;
             await client.WriteAsync(BitConverter.GetBytes(bytes.Length), timeout.Token).ConfigureAwait(false);
             await client.WriteAsync(bytes, timeout.Token).ConfigureAwait(false);
             await client.FlushAsync(timeout.Token).ConfigureAwait(false);
@@ -56,8 +69,8 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
     {
         try
         {
-            await using var pipe = new NamedPipeServerStream(_name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            await using var pipe = NamedPipeServerStreamAcl.Create(_name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous, 0, 0, CreatePipeSecurity());
             _pipe = pipe;
             while (!_stop.IsCancellationRequested)
             {
@@ -69,7 +82,9 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
                     var length = BitConverter.ToInt32(header); if (length is < 2 or > MaximumBytes) continue;
                     var bytes = new byte[length]; await pipe.ReadExactlyAsync(bytes, timeout.Token).ConfigureAwait(false);
                     var paths = JsonSerializer.Deserialize<string[]>(bytes);
-                    var valid = paths is not null && TryReadArguments(["--file-pack-load", .. paths], out var normalized) && _requests.Writer.TryWrite(normalized);
+                    var valid = GetNamedPipeClientSessionId(pipe.SafePipeHandle, out var session) &&
+                        session == SessionId &&
+                        paths is not null && TryReadArguments(["--file-pack-load", .. paths], out var normalized) && _requests.Writer.TryWrite(normalized);
                     await pipe.WriteAsync(new byte[] { valid ? (byte)1 : (byte)0 }, timeout.Token).ConfigureAwait(false);
                     await pipe.FlushAsync(timeout.Token).ConfigureAwait(false);
                     // The client closes after reading its acknowledgement. Keep the
@@ -83,6 +98,17 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
         catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException or UnauthorizedAccessException)
         { if (!_stop.IsCancellationRequested) _failure?.Invoke("文件集装箱右键入口未能启动。"); }
         finally { _pipe = null; _requests.Writer.TryComplete(); }
+    }
+    internal static PipeSecurity CreatePipeSecurity()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var user = identity.User ?? throw new UnauthorizedAccessException("当前用户身份不可用。");
+        var security = new PipeSecurity();
+        // Keep this endpoint exclusive to the actual user across their normal
+        // and administrator tokens. Do not grant the Administrators group or
+        // inherit permissions from a broader default owner ACL.
+        security.SetSecurityDescriptorSddlForm($"O:{user.Value}D:P(A;;FA;;;{user.Value})");
+        return security;
     }
     private async Task ConsumeAsync()
     {
@@ -104,4 +130,12 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
     }
     public void Dispose() { if (Interlocked.Exchange(ref _disposed, 1) != 0) return; _stop.Cancel(); _pipe?.Dispose(); }
     public async ValueTask DisposeAsync() { Dispose(); await Task.WhenAll(_server, _consumer).ConfigureAwait(false); _stop.Dispose(); }
+    private static uint ReadSessionId()
+    { using var process = System.Diagnostics.Process.GetCurrentProcess(); return (uint)process.SessionId; }
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetNamedPipeServerSessionId(SafePipeHandle pipe, out uint session);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetNamedPipeClientSessionId(SafePipeHandle pipe, out uint session);
 }

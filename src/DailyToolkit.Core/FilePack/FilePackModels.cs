@@ -7,13 +7,14 @@ public enum PackFormat { Zip, SevenZip, Tar }
 public enum PackCompression { Store, Fast, Standard, Maximum }
 public enum PackState { Queued, Collecting, Copying, Compressing, Verifying, AwaitingExternal, Completed, Cancelled, Failed, Interrupted }
 public enum PackOutputPolicy { Fail, AutoRename, Overwrite }
+public enum FilePackShortcutWindow { Quick, Detailed }
 
 public sealed record PackSourceStamp(long Length, long LastWriteUtcTicks, long CreationUtcTicks);
 public sealed record PackEntry(Guid Id, string SourcePath, string ArchivePath, bool IsDirectory, long Size,
     PackSourceStamp? SourceStamp, string SourceRoot);
 public sealed record PackOptions(PackMode Mode, PackFormat Format, PackCompression Compression, string OutputDirectory,
     string ArchiveName, PackOutputPolicy OutputPolicy = PackOutputPolicy.Fail, bool AllowStaging = false,
-    bool KeepWorkspace = false, PackSourceStamp? ApprovedOverwriteStamp = null);
+    bool KeepWorkspace = false, PackSourceStamp? ApprovedOverwriteStamp = null, bool UseCompletionTimeName = false);
 public sealed record PackSnapshot(Guid TaskId, Guid SessionId, string Name, IReadOnlyList<PackEntry> Entries,
     PackOptions Options, DateTimeOffset CreatedAt);
 public sealed record PackProgress(PackState State, double Percent, long ProcessedBytes, int ProcessedFiles, string Detail = "");
@@ -37,6 +38,8 @@ public sealed record FilePackPreferences(int MaximumParallel = 2, string LastOut
     public bool IsEnabled { get; init; } = true;
     public KeyboardShortcut? ToggleShortcut { get; init; } = new(3, 0x50, "Ctrl + Alt + P");
     public QuickPackPreferences QuickPack { get; init; } = new();
+    public FilePackShortcutWindow ShortcutWindow { get; init; } = FilePackShortcutWindow.Quick;
+    public FilePackWindowPlacement? DetailedWindowPlacement { get; init; }
     public Dictionary<string, string> SettingsColors { get; init; } = [];
     public Dictionary<string, string> PackWindowColors { get; init; } = [];
     public Dictionary<string, string> QuickWindowColors { get; init; } = [];
@@ -45,6 +48,8 @@ public sealed record FilePackPreferences(int MaximumParallel = 2, string LastOut
         MaximumParallel = Math.Clamp(MaximumParallel, 1, 4), LastOutputDirectory = LastOutputDirectory ?? "",
         ToggleShortcut = ToggleShortcut is null or { IsValid: true } ? ToggleShortcut : new(3, 0x50, "Ctrl + Alt + P"),
         QuickPack = (QuickPack ?? new()).Normalize(), SettingsColors = NormalizeColors(SettingsColors),
+        ShortcutWindow = Enum.IsDefined(ShortcutWindow) ? ShortcutWindow : FilePackShortcutWindow.Quick,
+        DetailedWindowPlacement = DetailedWindowPlacement?.Normalize(),
         PackWindowColors = NormalizeColors(PackWindowColors), QuickWindowColors = NormalizeColors(QuickWindowColors)
     };
     private static Dictionary<string, string> NormalizeColors(Dictionary<string, string>? colors) =>
@@ -52,13 +57,22 @@ public sealed record FilePackPreferences(int MaximumParallel = 2, string LastOut
             .Take(20).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
 }
 
+// Screen coordinates use physical pixels; sizes use WPF device-independent units.
+public sealed record FilePackWindowPlacement(double X, double Y, double Width, double Height)
+{
+    public FilePackWindowPlacement? Normalize() =>
+        double.IsFinite(X) && double.IsFinite(Y) && Math.Abs(X) <= 1_000_000 && Math.Abs(Y) <= 1_000_000 &&
+        double.IsFinite(Width) && double.IsFinite(Height) && Width > 0 && Height > 0
+            ? this with { Width = Math.Clamp(Width, 680, 10_000), Height = Math.Clamp(Height, 540, 10_000) } : null;
+}
+
 public sealed record QuickPackPreferences(PackFormat Format = PackFormat.Zip, PackCompression Compression = PackCompression.Standard,
-    string OutputDirectory = "", string ArchiveName = "文件集装箱")
+    string OutputDirectory = "", string ArchiveName = PackArchiveNaming.DefaultName)
 {
     public QuickPackPreferences Normalize() => this with
     {
         Format = Enum.IsDefined(Format) ? Format : PackFormat.Zip,
         Compression = Enum.IsDefined(Compression) ? Compression : PackCompression.Standard,
-        OutputDirectory = OutputDirectory ?? "", ArchiveName = ArchiveName ?? "文件集装箱"
+        OutputDirectory = OutputDirectory ?? "", ArchiveName = PackArchiveNaming.NormalizeDefault(ArchiveName)
     };
 }

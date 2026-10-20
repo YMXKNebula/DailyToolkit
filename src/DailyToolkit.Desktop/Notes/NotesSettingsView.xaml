@@ -20,15 +20,21 @@
     <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
      <Grid>
       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-      <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+      <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <TextBlock Text="显示 / 隐藏" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
       <TextBox Grid.Column="1" Tag="toggle" Text="{Binding ToggleShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="12,0,4,8" Padding="8,6" MinWidth="62" VerticalContentAlignment="Center"
        PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="按下组合键，Esc 取消。" AutomationProperties.Name="浮笺显示隐藏快捷键"/>
       <Button Grid.Column="2" Tag="toggle" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12" Margin="0,0,0,8"/>
-      <TextBlock Grid.Row="1" Text="聚焦" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-      <TextBox Grid.Row="1" Grid.Column="1" Tag="focus" Text="{Binding FocusShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="12,0,4,0" Padding="8,6" MinWidth="62" VerticalContentAlignment="Center"
+      <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Text="{Binding DataContext.Shortcuts.NotesToggleNotice, RelativeSource={RelativeSource AncestorType=Window}}"
+       Visibility="{Binding DataContext.Shortcuts.HasNotesToggleNotice, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
+       Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" FontSize="13" Margin="0,0,0,8"/>
+      <TextBlock Grid.Row="2" Text="聚焦" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+      <TextBox Grid.Row="2" Grid.Column="1" Tag="focus" Text="{Binding FocusShortcutText, Mode=OneWay}" IsReadOnly="True" Margin="12,0,4,0" Padding="8,6" MinWidth="62" VerticalContentAlignment="Center"
        PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" ToolTip="切换已显示浮笺的编辑状态。" AutomationProperties.Name="浮笺聚焦快捷键"/>
-      <Button Grid.Row="1" Grid.Column="2" Tag="focus" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12"/>
+      <Button Grid.Row="2" Grid.Column="2" Tag="focus" Content="清空" Click="ClearShortcut" Padding="6,6" FontSize="12"/>
+      <TextBlock Grid.Row="3" Grid.ColumnSpan="4" Text="{Binding DataContext.Shortcuts.NotesFocusNotice, RelativeSource={RelativeSource AncestorType=Window}}"
+       Visibility="{Binding DataContext.Shortcuts.HasNotesFocusNotice, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
+       Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" FontSize="13" Margin="0,8,0,0"/>
      </Grid>
      <Button Content="恢复默认快捷键" Click="ResetShortcuts" HorizontalAlignment="Left" Margin="0,12,0,12"/>
      <WrapPanel><Button Content="显示 / 隐藏浮笺" Click="ToggleNote" IsEnabled="{Binding IsEnabled}" Margin="0,0,8,8"/>

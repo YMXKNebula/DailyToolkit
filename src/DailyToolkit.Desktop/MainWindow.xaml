@@ -259,6 +259,9 @@
                              Padding="8,7" FontSize="13" Margin="0" ToolTip="按一次开启或关闭。" />
               </StackPanel>
               </Grid>
+              <TextBlock Text="{Binding DataContext.Shortcuts.LensNotice, RelativeSource={RelativeSource AncestorType=Window}}"
+                         Visibility="{Binding DataContext.Shortcuts.HasLensNotice, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
+                         Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" FontSize="13" Margin="0,10,0,0" />
               <Border x:Name="LensDetailsPanel">
                 <StackPanel Margin="0,16,0,0">
                   <Grid x:Name="LensSettingsGrid" SizeChanged="LensSettingsSizeChanged">
@@ -466,6 +469,48 @@
               <CheckBox Content="最小化时留在托盘" IsChecked="{Binding MinimizeToTray}" Foreground="{DynamicResource TextBrush}" />
             </StackPanel>
           </Border>
+          <StackPanel x:Name="ShortcutSettingsPanel" Visibility="{Binding ShowShortcutSettings, Converter={StaticResource VisibleWhen}}">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+              <StackPanel>
+                <TextBlock Text="全局快捷键" Style="{StaticResource SectionTitle}" />
+                <TextBlock Text="在对应工具中修改。停用工具的快捷键也会列出，并检查重复。" Style="{StaticResource MutedText}" Margin="0,0,0,14" />
+                <ItemsControl ItemsSource="{Binding Shortcuts.Rows}">
+                  <ItemsControl.ItemTemplate><DataTemplate>
+                    <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,12">
+                      <StackPanel>
+                        <WrapPanel>
+                          <TextBlock Text="{Binding Tool}" FontWeight="SemiBold" Margin="0,0,12,4" />
+                          <TextBlock Text="{Binding Action}" Style="{StaticResource MutedText}" Margin="0,0,12,4" />
+                        </WrapPanel>
+                        <WrapPanel>
+                          <TextBlock Text="{Binding ShortcutText}" Margin="0,0,16,4" />
+                          <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" FontSize="13"
+                                   Visibility="{Binding HasNotice, Converter={StaticResource VisibleWhen}}" />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="会提示已知的 Windows 组合键；其他程序是否占用，在启用或更改快捷键时检查。" Style="{StaticResource MutedText}" Margin="0,14,0,0" />
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card}">
+              <StackPanel>
+                <TextBlock Text="窗口内快捷键" Style="{StaticResource SectionTitle}" />
+                <TextBlock Text="仅在相应窗口内生效。" Style="{StaticResource MutedText}" Margin="0,0,0,12" />
+                <ItemsControl ItemsSource="{Binding Shortcuts.WindowRows}">
+                  <ItemsControl.ItemTemplate><DataTemplate>
+                    <StackPanel Margin="0,0,0,12">
+                      <WrapPanel><TextBlock Text="{Binding Tool}" FontWeight="SemiBold" Margin="0,0,12,4" />
+                        <TextBlock Text="{Binding ShortcutText}" Margin="0,0,0,4" /></WrapPanel>
+                      <TextBlock Text="{Binding Action}" Style="{StaticResource MutedText}" />
+                    </StackPanel>
+                  </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
           <Border x:Name="AboutSettingsCard" Style="{StaticResource Card}" Visibility="{Binding ShowAboutSettings, Converter={StaticResource VisibleWhen}}">
             <StackPanel>
               <StackPanel Orientation="Horizontal" Margin="0,0,0,20">

@@ -48,6 +48,7 @@ internal sealed class ClipboardHistoryController : IDisposable
         _cursor = cursor ?? NotesPositionService.Cursor;
         _focus = new(_foreground, () => _panel?.Handle ?? IntPtr.Zero);
         _shortcut = new(source, hotkeyId: HotkeyId); _shortcut.ToggleRequested += Toggle;
+        host.Shortcuts.ObserveRegistration(ShortcutIds.ClipboardToggle, _shortcut);
         _monitor = new(source); _access = access ?? new ClipboardNativeAccess(source.Handle);
         _monitor.Updated += ClipboardUpdated;
         _model.RestoreRequested = RestoreAsync; _model.PanelRequested = Toggle;

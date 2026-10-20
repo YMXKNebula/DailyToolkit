@@ -39,6 +39,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly NavigationItem[] _settingsNavigation=[
         new("settings-theme","主题配色","\uE790"),
         new("settings-runtime","软件运行","\uE7E8"),
+        new("settings-shortcuts","快捷键","\uE765"),
         new("settings-computer","电脑详情","\uE770"),
         new("settings-about","关于","\uE946")];
     private readonly NavigationOrderStore _navigationStore;
@@ -86,6 +87,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Notes = new(notesStore);
         ClipRecall = new(clipboardSettingsStore);
         FilePack = new(filePackStore);
+        Shortcuts = new(this);
         FilePack.IsFavorite = _favoriteIds.Contains("file-pack");
         _navigation[3].IsEnabled = FilePack.IsEnabled;
         ClipRecall.IsFavorite = _favoriteIds.Contains("clip-recall");
@@ -155,6 +157,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public NotesViewModel Notes { get; }
     public ClipboardHistoryViewModel ClipRecall { get; }
     public FilePackViewModel FilePack { get; }
+    public ShortcutCatalog Shortcuts { get; }
     public RelayCommand RefreshCommand { get; }
     public Task CurrentProbeTask { get; private set; } = Task.CompletedTask;
     public Task CurrentLocalStatusTask { get; private set; } = Task.CompletedTask;
@@ -190,6 +193,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool ShowSettingsContent => IsSettings && !IsHome;
     public bool ShowThemeSettings => IsSettings && Page == "settings-theme";
     public bool ShowRuntimeSettings => IsSettings && Page == "settings-runtime";
+    public bool ShowShortcutSettings => IsSettings && Page == "settings-shortcuts";
     public bool ShowAboutSettings => IsSettings && Page == "settings-about";
     public bool HasFavorites => _navigation.Any(item => _favoriteIds.Contains(item.Id));
     public bool ShowScreenLens => Page == "screen-lens";
@@ -587,7 +591,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public void CancelPending() => _lifetime.Cancel();
-    public void Dispose() { _startupDisposed=true; FilePack.PropertyChanged -= OnFilePackChanged; FilePack.Dispose(); ClipRecall.PropertyChanged -= OnClipRecallChanged; ClipRecall.Dispose(); Notes.PropertyChanged -= OnNotesChanged; Notes.Dispose(); Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { _startupDisposed=true; Shortcuts.Dispose(); FilePack.PropertyChanged -= OnFilePackChanged; FilePack.Dispose(); ClipRecall.PropertyChanged -= OnClipRecallChanged; ClipRecall.Dispose(); Notes.PropertyChanged -= OnNotesChanged; Notes.Dispose(); Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 
     private static string FormatBytes(long? bytes) => bytes is null ? "未知" :
         bytes >= 1024L * 1024 * 1024 ? $"{bytes.Value / (1024d * 1024 * 1024):0.#} GB" :

@@ -73,11 +73,12 @@ internal sealed partial class ApplicationRuntimeHost : IDisposable
         if (!enableRuntime) return;
 
         LensShortcuts = new(_source);
+        _viewModel.Shortcuts.ObserveRegistration(ShortcutIds.LensToggle, LensShortcuts);
         LensShortcuts.ToggleRequested += _viewModel.Gaming.Toggle;
         LensShortcuts.StartRequested += _viewModel.Gaming.Start;
         LensShortcuts.StopRequested += _viewModel.Gaming.Stop;
         RegisterLensHotkey();
-        Notes = new(_viewModel.Notes, _source, () => _viewModel.Gaming.ToggleShortcut);
+        Notes = new(_viewModel.Notes, _source, () => _viewModel.Gaming.ToggleShortcut, shortcuts: _viewModel.Shortcuts);
         ClipRecall = new(_viewModel, _source, ExistingClipboardShortcuts);
         FilePack = new(_viewModel, _source, ReservedFilePackShortcuts);
         FilePack.LegacyShortcutReleased += LegacyShortcutReleased;

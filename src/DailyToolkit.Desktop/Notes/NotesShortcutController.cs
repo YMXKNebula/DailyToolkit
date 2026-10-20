@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using DailyToolkit.Core.Gaming;
 using DailyToolkit.Desktop.Runtime;
+using DailyToolkit.Desktop.Presentation;
 
 namespace DailyToolkit.Desktop.Notes;
 
@@ -16,6 +17,7 @@ internal sealed class NotesShortcutController : IDisposable
     public bool FocusRegistered { get; private set; }
     public event Action? ToggleRequested;
     public event Action? FocusRequested;
+    internal event Action<bool, KeyboardShortcut?, ShortcutRegistrationState, int>? RegistrationChanged;
     public string Error { get; private set; } = "";
     public NotesShortcutController(WindowMessageSource source) => _source = source;
     public bool Configure(KeyboardShortcut? toggle, KeyboardShortcut? focus)
@@ -27,15 +29,25 @@ internal sealed class NotesShortcutController : IDisposable
     private bool Register()
     {
         Error = "";
-        if (_disposed || _suspended) return true;
+        if (_disposed || _suspended)
+        { Report(_suspended ? ShortcutRegistrationState.Paused : ShortcutRegistrationState.Unknown); return true; }
         if (_toggle is { IsValid: false } || _focus is { IsValid: false } || _toggle is not null && _toggle.Matches(_focus))
-        { Error = "浮笺快捷键无效或相互冲突，请重新设置。"; return false; }
+        { Error = "浮笺快捷键无效或相互冲突，请重新设置。"; Report(ShortcutRegistrationState.Failed); return false; }
         if (_toggle is not null) ToggleRegistered = RegisterHotKey(_source.Handle, ToggleId, _toggle.Modifiers | 0x4000, _toggle.VirtualKey);
+        var toggleError = _toggle is not null && !ToggleRegistered ? Marshal.GetLastWin32Error() : 0;
         if (_focus is not null) FocusRegistered = RegisterHotKey(_source.Handle, FocusId, _focus.Modifiers | 0x4000, _focus.VirtualKey);
+        var focusError = _focus is not null && !FocusRegistered ? Marshal.GetLastWin32Error() : 0;
         if (ToggleRegistered || FocusRegistered) { _source.AddHook(Message); _hookAttached = true; }
+        RegistrationChanged?.Invoke(false, _toggle, _toggle is null ? ShortcutRegistrationState.NotRegistered : ToggleRegistered ? ShortcutRegistrationState.Registered : ShortcutRegistrationState.Failed, toggleError);
+        RegistrationChanged?.Invoke(true, _focus, _focus is null ? ShortcutRegistrationState.NotRegistered : FocusRegistered ? ShortcutRegistrationState.Registered : ShortcutRegistrationState.Failed, focusError);
         if (_toggle is not null && !ToggleRegistered || _focus is not null && !FocusRegistered)
         { Error = "浮笺快捷键注册失败，可能已被其他程序占用；请更换快捷键。"; return false; }
         return true;
+    }
+    private void Report(ShortcutRegistrationState state)
+    {
+        RegistrationChanged?.Invoke(false, _toggle, state, 0);
+        RegistrationChanged?.Invoke(true, _focus, state, 0);
     }
     private void Unregister()
     {

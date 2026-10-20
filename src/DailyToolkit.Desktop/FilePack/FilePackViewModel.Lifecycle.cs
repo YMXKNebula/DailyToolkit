@@ -114,7 +114,7 @@ public sealed partial class FilePackViewModel
 
     private void RestoreDraft(PackDraft draft)
     {
-        TaskName = draft.TaskName; ArchiveName = draft.ArchiveName; OutputDirectory = draft.OutputDirectory;
+        TaskName = draft.TaskName; ArchiveName = PackArchiveNaming.NormalizeDefault(draft.ArchiveName); OutputDirectory = draft.OutputDirectory;
         Mode = draft.Mode; Format = draft.Format; Compression = draft.Compression;
         NewFolderPath = draft.NewFolderPath; MoveTargetPath = draft.MoveTargetPath;
         ReplaceEntries(draft.Entries.Select(row => row.Entry));

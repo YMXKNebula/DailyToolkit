@@ -28,12 +28,12 @@ internal static partial class Program
             return RunFilePackCrashWorkerAsync(fixture, engine).GetAwaiter().GetResult();
         try
         {
-            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _] or ["--clipboard-native-filepack-quick-checks", _]
-                or ["--background-resource-checks", _] or ["--background-resource-soak", _, _] or ["--window-memory-profile", _] or ["--runtime-memory-profile", _] or ["--runtime-memory-profile-production", _] or ["--runtime-memory-profile-retained", _] or ["--runtime-memory-experiment-optimized", _] or ["--runtime-memory-experiment-aggressive", _] or ["--runtime-memory-experiment-retained-aggressive", _] or ["--runtime-host-checks"] or ["--preview-resource-checks"]) ClipboardTestStation.Connect();
+            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _] or ["--clipboard-native-filepack-quick-checks", _] or ["--clipboard-native-shortcut-overview-checks", _]
+                or ["--background-resource-checks", _] or ["--background-resource-soak", _, _] or ["--window-memory-profile", _] or ["--runtime-memory-profile", _] or ["--runtime-memory-profile-production", _] or ["--runtime-memory-profile-retained", _] or ["--runtime-memory-experiment-optimized", _] or ["--runtime-memory-experiment-aggressive", _] or ["--runtime-memory-experiment-retained-aggressive", _] or ["--runtime-host-checks"] or ["--preview-resource-checks"] or ["--filepack-intake-checks"]) ClipboardTestStation.Connect();
             else if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer") ClipboardTestStation.Connect(args[1], args[2]);
         }
         catch (Exception exception) { Console.WriteLine("FAIL Clipboard test isolation: " + exception); return 1; }
-        if (args.Length > 0 && (args[0].StartsWith("--clipboard-native-", StringComparison.Ordinal) || args[0].StartsWith("--background-resource-", StringComparison.Ordinal) || args[0] is "--window-memory-profile" or "--runtime-memory-profile-production" or "--runtime-memory-profile" or "--runtime-memory-profile-retained" or "--runtime-memory-experiment-optimized" or "--runtime-memory-experiment-aggressive" or "--runtime-memory-experiment-retained-aggressive" or "--runtime-host-checks" or "--preview-resource-checks"))
+        if (args.Length > 0 && (args[0].StartsWith("--clipboard-native-", StringComparison.Ordinal) || args[0].StartsWith("--background-resource-", StringComparison.Ordinal) || args[0] is "--window-memory-profile" or "--runtime-memory-profile-production" or "--runtime-memory-profile" or "--runtime-memory-profile-retained" or "--runtime-memory-experiment-optimized" or "--runtime-memory-experiment-aggressive" or "--runtime-memory-experiment-retained-aggressive" or "--runtime-host-checks" or "--preview-resource-checks" or "--filepack-intake-checks"))
         {
             var result = 1;
             var isolatedThread = new Thread(() =>
@@ -90,8 +90,10 @@ internal static partial class Program
                 if (args is ["--clipboard-native-filepack-checks", var filePackImages])
                 {
                     await CheckFilePackEngineAsync(); await CheckFilePackCrashRecoveryAsync();
+                    await CheckFilePackCompletionNamingAsync();
                     await CheckFilePackVisualsAsync(filePackImages); await CheckFilePackExitRetryAsync();
                     await CheckFilePackQuickAsync(Path.Combine(filePackImages, "quick"));
+                    await CheckFilePackIntakeAsync();
                     await CheckFilePackDisabledResourcesAsync();
                     CheckFavorites(); CheckNavigation(); CheckAppSettings(); exitCode = 0; return;
                 }
@@ -99,6 +101,14 @@ internal static partial class Program
                 { await CheckClipboardNativeAsync(); await CheckClipboardNativeMediaAsync(); exitCode = 0; return; }
                 if (args is ["--clipboard-shortcut-checks"])
                 { await CheckClipboardNativeShortcutsAsync(); await CheckFilePackShortcutNoticesAsync(); exitCode = 0; return; }
+                if (args is ["--filepack-completion-name-checks"])
+                { await CheckFilePackCompletionNamingAsync(); exitCode = 0; return; }
+                if (args is ["--filepack-intake-checks"])
+                { await CheckFilePackIntakeAsync(); exitCode = 0; return; }
+                if (args is ["--shortcut-catalog-checks"])
+                { await CheckShortcutCatalogAsync(); exitCode = 0; return; }
+                if (args is ["--clipboard-native-shortcut-overview-checks", var shortcutImages])
+                { await CheckShortcutCatalogAsync(shortcutImages); exitCode = 0; return; }
                 if (args is ["--clipboard-native-visuals", var clipboardImages])
                 { await CheckClipboardVisualsAsync(clipboardImages); exitCode = 0; return; }
                 if (args is ["--clipboard-native-palette-checks", var paletteImages])
@@ -107,7 +117,8 @@ internal static partial class Program
                     await CheckPalettePersistenceAsync(); await CheckThemeEditingAsync(Path.Combine(paletteImages, "theme"));
                     await CheckClipboardViewModelAsync(); await CheckClipboardVisualsAsync(Path.Combine(paletteImages, "clipboard"));
                     await CheckNotesAppearanceAndNavigationAsync(Path.Combine(paletteImages, "notes"));
-                    await CheckPreviewLayoutAsync(Path.Combine(paletteImages, "lens")); exitCode = 0; return;
+                    await CheckPreviewLayoutAsync(Path.Combine(paletteImages, "lens"));
+                    await CheckShortcutCatalogAsync(Path.Combine(paletteImages, "shortcuts")); exitCode = 0; return;
                 }
                 if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer")
                 { await RunClipboardWriterAsync(args[3], args.Length == 5 ? args[4] : null); exitCode = 0; return; }
@@ -118,6 +129,7 @@ internal static partial class Program
                 if (args is ["--safe-regression-checks"])
                 {
                     CheckShortcutPersistence(); CheckRenamedSettingsCompatibility(); CheckFavorites(); CheckNavigation(); CheckAppSettings();
+                    await CheckShortcutCatalogAsync();
                     await CheckNotesPersistenceAsync(); await CheckNotesStabilityAsync(); CheckNotesFocus();
                     await CheckLensStartupTimingAsync(); CheckRendererRepeatedDispose();
                     await CheckInactiveNotesResourcesAsync(); await CheckPassiveComputerCancellationAsync(); await CheckTrayLifecycleAsync();
@@ -188,6 +200,7 @@ internal static partial class Program
         await CheckDiagnosticReportsAsync();
         await CheckClipboardRepositoryAsync(); await CheckClipboardProcessorAsync(); await CheckClipboardViewModelAsync();
         CheckShortcutPersistence();
+        await CheckShortcutCatalogAsync();
         CheckRenamedSettingsCompatibility();
         CheckFavorites();
         CheckNavigation();

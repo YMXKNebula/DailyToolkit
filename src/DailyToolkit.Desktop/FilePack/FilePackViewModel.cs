@@ -31,7 +31,7 @@ public sealed partial class FilePackViewModel : ObservableObject, IDisposable, I
     private Task? _initializing, _shutdownTask;
     private CancellationTokenSource? _collectionCancellation;
     private bool _loaded, _loading, _favorite, _visible, _collecting, _creating, _shuttingDown, _disposed, _draftLoaded;
-    private string _notice = "", _taskName = "文件集装箱", _archiveName = "文件集装箱", _outputDirectory = "";
+    private string _notice = "", _taskName = "文件集装箱", _archiveName = PackArchiveNaming.DefaultName, _outputDirectory = "";
     private string _newFolderPath = "新建文件夹", _moveTargetPath = "";
     private PackMode _mode = PackMode.BuiltIn;
     private PackFormat _format = PackFormat.Zip;
@@ -333,7 +333,8 @@ public sealed partial class FilePackViewModel : ObservableObject, IDisposable, I
             var quickSettings = _quickPack;
             var options = quick ? new PackOptions(PackMode.BuiltIn, quickSettings.Format,
                 quickSettings.Format == PackFormat.Tar ? PackCompression.Store : quickSettings.Compression,
-                quickSettings.OutputDirectory.Trim(), quickSettings.ArchiveName.Trim(), PackOutputPolicy.AutoRename) : DraftOptions();
+                quickSettings.OutputDirectory.Trim(), quickSettings.ArchiveName.Trim(), PackOutputPolicy.AutoRename,
+                UseCompletionTimeName: PackArchiveNaming.UsesCompletionTime(quickSettings.ArchiveName)) : DraftOptions();
             var name = quick ? options.ArchiveName : string.IsNullOrWhiteSpace(TaskName) ? ArchiveName.Trim() : TaskName.Trim();
             if (options.Mode == PackMode.BuiltIn)
             {
@@ -346,7 +347,7 @@ public sealed partial class FilePackViewModel : ObservableObject, IDisposable, I
                 }
                 else if (!quick && (AskOutputEachTime || string.IsNullOrWhiteSpace(OutputDirectory)))
                 { if (!PickOutputDirectory()) { Notice = ""; return null; } options = DraftOptions(); }
-                while (!quick)
+                while (!quick && !options.UseCompletionTimeName)
                 {
                     var path = FilePackPaths.GetOutputPath(options);
                     var reserved = Manager.Tasks.Any(task => task.Snapshot.Options.Mode == PackMode.BuiltIn &&
@@ -407,7 +408,10 @@ public sealed partial class FilePackViewModel : ObservableObject, IDisposable, I
         }
     }
     private PackOptions DraftOptions() => new(Mode, Format, Format == PackFormat.Tar ? PackCompression.Store : Compression,
-        OutputDirectory.Trim(), ArchiveName.Trim(), KeepWorkspace: Mode == PackMode.External && KeepExternalWorkspace);
+        OutputDirectory.Trim(), ArchiveName.Trim(),
+        OutputPolicy: PackArchiveNaming.UsesCompletionTime(ArchiveName) ? PackOutputPolicy.AutoRename : PackOutputPolicy.Fail,
+        KeepWorkspace: Mode == PackMode.External && KeepExternalWorkspace,
+        UseCompletionTimeName: Mode == PackMode.BuiltIn && PackArchiveNaming.UsesCompletionTime(ArchiveName));
 
     private void PickFiles()
     {

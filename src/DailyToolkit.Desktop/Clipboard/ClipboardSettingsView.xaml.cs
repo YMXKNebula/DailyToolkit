@@ -52,11 +52,18 @@ public partial class ClipboardSettingsView : UserControl
         if (modifiers.HasFlag(ModifierKeys.Shift)) labels.Add("Shift");
         if (modifiers.HasFlag(ModifierKeys.Windows)) labels.Add("Win");
         labels.Add(key is >= Key.D0 and <= Key.D9 ? ((int)key - (int)Key.D0).ToString() : key.ToString());
-        if (Model?.SetShortcut(new((uint)modifiers, (uint)KeyInterop.VirtualKeyFromKey(key), string.Join(" + ", labels)), ReservedShortcuts?.Invoke() ?? []) == true)
+        var shortcut = new KeyboardShortcut((uint)modifiers, (uint)KeyInterop.VirtualKeyFromKey(key), string.Join(" + ", labels));
+        if (ApplyShortcut(shortcut))
             Keyboard.ClearFocus();
     }
-    private void ClearShortcut(object sender, RoutedEventArgs e) => Model?.SetShortcut(null, ReservedShortcuts?.Invoke() ?? []);
-    private void ResetShortcut(object sender, RoutedEventArgs e) => Model?.SetShortcut(new(3, 0x56, "Ctrl + Alt + V"), ReservedShortcuts?.Invoke() ?? []);
+    private bool ApplyShortcut(KeyboardShortcut? shortcut)
+    {
+        var accepted = Model?.SetShortcut(shortcut, ReservedShortcuts?.Invoke() ?? []) == true;
+        (Window.GetWindow(this)?.DataContext as Presentation.MainViewModel)?.Shortcuts.ReportAssignmentAttempt(Presentation.ShortcutIds.ClipboardToggle, shortcut, accepted);
+        return accepted;
+    }
+    private void ClearShortcut(object sender, RoutedEventArgs e) => ApplyShortcut(null);
+    private void ResetShortcut(object sender, RoutedEventArgs e) => ApplyShortcut(new(3, 0x56, "Ctrl + Alt + V"));
     private async void SaveSettings(object sender, RoutedEventArgs e) { if (Model is { } model && await model.FlushSettingsAsync()) model.Notice = ""; }
     private async void ResetSettings(object sender, RoutedEventArgs e)
     {
