@@ -513,11 +513,35 @@ internal static partial class Program
             var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new[] { paths[0] });
             await idle.WriteAsync(BitConverter.GetBytes(bytes.Length)); await idle.WriteAsync(bytes);
             var ack = new byte[1]; await idle.ReadExactlyAsync(ack);
-            Require(ack[0] == 1 && await FilePackRequestBroker.SendAsync([paths[0]], name).WaitAsync(TimeSpan.FromSeconds(12)),
-                "A client retaining its connection blocked subsequent requests beyond the server deadline");
+            Require(ack[0] == 1 && await FilePackRequestBroker.SendAsync([paths[0]], name).WaitAsync(TimeSpan.FromSeconds(4)),
+                "A client retaining its connection blocked an independent request until its five-second deadline");
         }
+        var retained = new List<NamedPipeClientStream>();
+        try
+        {
+            for (var index = 0; index < 8; index++)
+            {
+                var client = await OpenFilePackProtocolClientAsync(name); retained.Add(client);
+                var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new[] { paths[0] });
+                await client.WriteAsync(BitConverter.GetBytes(bytes.Length)); await client.WriteAsync(bytes);
+                var ack = new byte[1]; await client.ReadExactlyAsync(ack);
+                Require(ack[0] == 1, "A bounded concurrent session lost its acknowledgement");
+            }
+            Require(await FilePackRequestBroker.SendAsync([paths[1]], name).WaitAsync(TimeSpan.FromSeconds(12)),
+                "Saturated connections did not release their bounded slots at the server deadline");
+        }
+        finally { foreach (var client in retained) await client.DisposeAsync(); }
         Require(serverFailures.IsEmpty, "Recoverable clients stopped the listener: " + string.Join("; ", serverFailures));
-        Console.WriteLine("PASS FilePack same-user local IPC: 12 concurrent client processes, delayed acknowledgement read, truncated/oversized requests, bounded idle-client recovery and disposal; no Explorer or registry changes");
+        var stopName = "DailyToolkit.FilePack.Tests." + Guid.NewGuid().ToString("N");
+        await using (var stopping = new FilePackRequestBroker(_ => Task.CompletedTask, stopName))
+        await using (var unfinished = await OpenFilePackProtocolClientAsync(stopName))
+        {
+            await unfinished.WriteAsync(new byte[] { 32 });
+            await stopping.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(4));
+            using var replacement = NamedPipeServerStreamAcl.Create(stopName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous, 0, 0, FilePackRequestBroker.CreatePipeSecurity());
+        }
+        Console.WriteLine("PASS FilePack same-user local IPC: 12 concurrent client processes, delayed acknowledgement read, truncated/oversized requests, independent progress beside a retained connection, eight-slot timeout recovery and disposal during an incomplete request; no Explorer or registry changes");
     }
     private static async Task<NamedPipeClientStream> OpenFilePackProtocolClientAsync(string name)
     {
@@ -539,7 +563,7 @@ internal static partial class Program
         if (!name.StartsWith(prefix, StringComparison.Ordinal) || !Guid.TryParseExact(name[prefix.Length..], "N", out _) || !Path.IsPathFullyQualified(path)) return 2;
         string? diagnostic = null;
         EventHandler<System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs> capture = (_, args) =>
-        { if (args.Exception is IOException or UnauthorizedAccessException or OperationCanceledException) diagnostic = $"{args.Exception.GetType().Name}/0x{args.Exception.HResult:X8}"; };
+        { if (args.Exception is IOException or UnauthorizedAccessException or OperationCanceledException) diagnostic = $"{args.Exception.GetType().Name}/0x{args.Exception.HResult:X8}: {args.Exception.StackTrace}"; };
         AppDomain.CurrentDomain.FirstChanceException += capture;
         try
         {

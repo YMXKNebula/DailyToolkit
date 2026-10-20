@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Pipes;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -14,14 +15,15 @@ namespace DailyToolkit.Desktop.FilePack;
 internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
 {
     private const int MaximumBytes = 128 * 1024;
+    private const int MaximumConnections = 8;
     private static readonly uint SessionId = ReadSessionId();
     private readonly string _name;
     private readonly Func<IReadOnlyList<string>, Task> _receive;
     private readonly Action<string>? _failure;
     private readonly CancellationTokenSource _stop = new();
-    private readonly Channel<string[]> _requests = Channel.CreateBounded<string[]>(new BoundedChannelOptions(128) { SingleReader = true, SingleWriter = true });
+    private readonly Channel<string[]> _requests = Channel.CreateBounded<string[]>(new BoundedChannelOptions(128) { SingleReader = true, SingleWriter = false });
     private readonly Task _server, _consumer;
-    private NamedPipeServerStream? _pipe;
+    private readonly ConcurrentDictionary<NamedPipeServerStream, byte> _pipes = new();
     private int _disposed;
     internal static string PipeName
     {
@@ -67,37 +69,63 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
     }
     private async Task ListenAsync()
     {
+        var sessions = new HashSet<Task>();
         try
         {
-            await using var pipe = NamedPipeServerStreamAcl.Create(_name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous, 0, 0, CreatePipeSecurity());
-            _pipe = pipe;
+            var security = CreatePipeSecurity();
             while (!_stop.IsCancellationRequested)
             {
-                await pipe.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token); timeout.CancelAfter(TimeSpan.FromSeconds(5));
+                foreach (var completed in sessions.Where(task => task.IsCompleted).ToArray())
+                { await completed.ConfigureAwait(false); sessions.Remove(completed); }
+                if (sessions.Count == MaximumConnections)
+                {
+                    await Task.WhenAny(sessions).WaitAsync(_stop.Token).ConfigureAwait(false);
+                    continue;
+                }
+                // Keep one idle acceptor. Only connected clients create sessions,
+                // so a slow acknowledgement reader cannot hold up Explorer's burst.
+                NamedPipeServerStream? pending = NamedPipeServerStreamAcl.Create(_name, PipeDirection.InOut, MaximumConnections,
+                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
                 try
                 {
-                    var header = new byte[4]; await pipe.ReadExactlyAsync(header, timeout.Token).ConfigureAwait(false);
-                    var length = BitConverter.ToInt32(header); if (length is < 2 or > MaximumBytes) continue;
-                    var bytes = new byte[length]; await pipe.ReadExactlyAsync(bytes, timeout.Token).ConfigureAwait(false);
-                    var paths = JsonSerializer.Deserialize<string[]>(bytes);
-                    var valid = GetNamedPipeClientSessionId(pipe.SafePipeHandle, out var session) &&
-                        session == SessionId &&
-                        paths is not null && TryReadArguments(["--file-pack-load", .. paths], out var normalized) && _requests.Writer.TryWrite(normalized);
-                    await pipe.WriteAsync(new byte[] { valid ? (byte)1 : (byte)0 }, timeout.Token).ConfigureAwait(false);
-                    await pipe.FlushAsync(timeout.Token).ConfigureAwait(false);
-                    // The client closes after reading its acknowledgement. Keep the
-                    // instance alive until then, so a fast reconnect cannot race it.
-                    await pipe.ReadAsync(new byte[1], timeout.Token).ConfigureAwait(false);
+                    _pipes.TryAdd(pending, 0);
+                    await pending.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
+                    sessions.Add(ReceiveAsync(pending));
+                    pending = null; // The session now owns disposal.
                 }
-                catch (Exception exception) when (exception is IOException or OperationCanceledException or JsonException or ArgumentException) { }
-                finally { if (!_stop.IsCancellationRequested) pipe.Disconnect(); }
+                finally
+                {
+                    if (pending is not null) { _pipes.TryRemove(pending, out _); pending.Dispose(); }
+                }
             }
         }
         catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException or UnauthorizedAccessException)
         { if (!_stop.IsCancellationRequested) _failure?.Invoke("文件集装箱右键入口未能启动。"); }
-        finally { _pipe = null; _requests.Writer.TryComplete(); }
+        finally
+        {
+            try { await Task.WhenAll(sessions).ConfigureAwait(false); }
+            finally { _requests.Writer.TryComplete(); }
+        }
+    }
+    private async Task ReceiveAsync(NamedPipeServerStream pipe)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token); timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            var header = new byte[4]; await pipe.ReadExactlyAsync(header, timeout.Token).ConfigureAwait(false);
+            var length = BitConverter.ToInt32(header); if (length is < 2 or > MaximumBytes) return;
+            var bytes = new byte[length]; await pipe.ReadExactlyAsync(bytes, timeout.Token).ConfigureAwait(false);
+            var paths = JsonSerializer.Deserialize<string[]>(bytes);
+            var valid = GetNamedPipeClientSessionId(pipe.SafePipeHandle, out var session) && session == SessionId &&
+                paths is not null && TryReadArguments(["--file-pack-load", .. paths], out var normalized) && _requests.Writer.TryWrite(normalized);
+            await pipe.WriteAsync(new byte[] { valid ? (byte)1 : (byte)0 }, timeout.Token).ConfigureAwait(false);
+            await pipe.FlushAsync(timeout.Token).ConfigureAwait(false);
+            // Preserve unread acknowledgements until the client closes or its
+            // deadline expires, without blocking unrelated connections.
+            await pipe.ReadAsync(new byte[1], timeout.Token).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException or JsonException or ArgumentException) { }
+        finally { _pipes.TryRemove(pipe, out _); await pipe.DisposeAsync().ConfigureAwait(false); }
     }
     internal static PipeSecurity CreatePipeSecurity()
     {
@@ -128,7 +156,11 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
         }
         catch (Exception exception) when (exception is OperationCanceledException or ObjectDisposedException) { }
     }
-    public void Dispose() { if (Interlocked.Exchange(ref _disposed, 1) != 0) return; _stop.Cancel(); _pipe?.Dispose(); }
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _stop.Cancel(); foreach (var pipe in _pipes.Keys) pipe.Dispose();
+    }
     public async ValueTask DisposeAsync() { Dispose(); await Task.WhenAll(_server, _consumer).ConfigureAwait(false); _stop.Dispose(); }
     private static uint ReadSessionId()
     { using var process = System.Diagnostics.Process.GetCurrentProcess(); return (uint)process.SessionId; }
