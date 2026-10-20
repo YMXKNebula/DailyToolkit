@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Compression;
 using System.IO.Pipes;
+using System.Security.Principal;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -465,9 +466,8 @@ internal static partial class Program
         Require(FilePackRequestBroker.TryReadArguments(["--file-pack-load", paths[0], paths[0]], out var normalized) && normalized.Length == 1 &&
             !FilePackRequestBroker.TryReadArguments(["--file-pack-load", "relative.txt"], out _) &&
             !FilePackRequestBroker.TryReadArguments(["--file-pack-load", "--exit"], out _), "Explorer arguments accepted invalid paths or commands");
-        await using (var delayed = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly))
+        await using (var delayed = await OpenFilePackProtocolClientAsync(name))
         {
-            await delayed.ConnectAsync(2000);
             var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new[] { paths[0] });
             await delayed.WriteAsync(BitConverter.GetBytes(bytes.Length)); await delayed.WriteAsync(bytes); await delayed.FlushAsync();
             await Task.Delay(250);
@@ -502,15 +502,14 @@ internal static partial class Program
             { try { if (!client.HasExited) { client.Kill(entireProcessTree: true); await client.WaitForExitAsync(); } } finally { client.Dispose(); } }
         }
         await WaitForFilePackAsync(() => received.Count == paths.Length, "Explorer burst lost selected files");
-        await using (var invalid = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous))
-        { await invalid.ConnectAsync(2000); await invalid.WriteAsync(BitConverter.GetBytes(2 * 1024 * 1024)); await invalid.FlushAsync(); }
+        await using (var invalid = await OpenFilePackProtocolClientAsync(name))
+        { await invalid.WriteAsync(BitConverter.GetBytes(2 * 1024 * 1024)); await invalid.FlushAsync(); }
         Require(await FilePackRequestBroker.SendAsync([paths[0]], name), "An oversized request stopped subsequent Explorer requests");
-        await using (var truncated = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly))
-        { await truncated.ConnectAsync(2000); await truncated.WriteAsync(BitConverter.GetBytes(32)); await truncated.WriteAsync(new byte[3]); }
+        await using (var truncated = await OpenFilePackProtocolClientAsync(name))
+        { await truncated.WriteAsync(BitConverter.GetBytes(32)); await truncated.WriteAsync(new byte[3]); }
         Require(await FilePackRequestBroker.SendAsync([paths[0]], name), "A disconnected client stopped subsequent requests");
-        await using (var idle = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly))
+        await using (var idle = await OpenFilePackProtocolClientAsync(name))
         {
-            await idle.ConnectAsync(2000);
             var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new[] { paths[0] });
             await idle.WriteAsync(BitConverter.GetBytes(bytes.Length)); await idle.WriteAsync(bytes);
             var ack = new byte[1]; await idle.ReadExactlyAsync(ack);
@@ -519,6 +518,20 @@ internal static partial class Program
         }
         Require(serverFailures.IsEmpty, "Recoverable clients stopped the listener: " + string.Join("; ", serverFailures));
         Console.WriteLine("PASS FilePack same-user local IPC: 12 concurrent client processes, delayed acknowledgement read, truncated/oversized requests, bounded idle-client recovery and disposal; no Explorer or registry changes");
+    }
+    private static async Task<NamedPipeClientStream> OpenFilePackProtocolClientAsync(string name)
+    {
+        var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous,
+            TokenImpersonationLevel.Identification);
+        try
+        {
+            await client.ConnectAsync(2000);
+            using var identity = WindowsIdentity.GetCurrent();
+            Require(client.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) == identity.User,
+                "The malformed-request fixture did not connect to its own user's pipe");
+            return client;
+        }
+        catch { client.Dispose(); throw; }
     }
     private static async Task<int> RunFilePackIpcClientAsync(string name, string path)
     {

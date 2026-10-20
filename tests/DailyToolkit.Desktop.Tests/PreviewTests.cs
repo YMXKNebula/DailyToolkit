@@ -493,14 +493,24 @@ internal static partial class Program
                 ((System.Windows.Media.SolidColorBrush)window.FindResource("WindowBrush")).Color.ToString() == "#FF171D1B",
                 "The live theme and preview did not receive the selected palette");
             model.LightThemeCommand.Execute(null);
-            var settingsCards=new[] { "ThemeSettingsCard","RuntimeSettingsCard","HomeScroll","AboutSettingsCard" };
-            foreach (var (item,index) in model.NavigationItems.ToArray().Select((item,index) => (item,index)))
+            var settingsCards=new Dictionary<string,string>(StringComparer.Ordinal)
+            {
+                ["settings-theme"]="ThemeSettingsCard",
+                ["settings-runtime"]="RuntimeSettingsCard",
+                ["settings-shortcuts"]="ShortcutSettingsPanel",
+                ["settings-computer"]="HomeScroll",
+                ["settings-about"]="AboutSettingsCard"
+            };
+            Require(model.NavigationItems.Count == settingsCards.Count &&
+                settingsCards.Keys.All(id => model.NavigationItems.Any(item => item.Id == id)),
+                "Settings navigation did not include every expected category");
+            foreach (var item in model.NavigationItems.ToArray())
             {
                 model.NavigateCommand.Execute(item); window.UpdateLayout();
                 Require(model.IsSettings && item.IsSelected && model.PageTitle == item.Name &&
-                    settingsCards.Count(name => ((UIElement)window.FindName(name)).IsVisible) == 1 &&
-                    ((UIElement)window.FindName(settingsCards[index])).IsVisible,
-                    "Settings navigation did not select exactly one category page");
+                    settingsCards.Values.Count(name => ((UIElement)window.FindName(name)).IsVisible) == 1 &&
+                    ((UIElement)window.FindName(settingsCards[item.Id])).IsVisible,
+                    $"Settings navigation did not select exactly the expected category page for {item.Id}");
             }
             Require(((System.Windows.Controls.TextBlock)window.FindName("ProductVersion")).Text == "版本 " + MainViewModel.ApplicationVersion &&
                 ((FrameworkElement)window.FindName("AboutSettingsCard")).IsVisible &&
