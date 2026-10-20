@@ -28,7 +28,7 @@ public sealed partial class FilePackViewModel
     public FilePackAppearance PackAppearance { get; private set; } = null!;
     public FilePackAppearance QuickAppearance { get; private set; } = null!;
     public IReadOnlyList<FilePackAppearance> Appearances { get; private set; } = [];
-    public FilePackAppearance SelectedAppearance { get => _selectedAppearance; set => Set(ref _selectedAppearance, value); }
+    public FilePackAppearance SelectedAppearance { get => _selectedAppearance; set { if (value is not null) Set(ref _selectedAppearance, value); } }
     public PackFormat QuickFormat { get => _quickPack.Format; set { if (!Enum.IsDefined(value) || value == QuickFormat) return;
         _quickPack = _quickPack with { Format = value }; Notify(); Notify(nameof(QuickCanChooseCompression)); SavePreferences(); } }
     public PackCompression QuickCompression { get => _quickPack.Compression; set { if (!Enum.IsDefined(value) || value == QuickCompression) return;

@@ -10,8 +10,5 @@ public partial class MainWindow
     private void InitializeNotes(HwndSource source)
     {
         _notes = new(_viewModel.Notes, source, () => _viewModel.Gaming.ToggleShortcut);
-        NotesSettings.LensShortcut = () => _viewModel.Gaming.ToggleShortcut;
-        NotesSettings.ToggleRequested = _notes.Toggle;
-        NotesSettings.ShortcutEditing = SuspendToolShortcuts;
     }
 }

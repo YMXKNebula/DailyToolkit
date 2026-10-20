@@ -60,6 +60,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private WeatherInfo _weather = WeatherInfo.Unavailable("正在读取 Windows 天气");
     private bool _isReadingStatus;
     private bool _passiveMonitoring, _probeIsPassive, _localStatusIsPassive;
+    private bool _mainWindowVisible = true;
     private CancellationTokenSource? _probeCancellation, _localStatusCancellation;
 
     public MainViewModel(IEnvironmentProbe probe, DisplayInfo display, ILocalStatusProbe? localStatus = null,
@@ -176,9 +177,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 if (value != "settings") { _settingsPage=value; _page=value; NotifyNavigation(); }
                 return;
             }
-            if (IsSettings) ExitSettings();
+            if (IsSettings) ExitSettings(notify: false);
             var id=value == "gaming" ? "screen-lens" : _navigation.Any(item => item.Id == value) ? value : "screen-lens";
-            if (IsFavorites && !_favoriteIds.Contains(id)) ExitFavorites();
+            if (IsFavorites && !_favoriteIds.Contains(id)) ExitFavorites(notify: false);
             _page=id;
             NotifyNavigation();
         }
@@ -242,13 +243,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         NotifyNavigation();
     }
 
-    private void ExitFavorites()
+    private void ExitFavorites(bool notify = true)
     {
         if (!IsFavorites) return;
         _favoritesOpen=false;
         _page=_pageBeforePanel;
         RefreshNavigation();
-        NotifyNavigation();
+        if (notify) NotifyNavigation();
     }
 
     private void OpenSettings()
@@ -261,13 +262,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RefreshNavigation(); NotifyNavigation();
     }
 
-    private void ExitSettings()
+    private void ExitSettings(bool notify = true)
     {
         if (!IsSettings) return;
         _settingsOpen=false;
         _page=_pageBeforePanel;
         RefreshNavigation();
-        NotifyNavigation();
+        if (notify) NotifyNavigation();
     }
 
     private void RefreshNavigation()
@@ -289,10 +290,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void NotifyNavigation()
     {
-        FilePack.IsVisible = !IsSettings && ShowFilePack;
+        FilePack.IsVisible = _mainWindowVisible && !IsSettings && ShowFilePack;
         foreach (var item in _navigation) item.IsSelected=item.Id == Page;
         foreach (var item in _settingsNavigation) item.IsSelected=IsSettings && item.Id == Page;
         Notify(nameof(Page)); Notify(""); RefreshCommand.Refresh();
+    }
+
+    internal void SetMainWindowVisible(bool visible)
+    {
+        _mainWindowVisible = visible;
+        FilePack.IsVisible = visible && !IsSettings && ShowFilePack;
     }
 
     private void MoveBy(object? parameter,int offset)

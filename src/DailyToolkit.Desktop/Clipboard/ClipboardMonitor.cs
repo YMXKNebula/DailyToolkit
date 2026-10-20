@@ -1,16 +1,17 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using DailyToolkit.Desktop.Runtime;
 
 namespace DailyToolkit.Desktop.ClipRecall;
 
 internal sealed class ClipboardMonitor : IDisposable
 {
-    private readonly HwndSource _source;
+    private readonly WindowMessageSource _source;
     private bool _disposed;
     public bool IsListening { get; private set; }
     public event Action? Updated;
-    public ClipboardMonitor(HwndSource source) { _source = source; }
+    public ClipboardMonitor(WindowMessageSource source) { _source = source; }
     public void Configure(bool listening)
     {
         if (_disposed || listening == IsListening) return;

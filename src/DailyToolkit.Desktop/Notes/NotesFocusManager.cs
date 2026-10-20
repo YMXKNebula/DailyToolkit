@@ -32,5 +32,10 @@ internal sealed class NotesFocusManager(INotesForeground foreground, Func<IntPtr
         if (current == noteHandle()) return;
         Previous = foreground.IsValid(current) ? current : IntPtr.Zero;
     }
+    internal void RetargetPreviousWindow(IntPtr previous, IntPtr replacement)
+    {
+        if (previous != IntPtr.Zero && replacement != IntPtr.Zero && Previous == previous)
+            Previous = replacement;
+    }
     public bool Restore() => Previous != noteHandle() && foreground.IsValid(Previous) && foreground.Activate(Previous);
 }

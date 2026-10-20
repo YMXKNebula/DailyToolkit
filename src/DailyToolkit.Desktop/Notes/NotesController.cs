@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using DailyToolkit.Core.Gaming;
+using DailyToolkit.Desktop.Runtime;
 
 namespace DailyToolkit.Desktop.Notes;
 
@@ -21,10 +22,11 @@ internal sealed class NotesController : IDisposable
     public Task Ready { get; }
     internal NotesWindow? NoteWindow => _window;
     internal IntPtr RestoreTarget => _focus.Previous;
+    internal void RetargetPreviousWindow(IntPtr previous, IntPtr replacement) => _focus.RetargetPreviousWindow(previous, replacement);
     internal Task Pending => _operation;
     internal double SavedVerticalOffset => _verticalOffset;
 
-    public NotesController(NotesViewModel model, HwndSource source, Func<KeyboardShortcut?> lensShortcut,
+    public NotesController(NotesViewModel model, WindowMessageSource source, Func<KeyboardShortcut?> lensShortcut,
         INotesForeground? foreground = null)
     {
         _model = model; _lensShortcut = lensShortcut; _shortcuts = new(source);

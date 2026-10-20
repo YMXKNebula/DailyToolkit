@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _viewModel = viewModel;
+        _deferredRuntimeBindingsEnabled = enableShortcuts;
         _trackActivity=enableShortcuts;
         DataContext = viewModel;
         _viewModel.ApplyTheme(Resources);
@@ -61,14 +62,15 @@ public partial class MainWindow : Window
             _viewModel.UpdateClock();
             if (++_ticks % 3 == 0) _viewModel.QueueLocalRefresh(passive: true);
         };
-        Loaded += (_, _) => StartLocalRuntime();
-        IsVisibleChanged += (_,_) => UpdateLocalPolling();
+        Loaded += (_, _) => { StartLocalRuntime(); EnsureSelectedSettingsView(); };
+        IsVisibleChanged += (_,_) => { UpdateLocalPolling(); EnsureSelectedSettingsView(); };
         Activated += (_,_) => UpdateLocalPolling();
         Deactivated += (_,_) => UpdateLocalPolling();
         SizeChanged += (_, _) => { FinishPageTransition(); FinishNavigationTransition(); UpdateWindowCorners(); _viewModel.SetViewportWidth(ActualWidth); };
         StateChanged += (_,_) =>
         {
             UpdateWindowCorners(); UpdateLocalPolling();
+            EnsureSelectedSettingsView();
             MaximizeGlyph.Text=WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
             MaximizeButton.ToolTip=WindowState == WindowState.Maximized ? "还原" : "最大化";
             System.Windows.Automation.AutomationProperties.SetName(MaximizeButton,(string)MaximizeButton.ToolTip);
@@ -78,16 +80,18 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         Closed += (_, _) =>
         {
+            _uiClosed = true;
             _clockTimer.Stop();
-            DisposeRuntime();
             FinishPageTransition();
             FinishNavigationTransition();
+            _viewModel.Gaming.PropertyChanged -= OnGamingStateChanged;
+            _viewModel.PropertyChanged -= OnAppSettingsChanged;
+            if (_applicationRuntime is not null) return;
+            DisposeRuntime();
             _shortcuts?.Dispose();
             _notes?.Dispose();
             _clipRecall?.Dispose();
             _filePack?.Dispose();
-            _viewModel.Gaming.PropertyChanged -= OnGamingStateChanged;
-            _viewModel.PropertyChanged -= OnAppSettingsChanged;
             _viewModel.Dispose();
             if (enableShortcuts) Application.Current?.Shutdown();
         };
@@ -212,6 +216,7 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.Page))
         {
+            EnsureSelectedSettingsView();
             if (_viewModel.IsSettings) SettingsScroll.ScrollToTop();
             UpdateLocalPolling();
             Dispatcher.BeginInvoke(DispatcherPriority.Loaded,new Action(UpdateNavigationBridge));
@@ -283,6 +288,7 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
+        if (_releasingForIdle) return;
         if (!_exitRequested && _viewModel.CloseToTray && HideToTray()) { e.Cancel=true; return; }
         if (_exitPrepared) return;
         e.Cancel = true;
@@ -315,17 +321,24 @@ public partial class MainWindow : Window
             if (!IsVisible) Show();
             RegisterLensHotkey(); _filePack?.Suspend(false); UpdateLocalPolling(); return;
         }
-        try { await _viewModel.FilePack.ShutdownAsync(); }
+        try
+        {
+            // Detect ordinary save failures before cancelling the FilePack runtime.
+            await _viewModel.FilePack.FlushAsync();
+            await _viewModel.FilePack.ShutdownAsync();
+        }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             _closing = false; _exitRequested = false;
             _notes?.CancelExitPreparation();
+            _clipRecall?.CancelExitPreparation();
             _viewModel.Notice = "文件集装箱尚未保存完成，请重试退出。";
             if (!IsVisible) Show();
             RegisterLensHotkey(); _filePack?.Suspend(false); UpdateLocalPolling(); return;
         }
         _viewModel.CancelPending();
         await _viewModel.PendingWork;
+        await _viewModel.ClipRecall.DisposeAsync();
         _exitPrepared = true;
         _closing = false;
         _ = Dispatcher.BeginInvoke(new Action(Close));
@@ -333,12 +346,14 @@ public partial class MainWindow : Window
 
     private void OnGamingStateChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (_applicationRuntime is not null) return;
         if (e.PropertyName is not (nameof(GamingViewModel.ToggleShortcut) or nameof(GamingViewModel.ActivationMode) or nameof(GamingViewModel.IsEnabled))) return;
         RegisterLensHotkey();
         _notes?.Reconfigure();
     }
     private void RegisterLensHotkey()
     {
+        if (_applicationRuntime is not null) { _applicationRuntime.RegisterLensHotkey(); return; }
         if (_shortcuts is null) return;
         UpdateShortcutNotice(_shortcuts.Configure(_viewModel.Gaming.IsEnabled ? _viewModel.Gaming.ToggleShortcut : null,_viewModel.Gaming.ActivationMode));
     }

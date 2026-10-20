@@ -9,6 +9,8 @@ using DailyToolkit.Desktop.Presentation;
 
 namespace DailyToolkit.Desktop.Controls;
 
+internal readonly record struct LensPreviewPosition(double X, double Y);
+
 public partial class LensPreview : UserControl
 {
     private GamingViewModel? _model;
@@ -21,6 +23,9 @@ public partial class LensPreview : UserControl
     internal bool HasGpuResources => _renderer is not null;
     internal bool IsRenderingScheduled => _timer.IsEnabled;
     internal Task PendingResourceRelease { get; private set; }=Task.CompletedTask;
+    internal bool IsIdleResourceCleanupComplete => !CanPreview && _renderer is null && _frame is null &&
+        !_timer.IsEnabled && !_releaseTimer.IsEnabled && !_rendering && !_dragging &&
+        PendingResourceRelease.IsCompletedSuccessfully;
     private bool _dirty=true, _rendering;
     private int _generation;
     private double _pointerX=0.5,_pointerY=0.5;
@@ -30,6 +35,16 @@ public partial class LensPreview : UserControl
     private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal Task Ready => _ready.Task;
     internal LensPreviewFrame? CurrentFrame => _frame;
+
+    internal LensPreviewPosition CapturePointerPosition() => new(_pointerX, _pointerY);
+
+    internal void RestorePointerPosition(LensPreviewPosition position)
+    {
+        _pointerX = double.IsFinite(position.X) ? Math.Clamp(position.X, 0, 1) : 0.5;
+        _pointerY = double.IsFinite(position.Y) ? Math.Clamp(position.Y, 0, 1) : 0.5;
+        _dirty = true;
+        UpdateTimer();
+    }
 
     public LensPreview()
     {

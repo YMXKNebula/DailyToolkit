@@ -9,6 +9,21 @@ public sealed partial class FilePackViewModel
     private CancellationTokenSource? _idleDelay;
     private Task _idleOperation = Task.CompletedTask;
     internal Task IdleWork => _idleOperation;
+    internal bool IsIdleForMemoryCollection
+    {
+        get
+        {
+            if (_disposed || _shuttingDown || _enabled || HasActivePresentation || _loading || _collecting || _creating ||
+                _loaded || _draftLoaded || _settingsDirty || _draftChanged || _preferencesGate.CurrentCount != 1 ||
+                _enabledGate.CurrentCount != 1 || _operations.Count != 0 || _runtimeOperations.Count != 0 ||
+                !SettingsReady.IsCompletedSuccessfully || !Manager.Ready.IsCompletedSuccessfully ||
+                !_idleOperation.IsCompletedSuccessfully || (_initializing is not null && !_initializing.IsCompletedSuccessfully) ||
+                Appearances.Any(appearance => !appearance.PendingSave.IsCompletedSuccessfully) || HasUnfinishedTasks ||
+                Manager.IsInitialized && !Manager.IsSuspended ||
+                Manager.GetTaskCounts() is not { Running: 0, Queued: 0, External: 0 }) return false;
+            lock (_taskChangeSync) return !_taskChangeScheduled && _pendingTaskChanges.Count == 0;
+        }
+    }
     internal event Action? RuntimeReleased;
     private bool HasActivePresentation => _visible || _settingsVisible || _toolWindowsVisible;
 

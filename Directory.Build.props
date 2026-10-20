@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
-    <Version>0.8.4</Version>
+    <Version>0.8.5</Version>
     <Authors>YMXKNebula</Authors>
     <Description>Windows 桌面工具集，提供放大镜、浮笺、剪贴回溯、文件集装箱和电脑信息查看。</Description>
     <RepositoryUrl>https://github.com/YMXKNebula/DailyToolkit</RepositoryUrl>

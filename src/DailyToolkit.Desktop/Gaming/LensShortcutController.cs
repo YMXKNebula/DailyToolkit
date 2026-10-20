@@ -2,13 +2,14 @@ using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using DailyToolkit.Core.Gaming;
+using DailyToolkit.Desktop.Runtime;
 
 namespace DailyToolkit.Desktop.Gaming;
 
 internal sealed class LensShortcutController : IDisposable
 {
     internal const int HotkeyId = 0xB011;
-    private readonly HwndSource _source;
+    private readonly WindowMessageSource _source;
     private readonly int _hotkeyId;
     private readonly Func<uint, bool> _keyDown;
     private readonly DispatcherTimer _releaseTimer;
@@ -18,7 +19,7 @@ internal sealed class LensShortcutController : IDisposable
     internal bool HasMessageHook => _hookAttached;
     internal bool IsReleasePolling => _releaseTimer.IsEnabled;
 
-    public LensShortcutController(HwndSource source, Func<uint, bool>? keyDown = null, int hotkeyId = HotkeyId)
+    public LensShortcutController(WindowMessageSource source, Func<uint, bool>? keyDown = null, int hotkeyId = HotkeyId)
     {
         _source = source;
         _hotkeyId = hotkeyId;

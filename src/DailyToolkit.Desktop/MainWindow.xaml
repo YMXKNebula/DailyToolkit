@@ -341,13 +341,13 @@
         </StackPanel>
       </ScrollViewer>
 
-      <notes:NotesSettingsView x:Name="NotesSettings" Grid.Row="1"
+      <ContentControl x:Name="NotesSettingsHost" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                     Visibility="{Binding DataContext.ShowFloatingNotes, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
                     DataContext="{Binding Notes}" />
-      <clip:ClipboardSettingsView x:Name="ClipRecallSettings" Grid.Row="1"
+      <ContentControl x:Name="ClipRecallSettingsHost" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                     Visibility="{Binding DataContext.ShowClipRecall, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
                     DataContext="{Binding ClipRecall}" />
-      <filepack:FilePackSettingsView x:Name="FilePackSettings" Grid.Row="1"
+      <ContentControl x:Name="FilePackSettingsHost" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                     Visibility="{Binding DataContext.ShowFilePack, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
                     DataContext="{Binding FilePack}" />
       <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"

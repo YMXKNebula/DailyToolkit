@@ -5,12 +5,16 @@ using System.Text;
 using System.Text.Json;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DailyToolkit.Core.Environment;
 using DailyToolkit.Desktop;
 using DailyToolkit.Desktop.Environment;
 using DailyToolkit.Desktop.Gaming;
 using DailyToolkit.Core.Gaming;
 using DailyToolkit.Desktop.Presentation;
+using Vortice.Direct3D11;
+using Vortice.DXGI;
 
 namespace DailyToolkit.Desktop.Tests;
 
@@ -67,6 +71,154 @@ internal static partial class Program
             Require(clamped.Magnified.PixelWidth == 200 && clamped.Magnified.PixelHeight == 100,"Preview did not match monitor size limits");
         });
         Console.WriteLine("PASS Bundled photo preview runs the real shader, with zoom, sharpening, independent dimensions and monitor clipping");
+    }
+
+    private static byte[] ReadPreviewPixels(BitmapSource bitmap)
+    {
+        var pixels = new byte[bitmap.PixelWidth*bitmap.PixelHeight*4];
+        bitmap.CopyPixels(pixels,bitmap.PixelWidth*4,0);
+        return pixels;
+    }
+
+    private static async Task CheckPreviewResourceReuseAsync()
+    {
+        var retained = await Task.Run(() =>
+        {
+            var fromMemory = CheckPreviewBitmapOwnership();
+            var fromGpu = CheckPreviewBitmapReadback();
+            CheckPhotoPreviewSourceReuse();
+            return (fromMemory, fromGpu);
+        });
+        Require(retained.fromMemory.Bitmap.IsFrozen && retained.fromGpu.Bitmap.IsFrozen &&
+            ReadPreviewPixels(retained.fromMemory.Bitmap).SequenceEqual(retained.fromMemory.Pixels) &&
+            ReadPreviewPixels(retained.fromGpu.Bitmap).SequenceEqual(retained.fromGpu.Pixels),
+            "Frozen preview images changed across threads after their source buffer or GPU renderer was released");
+        Console.WriteLine("PASS Preview bitmap readback matches the byte-array path, owns its pixels after buffer/GPU release, and photo source reuse preserves every image mode");
+    }
+
+    private static (BitmapSource Bitmap, byte[] Pixels) CheckPreviewBitmapOwnership()
+    {
+        const int width = 3, height = 2, stride = 20;
+        var source = new byte[stride*height];
+        var expected = new byte[width*height*4];
+        for (var y = 0; y < height; y++) for (var x = 0; x < width; x++)
+        {
+            var at = y*stride+x*4; var packed = (y*width+x)*4;
+            source[at] = expected[packed] = (byte)(x*71+y*19);
+            source[at+1] = expected[packed+1] = (byte)(x*11+y*83);
+            source[at+2] = expected[packed+2] = (byte)(x*37+y*41);
+            source[at+3] = expected[packed+3] = 255;
+        }
+        var buffer = Marshal.AllocHGlobal(source.Length);
+        try
+        {
+            Marshal.Copy(source,0,buffer,source.Length);
+            var bitmap = BitmapSource.Create(width,height,96,96,PixelFormats.Bgra32,null,buffer,source.Length,stride);
+            bitmap.Freeze();
+            Marshal.Copy(new byte[source.Length],0,buffer,source.Length);
+            Require(ReadPreviewPixels(bitmap).SequenceEqual(expected),
+                "BitmapSource retained the caller's padded source buffer instead of copying it");
+            return (bitmap, expected);
+        }
+        finally { Marshal.FreeHGlobal(buffer); }
+    }
+
+    private static (BitmapSource Bitmap, byte[] Pixels) CheckPreviewBitmapReadback()
+    {
+        using var renderer = new LensGpuRenderer(IntPtr.Zero,257,131,software:true);
+        var source = new byte[64*40*4];
+        for (var y = 0; y < 40; y++) for (var x = 0; x < 64; x++)
+        {
+            var at = (y*64+x)*4;
+            source[at] = (byte)(x*17+y*7); source[at+1] = (byte)(x*3+y*19);
+            source[at+2] = (byte)(x*13+y*11); source[at+3] = 255;
+        }
+        var area = new SourceArea(2.75,1.5,29.4,17.2);
+        var pinned = GCHandle.Alloc(source,GCHandleType.Pinned);
+        try
+        {
+            using var texture = renderer.Device.CreateTexture2D(new Texture2DDescription
+            {
+                Width=64,Height=40,MipLevels=1,ArraySize=1,Format=Format.B8G8R8A8_UNorm,
+                SampleDescription=new(1,0),Usage=ResourceUsage.Default,BindFlags=BindFlags.ShaderResource
+            },new SubresourceData(pinned.AddrOfPinnedObject(),64*4));
+            renderer.Render(texture,area,0.35,present:false,borderColor:0x123456);
+        }
+        finally { pinned.Free(); }
+        var first = renderer.ReadOutputBitmap();
+        var firstPixels = renderer.ReadOutput();
+        Require(first.IsFrozen && first.Format == PixelFormats.Bgra32 && first.DpiX == 96 && first.DpiY == 96 &&
+            ReadPreviewPixels(first).SequenceEqual(firstPixels), "Pointer readback changed format, DPI or pixels for a non-aligned row width");
+        var cases = new[]
+        {
+            (Width:641,Height:385,Mode:LensImageMode.Clear,Area:new SourceArea(11.25,4.5,39.5,23.5)),
+            (Width:480,Height:640,Mode:LensImageMode.HighQuality,Area:new SourceArea(20.5,10.75,8.5,12.5)),
+            (Width:257,Height:131,Mode:LensImageMode.Pixel,Area:new SourceArea(-2.5,30.5,19.75,12.25)),
+            (Width:640,Height:384,Mode:LensImageMode.Performance,Area:area)
+        };
+        foreach (var item in cases)
+        {
+            renderer.ResizePreview(item.Width,item.Height);
+            renderer.RenderLast(item.Area,LensImageSettings.GetSharpening(item.Mode),present:false,borderColor:0xABCDEF,imageMode:item.Mode);
+            var bitmap = renderer.ReadOutputBitmap();
+            Require(bitmap.IsFrozen && bitmap.PixelWidth == item.Width && bitmap.PixelHeight == item.Height &&
+                ReadPreviewPixels(bitmap).SequenceEqual(renderer.ReadOutput()),
+                $"Pointer readback diverged from byte-array pixels after resizing/moving in {item.Mode}");
+        }
+        BitmapSource LegacyBitmap()
+        {
+            var bitmap = BitmapSource.Create(640,384,96,96,PixelFormats.Bgra32,null,renderer.ReadOutput(),640*4);
+            bitmap.Freeze(); return bitmap;
+        }
+        // Warm both paths once. Record only managed allocations on this worker;
+        // driver/WIC native allocations and process memory are measured separately.
+        _ = LegacyBitmap(); _ = renderer.ReadOutputBitmap();
+        const int iterations = 5;
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var index = 0; index < iterations; index++) { var bitmap = LegacyBitmap(); GC.KeepAlive(bitmap); }
+        var legacyBytes = GC.GetAllocatedBytesForCurrentThread()-before;
+        before = GC.GetAllocatedBytesForCurrentThread();
+        for (var index = 0; index < iterations; index++) { var bitmap = renderer.ReadOutputBitmap(); GC.KeepAlive(bitmap); }
+        var bitmapBytes = GC.GetAllocatedBytesForCurrentThread()-before;
+        Console.WriteLine($"MEASURE Preview readback managed allocations after warm-up ({iterations} × 640×384): byte-array={legacyBytes} bytes, pointer-bitmap={bitmapBytes} bytes, difference={legacyBytes-bitmapBytes} bytes");
+        Require(ReadPreviewPixels(first).SequenceEqual(firstPixels), "Later renders or resize changed an earlier preview bitmap");
+        return (first, firstPixels);
+    }
+
+    private static void CheckPhotoPreviewSourceReuse()
+    {
+        using var renderer = new LensPhotoPreviewRenderer(software:true);
+        var settings = new LensPreviewSettings(2560,1440,320,192,2,0.35,0);
+        var first = renderer.Render(settings);
+        using (var stream = typeof(LensPhotoPreviewRenderer).Assembly.GetManifestResourceStream("DailyToolkit.Desktop.Assets.lens-preview.jpg")
+            ?? throw new IOException("The reference preview photo is missing."))
+        {
+            var decoded = BitmapDecoder.Create(stream,BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnLoad).Frames[0];
+            var reference = new FormatConvertedBitmap(decoded,PixelFormats.Bgra32,null,0);
+            reference.Freeze();
+            Require(first.Photo.IsFrozen && first.Photo.Format == reference.Format && first.Photo.PixelWidth == reference.PixelWidth &&
+                first.Photo.PixelHeight == reference.PixelHeight && first.Photo.DpiX == reference.DpiX && first.Photo.DpiY == reference.DpiY &&
+                first.Photo.DpiX == 300 && first.Photo.DpiY == 300 && ReadPreviewPixels(first.Photo).SequenceEqual(ReadPreviewPixels(reference)),
+                "Independent photo cache changed pixels, dimensions, format or the bundled photo's 300 DPI");
+        }
+        var firstPixels = ReadPreviewPixels(first.Magnified);
+        var cases = new[]
+        {
+            settings with { ImageMode=LensImageMode.Clear,Sharpening=1,Width=641,Height=385,Zoom=3.25,PointerX=.98,PointerY=.12 },
+            settings with { ImageMode=LensImageMode.HighQuality,Sharpening=1,Width=480,Height=640,Zoom=6.75,PointerX=.0625,PointerY=.8 },
+            settings with { ImageMode=LensImageMode.Pixel,Sharpening=0,ScreenWidth=200,ScreenHeight=100,Width=480,Height=640,Zoom=1,PointerX=1,PointerY=1 },
+            settings
+        };
+        foreach (var item in cases)
+        {
+            var actual = renderer.Render(item);
+            using var fresh = new LensPhotoPreviewRenderer(software:true);
+            var expected = fresh.Render(item);
+            Require(actual.Photo.IsFrozen && actual.Magnified.IsFrozen && actual.Layout.Source == expected.Layout.Source &&
+                actual.Layout.Output == expected.Layout.Output && ReadPreviewPixels(actual.Magnified).SequenceEqual(ReadPreviewPixels(expected.Magnified)),
+                $"Reusing the uploaded photo changed pixels or placement in {item.ImageMode}");
+        }
+        Require(ReadPreviewPixels(first.Magnified).SequenceEqual(firstPixels), "Reusing the photo source changed a previously returned frame");
     }
 
     private static async Task CheckPreviewLayoutAsync(string? images = null)

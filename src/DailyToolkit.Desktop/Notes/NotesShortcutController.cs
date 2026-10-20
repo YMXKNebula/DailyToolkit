@@ -1,13 +1,14 @@
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using DailyToolkit.Core.Gaming;
+using DailyToolkit.Desktop.Runtime;
 
 namespace DailyToolkit.Desktop.Notes;
 
 internal sealed class NotesShortcutController : IDisposable
 {
     internal const int ToggleId = 0xB021, FocusId = 0xB022;
-    private readonly HwndSource _source;
+    private readonly WindowMessageSource _source;
     private KeyboardShortcut? _toggle, _focus;
     private bool _suspended, _disposed, _hookAttached;
     internal bool HasMessageHook => _hookAttached;
@@ -16,7 +17,7 @@ internal sealed class NotesShortcutController : IDisposable
     public event Action? ToggleRequested;
     public event Action? FocusRequested;
     public string Error { get; private set; } = "";
-    public NotesShortcutController(HwndSource source) => _source = source;
+    public NotesShortcutController(WindowMessageSource source) => _source = source;
     public bool Configure(KeyboardShortcut? toggle, KeyboardShortcut? focus)
     {
         Unregister(); _toggle = toggle; _focus = focus;

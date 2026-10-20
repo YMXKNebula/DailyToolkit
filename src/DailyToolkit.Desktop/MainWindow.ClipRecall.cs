@@ -15,12 +15,10 @@ public partial class MainWindow
     private void InitializeClipRecall(HwndSource source)
     {
         _clipRecall = new(_viewModel, source, ExistingClipboardShortcuts);
-        ClipRecallSettings.ReservedShortcuts = ReservedClipboardShortcuts;
-        ClipRecallSettings.ShortcutEditing = SuspendToolShortcuts;
-        NotesSettings.ClipRecallShortcut = () => _viewModel.ClipRecall.IsEnabled ? _viewModel.ClipRecall.Settings.ToggleShortcut : null;
     }
     private void SuspendToolShortcuts(bool suspended)
     {
+        if (_applicationRuntime is not null) { _applicationRuntime.SuspendToolShortcuts(suspended); return; }
         if (_shortcuts is not null) UpdateShortcutNotice(_shortcuts.Suspend(suspended));
         _notes?.Suspend(suspended); _clipRecall?.Suspend(suspended);
         _filePack?.Suspend(suspended);

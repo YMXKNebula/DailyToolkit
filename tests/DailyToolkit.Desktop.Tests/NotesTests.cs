@@ -106,7 +106,27 @@ internal static partial class Program
         Require(!manager.Restore() && native.Activations == calls, "Closed target was activated");
         native.Current = new IntPtr(99); manager.Capture();
         Require(manager.Previous == IntPtr.Zero && !manager.Restore(), "Invalid foreground retained a stale restoration target");
-        Console.WriteLine("PASS Notes browser/editor focus targets, self exclusion, refocus updates, closed windows and one-attempt system refusal");
+
+        var oldMain = new IntPtr(40); var rebuiltMain = new IntPtr(50);
+        native.Windows.UnionWith([oldMain, rebuiltMain]); native.Allow = true;
+        native.Current = oldMain; manager.Capture(); native.Current = self; calls = native.Activations;
+        manager.RetargetPreviousWindow(oldMain, rebuiltMain);
+        Require(manager.Previous == rebuiltMain && native.Current == self && native.Activations == calls,
+            "Retargeting a rebuilt main window activated it or retained its old handle");
+        native.Windows.Remove(oldMain);
+        Require(manager.Restore() && native.Current == rebuiltMain,
+            "A rebuilt main-window target could not be restored after its old HWND was destroyed");
+        native.Current = browser; manager.Capture(); native.Current = self; calls = native.Activations;
+        manager.RetargetPreviousWindow(oldMain, rebuiltMain);
+        manager.RetargetPreviousWindow(IntPtr.Zero, rebuiltMain);
+        manager.RetargetPreviousWindow(browser, IntPtr.Zero);
+        Require(manager.Previous == browser && native.Current == self && native.Activations == calls,
+            "Main-window retargeting changed an unrelated target, accepted a zero handle or activated a window");
+        native.Current = new IntPtr(99); manager.Capture();
+        manager.RetargetPreviousWindow(IntPtr.Zero, rebuiltMain);
+        Require(manager.Previous == IntPtr.Zero && native.Activations == calls,
+            "A zero previous handle acquired a restoration target during retargeting");
+        Console.WriteLine("PASS Notes focus targets, self exclusion, system refusal and rebuilt-main HWND retargeting without activation");
     }
     private static async Task CheckNotesShortcutsAsync()
     {

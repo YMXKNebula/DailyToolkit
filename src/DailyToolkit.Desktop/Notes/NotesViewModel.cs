@@ -22,6 +22,10 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
     private Task? _contentLoadTask;
     internal bool IsContentLoaded => _contentLoaded;
     internal bool IsSaveScheduled => _saveTimer.IsEnabled;
+    internal bool IsIdleForMemoryCollection => !_disposed && _loaded && !IsEnabled && !_visible && !_focused &&
+        !_saveTimer.IsEnabled && _saving.CurrentCount == 1 && !_contentDirty && !_settingsDirty &&
+        (_contentLoadTask is null || _contentLoadTask.IsCompletedSuccessfully) && Ready.IsCompletedSuccessfully &&
+        PendingColorSave.IsCompletedSuccessfully;
     public NotesStore Store { get; }
     public Task Ready { get; }
     public bool ContentWritable { get; private set; } = true;

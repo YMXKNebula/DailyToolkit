@@ -27,20 +27,27 @@ internal sealed class SingleInstance : IDisposable
     public bool ActivateExistingWindow(bool exit=false, bool allowForegroundOnly=false)
     {
         var activated=false;
+        var markerFound=false;
         var ownProcess=System.Environment.ProcessId;
         var executable=System.Environment.ProcessPath;
+        // A current process can have a hidden runtime HWND and a separate UI HWND.
+        // Find its marker before considering any legacy title-based window.
         EnumWindows((window,_) =>
         {
             GetWindowThreadProcessId(window,out var processId);
             if (processId == ownProcess) return true;
-            if (GetProp(window,WindowMarker) != IntPtr.Zero)
-            {
-                if (allowForegroundOnly) { activated=AllowSetForegroundWindow(processId); return false; }
-                if (!exit) AllowSetForegroundWindow(processId);
-                activated=PostMessage(window,exit ? ExitMessage : ShowMessage,IntPtr.Zero,IntPtr.Zero);
-                if (!exit) SetForegroundWindow(window);
-                return false;
-            }
+            if (GetProp(window,WindowMarker) == IntPtr.Zero) return true;
+            markerFound=true;
+            if (allowForegroundOnly) { activated=AllowSetForegroundWindow(processId); return false; }
+            if (!exit) AllowSetForegroundWindow(processId);
+            activated=PostMessage(window,exit ? ExitMessage : ShowMessage,IntPtr.Zero,IntPtr.Zero);
+            return false;
+        },IntPtr.Zero);
+        if (markerFound) return activated;
+        EnumWindows((window,_) =>
+        {
+            GetWindowThreadProcessId(window,out var processId);
+            if (processId == ownProcess) return true;
             var title=new StringBuilder(256);
             GetWindowText(window,title,title.Capacity);
             if (title.ToString() != "DailyToolkit") return true;
@@ -48,6 +55,7 @@ internal sealed class SingleInstance : IDisposable
             {
                 using var process=Process.GetProcessById((int)processId);
                 if (!string.Equals(process.MainModule?.FileName,executable,StringComparison.OrdinalIgnoreCase)) return true;
+                if (allowForegroundOnly) { activated=AllowSetForegroundWindow(processId); return false; }
                 if (exit) { activated=PostMessage(window,0x10,IntPtr.Zero,IntPtr.Zero); return false; }
                 AllowSetForegroundWindow(processId);
                 if (IsIconic(window)) ShowWindow(window,9);

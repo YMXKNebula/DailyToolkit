@@ -160,6 +160,20 @@ internal static partial class Program
             checks.Add(new { name = "notes-idle-and-passive-computer-cancellation", status = "passed" });
             await CheckFilePackDisabledResourcesAsync();
             checks.Add(new { name = "filepack-disable-and-idle-data-retention", status = "passed" });
+            await CheckDeferredSettingsViewsAsync();
+            checks.Add(new { name = "deferred-settings-and-session-retention", status = "passed" });
+            await CheckNativeMessageWindowAsync();
+            checks.Add(new { name = "native-message-source-and-ui-entry", status = "passed" });
+            await CheckRuntimeHostLifecycleAsync();
+            checks.Add(new { name = "runtime-ui-release-and-background-tool-continuity", status = "passed" });
+            await CheckUiStateRetentionAsync();
+            checks.Add(new { name = "ui-session-lazy-state-and-draft-retention", status = "passed" });
+            await CheckDeferredViewReleaseAsync();
+            checks.Add(new { name = "idle-page-release-stable-window-and-session-retention", status = "passed" });
+            await CheckIdleMemoryPolicyAsync();
+            checks.Add(new { name = "guarded-idle-memory-collection-and-reopen-cancellation", status = "passed" });
+            await CheckClipboardExitPreparationAsync();
+            checks.Add(new { name = "cancelled-exit-resumes-clipboard-runtime", status = "passed" });
             do
             {
                 await CheckClipboardResourceLifecycleAsync();
@@ -175,14 +189,14 @@ internal static partial class Program
         }
         finally
         {
-            var unverified = new[] { "physical-mixed-dpi", "gpu-device-loss", "sleep-resume", "live-input-and-uac",
+            var unverified = new[] { "native-hotkey-registration-interactive-desktop", "physical-mixed-dpi", "gpu-device-loss", "sleep-resume", "live-input-and-uac",
                 "physical-disk-full-and-power-loss", "network-slowdown-causality" };
             await File.WriteAllTextAsync(report, JsonSerializer.Serialize(new
             {
                 schemaVersion = 1, status, scope = "isolated-fixtures-no-live-input-no-user-data",
                 durationSeconds = watch.Elapsed.TotalSeconds, requestedMinutes = durationMinutes,
                 checks, samples, unverified,
-                note = "Process counters are observations; deterministic resource teardown assertions decide pass/fail. No forced collection or working-set trimming."
+                note = "Counters include preceding fixture work, including explicit collections in reachability assertions; they are not idle application memory comparisons. Deterministic teardown assertions decide pass/fail. No working-set trimming."
             }, new JsonSerializerOptions { WriteIndented = true }));
         }
     }

@@ -29,11 +29,11 @@ internal static partial class Program
         try
         {
             if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _] or ["--clipboard-native-filepack-quick-checks", _]
-                or ["--background-resource-checks", _] or ["--background-resource-soak", _, _]) ClipboardTestStation.Connect();
+                or ["--background-resource-checks", _] or ["--background-resource-soak", _, _] or ["--window-memory-profile", _] or ["--runtime-memory-profile", _] or ["--runtime-memory-profile-production", _] or ["--runtime-memory-profile-retained", _] or ["--runtime-memory-experiment-optimized", _] or ["--runtime-memory-experiment-aggressive", _] or ["--runtime-memory-experiment-retained-aggressive", _] or ["--runtime-host-checks"] or ["--preview-resource-checks"]) ClipboardTestStation.Connect();
             else if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer") ClipboardTestStation.Connect(args[1], args[2]);
         }
         catch (Exception exception) { Console.WriteLine("FAIL Clipboard test isolation: " + exception); return 1; }
-        if (args.Length > 0 && (args[0].StartsWith("--clipboard-native-", StringComparison.Ordinal) || args[0].StartsWith("--background-resource-", StringComparison.Ordinal)))
+        if (args.Length > 0 && (args[0].StartsWith("--clipboard-native-", StringComparison.Ordinal) || args[0].StartsWith("--background-resource-", StringComparison.Ordinal) || args[0] is "--window-memory-profile" or "--runtime-memory-profile-production" or "--runtime-memory-profile" or "--runtime-memory-profile-retained" or "--runtime-memory-experiment-optimized" or "--runtime-memory-experiment-aggressive" or "--runtime-memory-experiment-retained-aggressive" or "--runtime-host-checks" or "--preview-resource-checks"))
         {
             var result = 1;
             var isolatedThread = new Thread(() =>
@@ -63,6 +63,24 @@ internal static partial class Program
             {
                 if (args is ["--diagnostic-checks"])
                 { await CheckDiagnosticReportsAsync(); exitCode = 0; return; }
+                if (args is ["--window-memory-profile", var memoryReport])
+                { await CheckWindowMemoryProfileAsync(memoryReport); exitCode = 0; return; }
+                if (args is ["--runtime-memory-profile", var runtimeMemoryReport])
+                { await CheckRuntimeMemoryProfileAsync(runtimeMemoryReport); exitCode = 0; return; }
+                if (args is ["--runtime-memory-profile-production", var productionMemoryReport])
+                { await CheckRuntimeMemoryProfileAsync(productionMemoryReport, productionIdlePolicy: true); exitCode = 0; return; }
+                if (args is ["--runtime-memory-profile-retained", var retainedMemoryReport])
+                { await CheckRuntimeMemoryProfileAsync(retainedMemoryReport, releaseUi: false); exitCode = 0; return; }
+                if (args is ["--runtime-memory-experiment-optimized", var collectionExperimentReport])
+                { await CheckRuntimeMemoryProfileAsync(collectionExperimentReport, optimizedCollectionExperiment: true); exitCode = 0; return; }
+                if (args is ["--runtime-memory-experiment-aggressive", var aggressiveExperimentReport])
+                { await CheckRuntimeMemoryProfileAsync(aggressiveExperimentReport, aggressiveCollectionExperiment: true); exitCode = 0; return; }
+                if (args is ["--runtime-memory-experiment-retained-aggressive", var retainedAggressiveExperimentReport])
+                { await CheckRuntimeMemoryProfileAsync(retainedAggressiveExperimentReport, releaseUi: false, aggressiveCollectionExperiment: true); exitCode = 0; return; }
+                if (args is ["--runtime-host-checks"])
+                { await CheckNativeMessageWindowAsync(); await CheckRuntimeHostLifecycleAsync(); await CheckUiStateRetentionAsync(); await CheckDeferredViewReleaseAsync(); await CheckIdleMemoryPolicyAsync(); await CheckClipboardExitPreparationAsync(); exitCode = 0; return; }
+                if (args is ["--preview-resource-checks"])
+                { await CheckPhotoPreviewAsync(); await CheckPreviewResourceReuseAsync(); exitCode = 0; return; }
                 if (args is ["--background-resource-checks", var backgroundReport])
                 { await CheckBackgroundResourcesAsync(backgroundReport); exitCode = 0; return; }
                 if (args is ["--background-resource-soak", var soakReport, var soakMinutes])
@@ -102,7 +120,8 @@ internal static partial class Program
                     CheckShortcutPersistence(); CheckRenamedSettingsCompatibility(); CheckFavorites(); CheckNavigation(); CheckAppSettings();
                     await CheckNotesPersistenceAsync(); await CheckNotesStabilityAsync(); CheckNotesFocus();
                     await CheckLensStartupTimingAsync(); CheckRendererRepeatedDispose();
-                    await CheckInactiveNotesResourcesAsync(); await CheckPassiveComputerCancellationAsync(); await CheckTrayLifecycleAsync(); exitCode = 0; return;
+                    await CheckInactiveNotesResourcesAsync(); await CheckPassiveComputerCancellationAsync(); await CheckTrayLifecycleAsync();
+                    await CheckDeferredSettingsViewsAsync(); exitCode = 0; return;
                 }
                 if (args is ["--update-checks"])
                 { await CheckAppUpdatesAsync(); exitCode = 0; return; }
@@ -188,6 +207,7 @@ internal static partial class Program
         CheckRendererRepeatedDispose();
         Console.WriteLine("PASS Actual Direct3D shader preserves colors and reconstructs subpixel edges");
         await CheckPhotoPreviewAsync();
+        await CheckPreviewResourceReuseAsync();
         CheckLensPointer();
         await CheckLensStartupTimingAsync();
         await CheckPreviewLayoutAsync();

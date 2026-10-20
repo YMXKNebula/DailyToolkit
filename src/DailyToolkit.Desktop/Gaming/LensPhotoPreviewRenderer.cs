@@ -20,17 +20,23 @@ internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposa
     private readonly object _gate = new();
     private BitmapSource? _photo;
     private LensGpuRenderer? _renderer;
-    private ID3D11Texture2D? _texture;
     private bool _disposed;
 
-    private static BitmapSource LoadPhoto()
+    private static (BitmapSource Photo, byte[] Pixels) LoadPhoto()
     {
         using var stream = typeof(LensPhotoPreviewRenderer).Assembly.GetManifestResourceStream("DailyToolkit.Desktop.Assets.lens-preview.jpg")
             ?? throw new IOException("The lens preview photo is missing.");
         var source = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
-        var bitmap = new FormatConvertedBitmap(source,PixelFormats.Bgra32,null,0);
+        var converted = new FormatConvertedBitmap(source,PixelFormats.Bgra32,null,0);
+        var stride = checked(converted.PixelWidth*4);
+        var pixels = new byte[checked(stride*converted.PixelHeight)];
+        converted.CopyPixels(pixels,stride,0);
+        // Own the BGRA cache rather than retaining the JPEG decoder/conversion
+        // chain. The same temporary pixels also supply the first GPU upload.
+        var bitmap = BitmapSource.Create(converted.PixelWidth,converted.PixelHeight,converted.DpiX,converted.DpiY,
+            PixelFormats.Bgra32,null,pixels,stride);
         bitmap.Freeze();
-        return bitmap;
+        return (bitmap,pixels);
     }
 
     public unsafe LensPreviewFrame Render(LensPreviewSettings settings)
@@ -38,7 +44,9 @@ internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposa
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed,this);
-            var photo = _photo ??= LoadPhoto();
+            var photo = _photo;
+            byte[]? initialPixels = null;
+            if (photo is null) { (photo,initialPixels)=LoadPhoto(); _photo=photo; }
             var monitor = new PixelBounds(0,0,settings.ScreenWidth,settings.ScreenHeight);
             var centerX = (int)Math.Round(settings.PointerX*monitor.Width);
             var centerY = (int)Math.Round(settings.PointerY*monitor.Height);
@@ -48,34 +56,55 @@ internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposa
             centerX=layout.Output.Left+layout.Output.Width/2;
             centerY=layout.Output.Top+layout.Output.Height/2;
             layout=LensLayout.Calculate(monitor,layout.Output.Width,layout.Output.Height,settings.Zoom,centerX,centerY);
-            if (_renderer is null)
-            {
-                try { _renderer=new(IntPtr.Zero,layout.Output.Width,layout.Output.Height,software); }
-                catch when (!software) { _renderer=new(IntPtr.Zero,layout.Output.Width,layout.Output.Height,software:true); }
-                var pixels = new byte[photo.PixelWidth*photo.PixelHeight*4];
-                photo.CopyPixels(pixels,photo.PixelWidth*4,0);
-                fixed (byte* pointer = pixels)
-                {
-                    _texture = _renderer.Device.CreateTexture2D(new Texture2DDescription
-                    {
-                        Width=(uint)photo.PixelWidth, Height=(uint)photo.PixelHeight, MipLevels=1, ArraySize=1,
-                        Format=Format.B8G8R8A8_UNorm, SampleDescription=new(1,0),
-                        Usage=ResourceUsage.Default, BindFlags=BindFlags.ShaderResource
-                    },new SubresourceData(new IntPtr(pointer),(uint)(photo.PixelWidth*4)));
-                }
-            }
-            _renderer.ResizePreview(layout.Output.Width,layout.Output.Height);
             // Match the background image's UniformToFill crop for the selected monitor's aspect ratio.
             var scale = Math.Max(monitor.Width/(double)photo.PixelWidth,monitor.Height/(double)photo.PixelHeight);
             var offsetX = (monitor.Width-photo.PixelWidth*scale)/2;
             var offsetY = (monitor.Height-photo.PixelHeight*scale)/2;
             var source = new SourceArea((layout.Source.Left-offsetX)/scale,(layout.Source.Top-offsetY)/scale,
                 layout.Source.Width/scale,layout.Source.Height/scale);
-            _renderer.Render(_texture!,source,settings.Sharpening,present:false,borderColor:settings.BorderColor,imageMode:settings.ImageMode);
-            var output = BitmapSource.Create(layout.Output.Width,layout.Output.Height,96,96,
-                PixelFormats.Bgra32,null,_renderer.ReadOutput(),layout.Output.Width*4);
-            output.Freeze();
-            return new(photo,output,layout,settings);
+            var renderer = _renderer;
+            try
+            {
+                if (renderer is null)
+                {
+                    try { renderer=new(IntPtr.Zero,layout.Output.Width,layout.Output.Height,software); }
+                    catch when (!software) { renderer=new(IntPtr.Zero,layout.Output.Width,layout.Output.Height,software:true); }
+                    var pixels = initialPixels;
+                    if (pixels is null)
+                    {
+                        // Retry a failed GPU initialization using the independent
+                        // cached photo; successful startup reuses LoadPhoto's array.
+                        pixels = new byte[checked(photo.PixelWidth*photo.PixelHeight*4)];
+                        photo.CopyPixels(pixels,photo.PixelWidth*4,0);
+                    }
+                    fixed (byte* pointer = pixels)
+                    {
+                        using var texture = renderer.Device.CreateTexture2D(new Texture2DDescription
+                        {
+                            Width=(uint)photo.PixelWidth, Height=(uint)photo.PixelHeight, MipLevels=1, ArraySize=1,
+                            Format=Format.B8G8R8A8_UNorm, SampleDescription=new(1,0),
+                            Usage=ResourceUsage.Default, BindFlags=BindFlags.ShaderResource
+                        },new SubresourceData(new IntPtr(pointer),(uint)(photo.PixelWidth*4)));
+                        // Render retains its own source copy. The unchanged photo needs
+                        // no second upload texture once the first frame has succeeded.
+                        renderer.Render(texture,source,settings.Sharpening,present:false,borderColor:settings.BorderColor,imageMode:settings.ImageMode);
+                    }
+                    _renderer = renderer;
+                }
+                else
+                {
+                    renderer.ResizePreview(layout.Output.Width,layout.Output.Height);
+                    renderer.RenderLast(source,settings.Sharpening,present:false,borderColor:settings.BorderColor,imageMode:settings.ImageMode);
+                }
+                return new(photo,renderer.ReadOutputBitmap(),layout,settings);
+            }
+            catch
+            {
+                // A failed first upload must not leave a renderer without a usable
+                // source behind; the next request can initialize it again.
+                renderer?.Dispose(); _renderer=null;
+                throw;
+            }
         }
     }
 
@@ -85,8 +114,8 @@ internal sealed class LensPhotoPreviewRenderer(bool software = false) : IDisposa
         {
             if (_disposed) return;
             _disposed=true;
-            _texture?.Dispose(); _renderer?.Dispose();
-            _texture=null; _renderer=null; _photo=null;
+            _renderer?.Dispose();
+            _renderer=null; _photo=null;
         }
     }
 }

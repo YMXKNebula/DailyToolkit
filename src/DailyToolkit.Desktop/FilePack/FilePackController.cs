@@ -5,6 +5,7 @@ using DailyToolkit.Core.Gaming;
 using DailyToolkit.Desktop.Gaming;
 using DailyToolkit.Desktop.Notes;
 using DailyToolkit.Desktop.Presentation;
+using DailyToolkit.Desktop.Runtime;
 
 namespace DailyToolkit.Desktop.FilePack;
 
@@ -24,11 +25,12 @@ internal sealed class FilePackController : IDisposable
     private FilePackWindowSession? _quickSession, _detailsSession;
     private FilePackWindow? _quick, _details;
     internal FilePackWindow? QuickWindow => _quick;
+    internal void RetargetPreviousWindow(IntPtr previous, IntPtr replacement) => _focus.RetargetPreviousWindow(previous, replacement);
     internal FilePackWindow? PackWindow => _details;
     internal bool IsHotkeyRegistered => _shortcut.IsRegistered;
     public Task Ready { get; }
     internal event Action<object?>? LegacyShortcutReleased;
-    public FilePackController(MainViewModel host, HwndSource source, Func<IEnumerable<KeyboardShortcut?>> reserved, INotesForeground? foreground = null,
+    public FilePackController(MainViewModel host, WindowMessageSource source, Func<IEnumerable<KeyboardShortcut?>> reserved, INotesForeground? foreground = null,
         Func<(int X, int Y)>? cursor = null)
     {
         _host = host; _model = host.FilePack; _reserved = reserved;

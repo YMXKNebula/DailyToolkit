@@ -2,6 +2,8 @@ using System.IO;
 using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DailyToolkit.Core.Gaming;
 using Vortice.D3DCompiler;
 using Vortice.Direct3D;
@@ -238,6 +240,28 @@ internal sealed class LensGpuRenderer : IDisposable
             var pixels = new byte[_width*_height*4];
             for (var row=0;row<_height;row++) Marshal.Copy(mapped.DataPointer + (int)mapped.RowPitch*row, pixels, row*_width*4, _width*4);
             return pixels;
+        }
+        finally { _context.Unmap(staging,0); }
+    }
+
+    public BitmapSource ReadOutputBitmap()
+    {
+        var description = _output!.Description;
+        description.BindFlags = BindFlags.None;
+        description.Usage = ResourceUsage.Staging;
+        description.CPUAccessFlags = CpuAccessFlags.Read;
+        using var staging = Device.CreateTexture2D(description);
+        _context.CopyResource(staging,_output);
+        var mapped = _context.Map(staging,0,MapMode.Read,Vortice.Direct3D11.MapFlags.None);
+        try
+        {
+            var stride = checked((int)mapped.RowPitch);
+            // BitmapSource.Create synchronously copies into its own OnLoad WIC
+            // bitmap. It does not retain the mapped buffer after returning.
+            var bitmap = BitmapSource.Create(_width,_height,96,96,PixelFormats.Bgra32,null,
+                mapped.DataPointer,checked(stride*_height),stride);
+            bitmap.Freeze();
+            return bitmap;
         }
         finally { _context.Unmap(staging,0); }
     }

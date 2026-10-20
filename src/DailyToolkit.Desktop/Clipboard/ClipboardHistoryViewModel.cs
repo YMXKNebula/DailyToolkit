@@ -214,7 +214,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     }
     internal void RequestRefresh()
     {
-        if (_disposed || !IsVisible) return;
+        if (_disposed || _stopping || !IsVisible) return;
         _searchCancellation?.Cancel(); _searchCancellation?.Dispose();
         _searchCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _refreshTask = RefreshAsync(_searchCancellation.Token);
@@ -367,7 +367,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     }
     private void QueueMaintenance()
     {
-        if (_disposed || !IsEnabled || !Repository.IsReady || _maintenanceQueued) return;
+        if (_disposed || _stopping || !IsEnabled || !Repository.IsReady || _maintenanceQueued) return;
         _maintenanceQueued = true; _maintenanceTask = ScheduleMaintenanceAsync();
     }
     private async Task ScheduleMaintenanceAsync()
@@ -375,7 +375,7 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
         try
         {
             var next = await Repository.NextCleanupAsync(Settings);
-            if (_disposed || !IsEnabled) return;
+            if (_disposed || _stopping || !IsEnabled) return;
             _cleanupTimer?.Dispose(); _cleanupTimer = null;
             if (next is { } at)
             {
@@ -390,19 +390,35 @@ public sealed partial class ClipboardHistoryViewModel : ObservableObject, IDispo
     }
     private async Task CleanupAsync()
     {
-        if (_disposed || !IsEnabled) return;
+        if (_disposed || _stopping || !IsEnabled) return;
         try { await Repository.CleanupAsync(Settings); Notify(nameof(CanUndo)); QueueMaintenance(); }
         catch (Exception exception) when (ClipboardCaptureProcessor.IsExpectedError(exception)) { Notice = "自动清理失败，请检查数据目录。"; }
     }
     internal async Task<bool> PrepareExitAsync()
     {
-        _stopping = true; var pendingAppearance = PendingAppearanceSave; var waitingForAppearance = !pendingAppearance.IsCompleted;
-        await Task.WhenAll(_actionTask, pendingAppearance);
-        if (waitingForAppearance && !await pendingAppearance) { _stopping = false; return false; }
-        if (!await FlushSettingsAsync()) { _stopping = false; return false; }
-        _lifetime.Cancel(); _cleanupTimer?.Dispose();
-        try { await Task.WhenAll(_refreshTask, _selectionTask, _imageTask); } catch (OperationCanceledException) { }
-        return true;
+        if (_disposed) return false;
+        _stopping = true;
+        _cleanupTimer?.Dispose(); _cleanupTimer = null;
+        var prepared = false;
+        try
+        {
+            var pendingAppearance = PendingAppearanceSave; var waitingForAppearance = !pendingAppearance.IsCompleted;
+            await Task.WhenAll(_actionTask, pendingAppearance);
+            if (waitingForAppearance && !await pendingAppearance || !await FlushSettingsAsync()) return false;
+            // Refresh may start a detail load, which may start an image load.
+            // Drain these in order without cancelling the reusable lifetime.
+            await _refreshTask; await _selectionTask; await _imageTask; await _maintenanceTask;
+            prepared = true;
+            return true;
+        }
+        finally { if (!prepared) CancelExitPreparation(); }
+    }
+    internal void CancelExitPreparation()
+    {
+        if (_disposed || !_stopping) return;
+        _stopping = false;
+        QueueMaintenance();
+        if (IsVisible) RequestRefresh();
     }
     public void Dispose() => _ = DisposeAsync().AsTask();
     public ValueTask DisposeAsync()

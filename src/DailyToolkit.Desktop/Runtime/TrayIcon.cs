@@ -7,14 +7,14 @@ namespace DailyToolkit.Desktop.Runtime;
 internal sealed class TrayIcon : IDisposable
 {
     private const int Callback=0x802A;
-    private readonly HwndSource _source;
+    private readonly WindowMessageSource _source;
     private readonly uint _taskbarCreated=RegisterWindowMessage("TaskbarCreated");
     private Data _data;
     private bool _added;
     private readonly DispatcherTimer _retry=new(DispatcherPriority.Background) { Interval=TimeSpan.FromSeconds(2) };
     internal bool Available => _added;
     internal event Action? ShowRequested,SettingsRequested,ExitRequested;
-    internal TrayIcon(HwndSource source)
+    internal TrayIcon(WindowMessageSource source)
     {
         _source=source;
         ExtractIconEx(System.Environment.ProcessPath!,0,out var large,out var small,1);

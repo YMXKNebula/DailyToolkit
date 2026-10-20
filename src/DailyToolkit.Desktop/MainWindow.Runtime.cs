@@ -14,7 +14,7 @@ public partial class MainWindow
     internal bool TrackActivity { get => _trackActivity; set { _trackActivity=value; UpdateLocalPolling(); } }
     internal bool IsLocalPolling => _clockTimer.IsEnabled;
     private WindowState _lastVisibleState=WindowState.Normal;
-    internal bool TrayAvailable => _tray?.Available == true;
+    internal bool TrayAvailable => _applicationRuntime?.TrayAvailable ?? _tray?.Available == true;
     internal void InitializeRuntime(HwndSource source)
     {
         _runtimeSource=source; source.AddHook(RuntimeMessage);
@@ -43,6 +43,7 @@ public partial class MainWindow
     private void UpdateLocalPolling()
     {
         if (_clockTimer is null || _viewModel is null) return;
+        _viewModel.SetMainWindowVisible(IsVisible && WindowState != WindowState.Minimized);
         var visible=IsVisible && WindowState != WindowState.Minimized && (!_trackActivity || IsActive);
         LensPhotoPreview.SetHostActive(visible);
         var monitorComputer = _initializedRuntime && visible && _viewModel.IsHome;
@@ -60,6 +61,7 @@ public partial class MainWindow
     }
     internal void ShowFromTray()
     {
+        if (_applicationRuntime is not null) { _applicationRuntime.ShowWindow(); return; }
         if (_exitRequested || _closing) return;
         if (!IsVisible) Show();
         if (WindowState == WindowState.Minimized) WindowState=_lastVisibleState;
@@ -67,7 +69,7 @@ public partial class MainWindow
     }
     private bool HideToTray()
     {
-        if (_tray?.Available != true) return false;
+        if (!TrayAvailable) return false;
         if (WindowState != WindowState.Minimized) _lastVisibleState=WindowState;
         FinishPageTransition(); FinishNavigationTransition(); _shortcuts?.Suspend(false); _notes?.Suspend(false); Hide(); return true;
     }

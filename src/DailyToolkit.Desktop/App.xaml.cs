@@ -19,6 +19,7 @@ public partial class App : Application
     private readonly Stopwatch _startup = Stopwatch.StartNew();
     private SingleInstance? _instance;
     private Runtime.FilePackRequestRuntime? _filePackRequests;
+    private ApplicationRuntimeHost? _runtimeHost;
 
     public App()
     {
@@ -173,12 +174,27 @@ public partial class App : Application
                 return;
             }
 
-            var window = new MainWindow(viewModel, enableShortcuts: !preview);
-            MainWindow = window;
             if (!preview)
             {
+                var runtimeHost = _runtimeHost = new ApplicationRuntimeHost(viewModel);
+                var firstFrameRecorded = false;
+                runtimeHost.WindowCreated += created =>
+                {
+                    created.ContentRendered += (_, _) =>
+                    {
+                        if (firstFrameRecorded) return;
+                        firstFrameRecorded = true;
+                        viewModel.SetFirstFrameTime(_startup.Elapsed.TotalMilliseconds);
+                    };
+                    if (startupRecoveryNotice is not null)
+                    {
+                        var notice = startupRecoveryNotice;
+                        startupRecoveryNotice = null;
+                        created.Loaded += (_, _) => viewModel.ShowStartupRecovery(notice);
+                    }
+                };
                 _filePackRequests = new(() => new FilePack.FilePackRequestBroker(
-                    paths => Dispatcher.InvokeAsync(() => window.LoadFilePackPathsAsync(paths)).Task.Unwrap(),
+                    paths => Dispatcher.InvokeAsync(() => runtimeHost.LoadFilePackPathsAsync(paths)).Task.Unwrap(),
                     failure: message => Dispatcher.BeginInvoke(new Action(() => viewModel.FilePack.SetNotice(message)))),
                     error => { Runtime.DiagnosticReportService.Shared.RecordError(Runtime.DiagnosticModule.FilePack, error);
                         viewModel.FilePack.SetNotice("文件装载入口未能启动，请用窗口选择文件或拖入。"); });
@@ -188,8 +204,16 @@ public partial class App : Application
                         _filePackRequests?.Configure(viewModel.FilePack.SettingsLoaded && viewModel.FilePack.IsEnabled);
                 };
                 _filePackRequests.Configure(viewModel.FilePack.SettingsLoaded && viewModel.FilePack.IsEnabled);
+                var shellLaunch = FilePack.FilePackRequestBroker.TryReadArguments(e.Args, out var initialPaths);
+                if (startupRecoveryNotice is not null || !shellLaunch &&
+                    (!new AppPreferencesStore().Load().SilentStartup || e.Args.Contains("--show")))
+                    runtimeHost.ShowWindow();
+                if (shellLaunch) await runtimeHost.LoadFilePackPathsAsync(initialPaths);
+                return;
             }
-            if (startupRecoveryNotice is not null) window.Loaded += (_,_) => viewModel.ShowStartupRecovery(startupRecoveryNotice);
+
+            var window = new MainWindow(viewModel, enableShortcuts: false);
+            MainWindow = window;
             var firstFrame = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             window.ContentRendered += (_, _) =>
             {
@@ -198,30 +222,17 @@ public partial class App : Application
                     viewModel.SetFirstFrameTime(_startup.Elapsed.TotalMilliseconds);
                 }
             };
-            if (preview)
-            {
-                window.ShowActivated = false;
-                window.ShowInTaskbar = false;
-                window.WindowStartupLocation = WindowStartupLocation.Manual;
-                window.Left = -20000;
-                window.Top = -20000;
-                window.Width = ReadDimension(e.Args, "--width", 1040, 680);
-                window.Height = ReadDimension(e.Args, "--height", 800, 540);
-                // Exported frames have no physical LCD subpixels; set this before
-                // capturing an animation snapshot as well as the final bitmap.
-                TextOptions.SetTextRenderingMode(window.PreviewContent,TextRenderingMode.Grayscale);
-            }
-            if (!preview && startupRecoveryNotice is null && (FilePack.FilePackRequestBroker.TryReadArguments(e.Args, out _) ||
-                new AppPreferencesStore().Load().SilentStartup && !e.Args.Contains("--show")))
-            {
-                window.StartHidden();
-            }
-            else window.Show();
-            if (!preview)
-            {
-                if (FilePack.FilePackRequestBroker.TryReadArguments(e.Args, out var initialPaths)) await window.LoadFilePackPathsAsync(initialPaths);
-                return;
-            }
+            window.ShowActivated = false;
+            window.ShowInTaskbar = false;
+            window.WindowStartupLocation = WindowStartupLocation.Manual;
+            window.Left = -20000;
+            window.Top = -20000;
+            window.Width = ReadDimension(e.Args, "--width", 1040, 680);
+            window.Height = ReadDimension(e.Args, "--height", 800, 540);
+            // Exported frames have no physical LCD subpixels; set this before
+            // capturing an animation snapshot as well as the final bitmap.
+            TextOptions.SetTextRenderingMode(window.PreviewContent,TextRenderingMode.Grayscale);
+            window.Show();
 
             await firstFrame.Task;
             await viewModel.CurrentProbeTask;
@@ -296,13 +307,15 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _filePackRequests?.Dispose(); _filePackRequests = null;
+        _runtimeHost?.Dispose(); _runtimeHost = null;
         _instance?.Dispose(); _instance=null;
         base.OnExit(e);
     }
 
     protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
     {
-        if (MainWindow is MainWindow window) window.RequestExit();
+        if (_runtimeHost is not null) _runtimeHost.RequestExit();
+        else if (MainWindow is MainWindow window) window.RequestExit();
         base.OnSessionEnding(e);
     }
 

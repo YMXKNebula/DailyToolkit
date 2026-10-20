@@ -6,6 +6,7 @@ using DailyToolkit.Core.Gaming;
 using DailyToolkit.Desktop.Gaming;
 using DailyToolkit.Desktop.Notes;
 using DailyToolkit.Desktop.Presentation;
+using DailyToolkit.Desktop.Runtime;
 
 namespace DailyToolkit.Desktop.ClipRecall;
 
@@ -28,15 +29,17 @@ internal sealed class ClipboardHistoryController : IDisposable
     private double? _panelWidth, _panelHeight;
     private Task _configuration = Task.CompletedTask;
     private bool _disposed, _stopping, _openingPanel, _cancelShow, _lastEnabled, _closeForDisable;
+    private bool? _panelEnabledBeforeExit;
     public Task Ready { get; }
     internal ClipboardHistoryPanel? Panel => _panel;
+    internal void RetargetPreviousWindow(IntPtr previous, IntPtr replacement) => _focus.RetargetPreviousWindow(previous, replacement);
     internal bool IsListening => _monitor.IsListening;
     internal bool IsHotkeyRegistered => _shortcut.IsRegistered;
     internal bool HasCaptureProcessor => _processor is not null;
     internal Task Pending => _configuration;
     internal bool IsOpeningPanel => _openingPanel;
     internal string ConfigurationFailureCode { get; private set; } = "";
-    public ClipboardHistoryController(MainViewModel host, HwndSource source, Func<IEnumerable<KeyboardShortcut?>> reserved,
+    public ClipboardHistoryController(MainViewModel host, WindowMessageSource source, Func<IEnumerable<KeyboardShortcut?>> reserved,
         INotesForeground? foreground = null, IClipboardAccess? access = null, Func<(int X, int Y)>? cursor = null)
     {
         _host = host; _model = host.ClipRecall; _reserved = reserved; _dispatcher = source.Dispatcher;
@@ -234,12 +237,30 @@ internal sealed class ClipboardHistoryController : IDisposable
     public async Task<bool> PrepareExitAsync()
     {
         if (_panel?.IsVisible == true && !_panel.ConfirmHide()) return false;
-        _stopping = true; _monitor.Configure(false); _shortcut.Suspend(true); await _configuration; await Ready;
-        if (!await _model.PrepareExitAsync()) { _stopping = false; _shortcut.Suspend(false); Reconfigure(); return false; }
-        await _runtimeGate.WaitAsync();
-        try { await ReleaseProcessorAsync(); }
-        finally { _runtimeGate.Release(); }
-        await _model.DisposeAsync(); return true;
+        _stopping = true; _monitor.Configure(false); _shortcut.Suspend(true);
+        if (_panel is not null) { _panelEnabledBeforeExit ??= _panel.IsEnabled; _panel.IsEnabled = false; }
+        var prepared = false;
+        try
+        {
+            await _configuration; await Ready;
+            if (!await _model.PrepareExitAsync()) return false;
+            await _runtimeGate.WaitAsync();
+            try { await ReleaseProcessorAsync(); }
+            finally { _runtimeGate.Release(); }
+            prepared = true;
+            return true;
+        }
+        finally { if (!prepared) CancelExitPreparation(); }
+    }
+    internal void CancelExitPreparation()
+    {
+        if (_disposed || !_stopping) return;
+        _model.CancelExitPreparation();
+        _stopping = false;
+        if (_panel is not null && _panelEnabledBeforeExit is { } enabled) _panel.IsEnabled = enabled;
+        _panelEnabledBeforeExit = null;
+        _shortcut.Suspend(false);
+        Reconfigure();
     }
     public void Dispose()
     {

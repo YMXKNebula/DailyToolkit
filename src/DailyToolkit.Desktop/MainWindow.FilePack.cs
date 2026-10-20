@@ -19,9 +19,6 @@ public partial class MainWindow
             else if (ReferenceEquals(sender, _viewModel.Notes)) _notes?.Suspend(false);
             else if (ReferenceEquals(sender, _viewModel.ClipRecall)) _clipRecall?.Suspend(false);
         };
-        FilePackSettings.ReservedShortcuts = ReservedFilePackShortcuts;
-        FilePackSettings.ShortcutEditing = SuspendToolShortcuts;
-        NotesSettings.FilePackShortcut = () => _viewModel.FilePack.IsEnabled ? _viewModel.FilePack.ToggleShortcut : null;
     }
     internal async Task<bool> LoadFilePackPathsAsync(IReadOnlyList<string> paths)
     {
