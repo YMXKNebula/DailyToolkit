@@ -7,6 +7,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>DailyToolkit</AssemblyName>
     <RootNamespace>DailyToolkit.Desktop</RootNamespace>
+    <StartupObject>DailyToolkit.Desktop.DesktopEntryPoint</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/dt.ico</ApplicationIcon>
   </PropertyGroup>

@@ -96,7 +96,7 @@ try {
     Invoke-QualityCheck 'filepack-recovery' { Invoke-DesktopCheck -CheckArguments @('--clipboard-native-filepack-checks', (Join-Path $output 'filepack-checks')) } $nativeReason
     Invoke-QualityCheck 'interface-visuals' { Invoke-DesktopCheck -CheckArguments @('--interface-checks', (Join-Path $output 'interface-checks')) } $nativeReason
     foreach ($manual in @('mixed-monitor-dpi', 'gpu-device-loss', 'sleep-lock-game', 'physical-disk-full', 'real-upgrade-data', 'code-signing')) {
-        Invoke-QualityCheck $manual { } 'Manual acceptance or external signing identity required; see docs/QUALITY_086.md.'
+        Invoke-QualityCheck $manual { } 'Manual acceptance or external signing identity required; see docs/QUALITY_087.md.'
     }
     $runCompleted = $true
 } catch {

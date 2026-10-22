@@ -176,7 +176,7 @@ public partial class App : Application
 
             if (!preview)
             {
-                var runtimeHost = _runtimeHost = new ApplicationRuntimeHost(viewModel);
+                var runtimeHost = _runtimeHost = new ApplicationRuntimeHost(viewModel, enableExternalFileDrop: true);
                 var firstFrameRecorded = false;
                 runtimeHost.WindowCreated += created =>
                 {

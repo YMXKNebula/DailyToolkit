@@ -41,8 +41,8 @@ internal static partial class Program
             await HideProfileWindowAsync();
             await SampleAsync(releaseUi ? "hidden-views-released" : "hidden-views-retained", productionIdlePolicy ? 6500 : 3000);
             if (productionIdlePolicy)
-                Require(runtime.IdleMemoryCollectionCount == 1 && runtime.Window!.CreatedSettingsViewCount == 0,
-                    "Production idle policy did not retire pages and collect once: " + DescribeIdleMemoryFixture(runtime, model));
+                Require(runtime.IdleMemoryCollectionCount == 1 && runtime.Window is null && ReviewIsWindow(runtime.SourceHandle),
+                    "Fully disabled production idle policy did not retire its main UI/HWND and collect once: " + DescribeIdleMemoryFixture(runtime, model));
             ShowProfileWindow();
             await SampleAsync("reopened-idle", 3000);
             await HideProfileWindowAsync();
@@ -72,7 +72,8 @@ internal static partial class Program
                     desktopAssemblySha256 = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(assembly.Location))).ToLowerInvariant(),
                     processArchitecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
                     framework = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
-                    releaseUi, releaseMode = releaseUi ? "deferred-pages-stable-main-window" : "retain-settings-pages", settingsPagesVisited = true,
+                    releaseUi, releaseMode = productionIdlePolicy ? "all-tools-disabled-full-main-ui-retirement" :
+                        releaseUi ? "deferred-pages-stable-main-window" : "retain-settings-pages", settingsPagesVisited = true,
                     optimizedCollectionExperiment, aggressiveCollectionExperiment, productionIdlePolicy,
                     synchronousShowMilliseconds = openTimings, collectionRequests,
                     synchronousHideAndReleaseMilliseconds = releaseTimings,

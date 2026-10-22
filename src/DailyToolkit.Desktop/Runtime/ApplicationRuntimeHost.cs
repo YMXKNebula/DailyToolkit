@@ -21,6 +21,7 @@ internal sealed partial class ApplicationRuntimeHost : IDisposable
     private readonly DispatcherTimer _idleTimer;
     private readonly TimeSpan _idleDelay;
     private readonly bool _shutdownApplication;
+    private readonly bool _enableExternalFileDrop;
     private NativeMessageWindow? _source;
     private TrayIcon? _tray;
     private MainWindowUiState? _uiState;
@@ -38,19 +39,21 @@ internal sealed partial class ApplicationRuntimeHost : IDisposable
     internal event Action<MainWindow>? WindowCreated;
 
     internal ApplicationRuntimeHost(MainViewModel viewModel, bool enableRuntime = true,
-        TimeSpan? idleDelay = null, bool shutdownApplication = true)
+        TimeSpan? idleDelay = null, bool shutdownApplication = true, bool enableExternalFileDrop = false)
     {
         _viewModel = viewModel;
         _dispatcher = Dispatcher.CurrentDispatcher;
         _idleDelay = idleDelay ?? TimeSpan.FromSeconds(5);
         if (_idleDelay <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(idleDelay));
         _shutdownApplication = shutdownApplication;
+        _enableExternalFileDrop = enableExternalFileDrop;
         _idleTimer = new(DispatcherPriority.Background, _dispatcher) { Interval = _idleDelay };
         _idleTimer.Tick += ReleaseHiddenWindow;
         try
         {
             _viewModel.SetMainWindowVisible(false);
             InitializeRuntime(enableRuntime);
+            if (enableRuntime) ObserveIdleMemoryChanges(subscribe: true);
             _viewModel.AdministratorRestartRequested += RequestExit;
         }
         catch
@@ -80,7 +83,7 @@ internal sealed partial class ApplicationRuntimeHost : IDisposable
         RegisterLensHotkey();
         Notes = new(_viewModel.Notes, _source, () => _viewModel.Gaming.ToggleShortcut, shortcuts: _viewModel.Shortcuts);
         ClipRecall = new(_viewModel, _source, ExistingClipboardShortcuts);
-        FilePack = new(_viewModel, _source, ReservedFilePackShortcuts);
+        FilePack = new(_viewModel, _source, ReservedFilePackShortcuts, enableExternalDrop: _enableExternalFileDrop);
         FilePack.LegacyShortcutReleased += LegacyShortcutReleased;
         _viewModel.Gaming.PropertyChanged += GamingChanged;
         _tray = new(_source);
@@ -237,8 +240,8 @@ internal sealed partial class ApplicationRuntimeHost : IDisposable
     private void ReleaseHiddenWindow(object? sender, EventArgs args)
     {
         // Runtime-disabled UI fixtures retain the separate page-lifetime path.
-        // Production retires pages only when a single guarded collection can
-        // also return their committed heap; retirement alone measured worse.
+        // Fully disabled production tools can retire the entire hidden main UI;
+        // heap size and collection cooldown never veto safe UI retirement.
         if (Notes is null) TryReleaseHiddenViews();
         else TryQueueIdleMemoryReclaim();
     }
@@ -265,17 +268,23 @@ internal sealed partial class ApplicationRuntimeHost : IDisposable
         var current = Window;
         if (_disposed || current is null || current.IsVisible) return false;
         CancelIdleMemoryReclaim();
+        if (ReleaseHiddenWindowCore(current)) return true;
+        if (ReferenceEquals(Window, current) && !current.IsVisible && current.IdleReleaseCanRetry)
+        {
+            // This explicit fixture/legacy entry retains its slow retry path.
+            // Production scheduling is driven by actual work completion.
+            _idleTimer.Interval = _idleDelay < TimeSpan.FromSeconds(15) ? TimeSpan.FromSeconds(15) : _idleDelay;
+            _idleTimer.Start();
+        }
+        return false;
+    }
+
+    private bool ReleaseHiddenWindowCore(MainWindow current)
+    {
         var previous = _releasedMainWindowHandle;
         _releasedMainWindowHandle = new WindowInteropHelper(current).Handle;
         if (current.TryReleaseForIdle(out var state)) { _uiState = state; return true; }
         _releasedMainWindowHandle = previous;
-        if (ReferenceEquals(Window, current) && !current.IsVisible && current.IdleReleaseCanRetry)
-        {
-            // Busy work may finish without another visibility event. Retry slowly;
-            // a persistent draft veto does not keep a polling timer running.
-            _idleTimer.Interval = _idleDelay < TimeSpan.FromSeconds(15) ? TimeSpan.FromSeconds(15) : _idleDelay;
-            _idleTimer.Start();
-        }
         return false;
     }
 
@@ -288,7 +297,7 @@ internal sealed partial class ApplicationRuntimeHost : IDisposable
         closed.Closed -= WindowClosed;
         if (!ReferenceEquals(Window, closed)) return;
         _idleTimer.Stop();
-        CancelIdleMemoryReclaim();
+        if (!_retiringHiddenWindow) CancelIdleMemoryReclaim();
         Window = null;
         if (Application.Current is { } application && ReferenceEquals(application.MainWindow, closed))
             application.MainWindow = null;
@@ -310,6 +319,7 @@ internal sealed partial class ApplicationRuntimeHost : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        ObserveIdleMemoryChanges(subscribe: false);
         CancelIdleMemoryReclaim();
         _idleTimer.Stop();
         _idleTimer.Tick -= ReleaseHiddenWindow;

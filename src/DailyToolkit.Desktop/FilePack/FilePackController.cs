@@ -25,6 +25,8 @@ internal sealed class FilePackController : IDisposable
     private readonly HashSet<FilePackWindow> _closingWindows = [];
     private FilePackWindowSession? _quickSession, _detailsSession;
     private FilePackWindow? _quick, _details;
+    private readonly bool _enableExternalDrop;
+    internal Task PendingDropCleanup { get; private set; } = Task.CompletedTask;
     internal FilePackWindow? QuickWindow => _quick;
     internal void RetargetPreviousWindow(IntPtr previous, IntPtr replacement) => _focus.RetargetPreviousWindow(previous, replacement);
     internal FilePackWindow? PackWindow => _details;
@@ -32,9 +34,10 @@ internal sealed class FilePackController : IDisposable
     public Task Ready { get; }
     internal event Action<object?>? LegacyShortcutReleased;
     public FilePackController(MainViewModel host, WindowMessageSource source, Func<IEnumerable<KeyboardShortcut?>> reserved, INotesForeground? foreground = null,
-        Func<(int X, int Y)>? cursor = null)
+        Func<(int X, int Y)>? cursor = null, bool enableExternalDrop = false)
     {
         _host = host; _model = host.FilePack; _reserved = reserved;
+        _enableExternalDrop = enableExternalDrop;
         _foreground = foreground ?? new NotesForeground();
         _cursor = cursor ?? NotesPositionService.Cursor;
         _focus = new(_foreground, () => _quick?.IsActive == true ? _quick.Handle : _details?.Handle ?? IntPtr.Zero);
@@ -139,7 +142,7 @@ internal sealed class FilePackController : IDisposable
     }
     private FilePackWindow CreateWindow(bool quick)
     {
-        var window = new FilePackWindow(_model, quick);
+        var window = new FilePackWindow(_model, quick, _enableExternalDrop);
         var size = quick ? _quickSession : _detailsSession;
         if (size is { } saved) { window.Width = saved.Width; window.Height = saved.Height; }
         window.HideRequested += () => _ = CloseWindowAsync(window, true);
@@ -153,11 +156,13 @@ internal sealed class FilePackController : IDisposable
         if (!_closingWindows.Add(window)) return false;
         try
         {
-            if (!await _model.SaveBeforeClosingWindowAsync()) return false;
+            if (!await window.FlushDropAsync()) { window.ResumeDrop(); return false; }
+            if (!await _model.SaveBeforeClosingWindowAsync()) { window.ResumeDrop(); return false; }
             if (!ReferenceEquals(window, _quick) && !ReferenceEquals(window, _details)) return true;
-            if (!await window.SavePlacementAsync()) return false;
+            if (!await window.SavePlacementAsync()) { window.ResumeDrop(); return false; }
             var ownsFocus = _foreground.Current == window.Handle;
             ReleaseWindow(window);
+            await window.DropCleanup;
             if (restore && ownsFocus) _focus.Restore();
             return true;
         }
@@ -167,7 +172,9 @@ internal sealed class FilePackController : IDisposable
     {
         if (ReferenceEquals(window, _quick)) { _quickSession = window.CaptureSession(); _quick = null; }
         if (ReferenceEquals(window, _details)) { _detailsSession = window.CaptureSession(); _details = null; }
-        window.CloseRuntime(); UpdateWindowVisibility();
+        window.CloseRuntime();
+        PendingDropCleanup = Task.WhenAll(PendingDropCleanup, window.DropCleanup);
+        UpdateWindowVisibility();
     }
     private void CloseAllWindows()
     {

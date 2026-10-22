@@ -22,6 +22,7 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
     private Task? _contentLoadTask;
     internal bool IsContentLoaded => _contentLoaded;
     internal bool IsSaveScheduled => _saveTimer.IsEnabled;
+    internal event Action? IdleStateChanged;
     internal bool IsIdleForMemoryCollection => !_disposed && _loaded && !IsEnabled && !_visible && !_focused &&
         !_saveTimer.IsEnabled && _saving.CurrentCount == 1 && !_contentDirty && !_settingsDirty &&
         (_contentLoadTask is null || _contentLoadTask.IsCompletedSuccessfully) && Ready.IsCompletedSuccessfully &&
@@ -235,7 +236,15 @@ public sealed partial class NotesViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception) when (NotesStore.IsStorageError(exception))
         { DiagnosticReportService.Shared.RecordError(DiagnosticModule.FloatingNotes, exception); Notice = "保存失败，请检查空间或权限。重试保存或导出后再退出。"; return false; }
-        finally { _saving.Release(); }
+        finally
+        {
+            _saving.Release();
+            // Scheduling the normal debounce happens after preference change
+            // notifications. Announce its actual completion separately so a
+            // hidden host can retry resource release without polling or saving
+            // on the user's behalf. Dirty/failed saves still veto eligibility.
+            IdleStateChanged?.Invoke();
+        }
     }
     public void Dispose() { _disposed = true; _saveTimer.Stop(); _saveTimer.Tick -= SaveTick; ReleaseFontList(); }
 }

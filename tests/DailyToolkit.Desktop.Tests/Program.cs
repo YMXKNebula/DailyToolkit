@@ -22,6 +22,8 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Length == 6 && args[0] == "--filepack-drop-host-fixture")
+            return RunFilePackDropHostFixture(args);
         if (args is ["--filepack-ipc-client", var pipe, var file])
             return RunFilePackIpcClientAsync(pipe, file).GetAwaiter().GetResult();
         if (args is ["--filepack-crash-worker", var fixture, var engine])
@@ -29,7 +31,7 @@ internal static partial class Program
         try
         {
             if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _] or ["--clipboard-native-filepack-quick-checks", _] or ["--clipboard-native-filepack-ipc-checks"] or ["--clipboard-native-shortcut-overview-checks", _]
-                or ["--background-resource-checks", _] or ["--background-resource-soak", _, _] or ["--window-memory-profile", _] or ["--runtime-memory-profile", _] or ["--runtime-memory-profile-production", _] or ["--runtime-memory-profile-retained", _] or ["--runtime-memory-experiment-optimized", _] or ["--runtime-memory-experiment-aggressive", _] or ["--runtime-memory-experiment-retained-aggressive", _] or ["--runtime-host-checks"] or ["--preview-resource-checks"] or ["--filepack-intake-checks"]) ClipboardTestStation.Connect();
+                or ["--clipboard-native-filepack-drop-host-checks"] or ["--background-resource-checks", _] or ["--background-resource-soak", _, _] or ["--window-memory-profile", _] or ["--runtime-memory-profile", _] or ["--runtime-memory-profile-production", _] or ["--runtime-memory-profile-retained", _] or ["--runtime-memory-experiment-optimized", _] or ["--runtime-memory-experiment-aggressive", _] or ["--runtime-memory-experiment-retained-aggressive", _] or ["--runtime-host-checks"] or ["--preview-resource-checks"] or ["--filepack-intake-checks"]) ClipboardTestStation.Connect();
             else if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer") ClipboardTestStation.Connect(args[1], args[2]);
         }
         catch (Exception exception) { Console.WriteLine("FAIL Clipboard test isolation: " + exception); return 1; }
@@ -89,6 +91,8 @@ internal static partial class Program
                 { await CheckFilePackQuickAsync(quickImages); exitCode = 0; return; }
                 if (args is ["--clipboard-native-filepack-ipc-checks"])
                 { await CheckFilePackBrokerAsync(); exitCode = 0; return; }
+                if (args is ["--clipboard-native-filepack-drop-host-checks"])
+                { await CheckFilePackDropHostAsync(); exitCode = 0; return; }
                 if (args is ["--clipboard-native-filepack-checks", var filePackImages])
                 {
                     await CheckFilePackEngineAsync(); await CheckFilePackCrashRecoveryAsync();
@@ -96,6 +100,7 @@ internal static partial class Program
                     await CheckFilePackVisualsAsync(filePackImages); await CheckFilePackExitRetryAsync();
                     await CheckFilePackQuickAsync(Path.Combine(filePackImages, "quick"));
                     await CheckFilePackIntakeAsync();
+                    await CheckFilePackDropHostAsync();
                     await CheckFilePackDisabledResourcesAsync();
                     CheckFavorites(); CheckNavigation(); CheckAppSettings(); exitCode = 0; return;
                 }

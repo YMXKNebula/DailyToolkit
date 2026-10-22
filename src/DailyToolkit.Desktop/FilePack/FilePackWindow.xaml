@@ -6,7 +6,7 @@
  UseLayoutRounding="True" SnapsToDevicePixels="True" KeyDown="WindowKeyDown">
  <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6" CornerRadius="12" GlassFrameThickness="0" UseAeroCaptionButtons="False"/></shell:WindowChrome.WindowChrome>
  <Border x:Name="WindowFrame" Focusable="True" Background="{DynamicResource WindowBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="16,10,16,16">
-  <Grid shell:WindowChrome.IsHitTestVisibleInChrome="True"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+  <Grid shell:WindowChrome.IsHitTestVisibleInChrome="True"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
    <Grid Height="30" Background="Transparent" Margin="0,0,0,12" shell:WindowChrome.IsHitTestVisibleInChrome="False">
     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
     <TextBlock x:Name="WindowTitle" Text="文件集装箱" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -14,6 +14,7 @@
     <Button x:Name="CloseButton" Grid.Column="2" Content="×" Click="HideWindow" Width="30" Height="28" Padding="0" Focusable="False" ToolTip="关闭（Esc）" AutomationProperties.Name="关闭文件集装箱" shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
    </Grid>
    <ContentControl x:Name="Body" Grid.Row="1"/>
+   <ContentControl x:Name="DropHostArea" Grid.Row="2" Height="40" Margin="0,10,0,0" Visibility="Collapsed" AutomationProperties.Name="拖入文件或文件夹"/>
   </Grid>
  </Border>
 </Window>

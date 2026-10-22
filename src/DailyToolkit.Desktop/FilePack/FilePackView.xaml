@@ -55,7 +55,7 @@
        <Button Content="清空" Command="{Binding ClearCommand}" Style="{StaticResource SmallButton}"/>
       </WrapPanel>
       <Grid Margin="0,2,0,10"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-       <TextBlock Text="拖入文件或文件夹" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+       <TextBlock x:Name="DropHint" Text="拖入文件或文件夹" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
        <Button Grid.Column="1" Content="取消收集" Command="{Binding CancelCollectionCommand}" Style="{StaticResource SmallButton}"
         Visibility="{Binding IsCollecting, Converter={StaticResource VisibleWhen}}"/>
       </Grid>

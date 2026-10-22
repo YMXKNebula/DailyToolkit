@@ -9,6 +9,7 @@ using System.Windows.Shell;
 using DailyToolkit.Core.FilePack;
 using DailyToolkit.Core.Notes;
 using DailyToolkit.Desktop.Notes;
+using DailyToolkit.Desktop.FilePack.DropHost;
 
 namespace DailyToolkit.Desktop.FilePack;
 
@@ -24,11 +25,24 @@ public partial class FilePackWindow : Window
     private readonly double _minimumWidth, _minimumHeight;
     private HwndSource? _source;
     private bool _closingRuntime;
+    private readonly bool _enableExternalDrop;
+    private readonly Func<Func<IReadOnlyList<string>, Task>, Action, FilePackDropMessage, FilePackDropBridge> _createDropBridge;
+    private FilePackDropBridge? _dropBridge;
+    private FilePackDropSurface? _dropSurface;
+    private Task _dropStarting = Task.CompletedTask;
+    private Task _dropStopping = Task.CompletedTask;
+    private Task _dropSuspending = Task.CompletedTask;
+    private bool _dropPaused;
+    private int _dropGeneration;
     public event Action? HideRequested;
     internal IntPtr Handle => new WindowInteropHelper(this).Handle;
-    public FilePackWindow(FilePackViewModel model, bool quick)
+    public FilePackWindow(FilePackViewModel model, bool quick) : this(model, quick, false) { }
+    internal FilePackWindow(FilePackViewModel model, bool quick, bool enableExternalDrop,
+        Func<Func<IReadOnlyList<string>, Task>, Action, FilePackDropMessage, FilePackDropBridge>? createDropBridge = null)
     {
         InitializeComponent(); DataContext = model; _model = model; _quick = quick;
+        _enableExternalDrop = enableExternalDrop && (createDropBridge is not null || FilePackDropProcess.NeedsStandardDropHost);
+        _createDropBridge = createDropBridge ?? ((receive, failure, palette) => new(receive, failure, palette));
         _appearance = quick ? model.QuickAppearance : model.PackAppearance;
         Width = quick ? 480 : 1080; Height = quick ? 440 : 780;
         MinWidth = _minimumWidth = quick ? 380 : 680; MinHeight = _minimumHeight = quick ? 320 : 540;
@@ -42,7 +56,9 @@ public partial class FilePackWindow : Window
             Grid.SetColumn(WindowTitle, 1); WindowTitle.HorizontalAlignment = HorizontalAlignment.Center; WindowTitle.Margin = new(8, 0, 8, 0);
         }
         Body.Content = quick ? new FilePackQuickView() : new FilePackView();
+        if (_enableExternalDrop) SetDropHint(false);
         _appearance.Apply(Resources); _appearance.PropertyChanged += AppearanceChanged;
+        _model.PropertyChanged += DropStateChanged;
         SystemParameters.StaticPropertyChanged += SystemAppearanceChanged;
         SourceInitialized += (_, _) =>
         {
@@ -50,16 +66,111 @@ public partial class FilePackWindow : Window
         };
         SizeChanged += (_, _) => WindowChrome.GetWindowChrome(this).CaptionHeight = Math.Max(0, ActualHeight - 12);
         Closing += (_, e) => { if (!_closingRuntime) { e.Cancel = true; HideRequested?.Invoke(); } };
+        IsVisibleChanged += (_, _) => UpdateDropLifetime();
+        StateChanged += (_, _) => UpdateDropLifetime();
         Closed += (_, _) =>
         {
             _appearance.PropertyChanged -= AppearanceChanged; SystemParameters.StaticPropertyChanged -= SystemAppearanceChanged;
+            _model.PropertyChanged -= DropStateChanged; StopDropBridge();
             _source?.RemoveHook(Message); _source = null;
         };
     }
     private void AppearanceChanged(object? sender, PropertyChangedEventArgs e)
-    { if (e.PropertyName == nameof(FilePackAppearance.Applied)) _appearance.Apply(Resources); }
+    { if (e.PropertyName == nameof(FilePackAppearance.Applied)) { _appearance.Apply(Resources); UpdateDropPalette(); } }
     private void SystemAppearanceChanged(object? sender, PropertyChangedEventArgs e)
-    { if (e.PropertyName == nameof(SystemParameters.HighContrast)) Dispatcher.BeginInvoke(new Action(() => { if (!_closingRuntime) _appearance.Apply(Resources); })); }
+    { if (e.PropertyName == nameof(SystemParameters.HighContrast)) Dispatcher.BeginInvoke(new Action(() => { if (!_closingRuntime) { _appearance.Apply(Resources); UpdateDropPalette(); } })); }
+    private void DropStateChanged(object? sender, PropertyChangedEventArgs e)
+    { if (e.PropertyName is nameof(FilePackViewModel.CanEditDraft) or nameof(FilePackViewModel.IsEnabled)) UpdateDropPalette(); }
+    private FilePackDropMessage DropPalette()
+    {
+        uint Rgb(string key) { var color = ((SolidColorBrush)FindResource(key)).Color; return (uint)(color.R << 16 | color.G << 8 | color.B); }
+        return new("palette", Background: Rgb("SurfaceBrush"), Foreground: Rgb("MutedBrush"), Border: Rgb("BorderBrush"),
+            Enabled: _model.IsEnabled && _model.CanEditDraft && !_closingRuntime && !_dropPaused);
+    }
+    private void UpdateDropPalette() => _dropBridge?.UpdatePalette(DropPalette());
+    private void SetDropHint(bool active)
+    {
+        if (((FrameworkElement)Body.Content).FindName("DropHint") is TextBlock hint)
+            hint.Text = active ? "拖到窗口下方的拖入区" : "使用上方按钮添加文件";
+    }
+    private void UpdateDropLifetime()
+    {
+        if (!_enableExternalDrop) return;
+        if (_closingRuntime) { StopDropBridge(); return; }
+        if (!IsVisible || WindowState == WindowState.Minimized)
+        { if (_dropSuspending.IsCompleted) _dropSuspending = SuspendDropBridgeAsync(); return; }
+        if (_dropBridge is null) _dropStarting = StartDropBridgeAsync();
+        else if (_dropSuspending.IsCompleted) ResumeDrop();
+    }
+    private async Task StartDropBridgeAsync()
+    {
+        var generation = ++_dropGeneration;
+        await _dropStopping;
+        if (_closingRuntime || generation != _dropGeneration || !IsVisible || WindowState == WindowState.Minimized) return;
+        _dropPaused = false;
+        var bridge = _createDropBridge(paths => Dispatcher.InvokeAsync(async () =>
+        {
+            if (!_model.IsEnabled || _model.IsStopping) return;
+            await _model.WaitForDraftAsync();
+            if (_model.IsEnabled && !_model.IsStopping) await _model.AddPathsAsync(paths);
+        }).Task.Unwrap(), () => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!_closingRuntime && generation == _dropGeneration)
+            { StopDropBridge(); _model.SetNotice("拖放入口已关闭，请重新打开窗口。"); }
+        })), DropPalette());
+        _dropBridge = bridge;
+        try
+        {
+            await bridge.StartAsync();
+            if (_closingRuntime || generation != _dropGeneration || !IsVisible || WindowState == WindowState.Minimized)
+            { await bridge.DisposeAsync(); return; }
+            _dropSurface = new(bridge.Handle, bridge.ExpectedProcessId, () => bridge.IsHostAlive);
+            DropHostArea.Content = _dropSurface; DropHostArea.Visibility = Visibility.Visible;
+            DropHostArea.UpdateLayout();
+            SetDropHint(true);
+            UpdateDropPalette();
+        }
+        catch (Exception error) when (FilePackDropWire.IsExpected(error) || error is System.Runtime.InteropServices.COMException)
+        {
+            if (generation == _dropGeneration)
+            {
+                _dropSurface?.Dispose(); _dropSurface = null; DropHostArea.Content = null; DropHostArea.Visibility = Visibility.Collapsed;
+                _dropBridge = null;
+                SetDropHint(false);
+                if (!_closingRuntime) _model.SetNotice("拖放入口未能打开，可用文件选择或右键装载。");
+            }
+            await bridge.DisposeAsync();
+        }
+    }
+    private void StopDropBridge()
+    {
+        ++_dropGeneration;
+        _dropSurface?.Dispose(); _dropSurface = null; DropHostArea.Content = null; DropHostArea.Visibility = Visibility.Collapsed;
+        SetDropHint(false);
+        var bridge = _dropBridge; _dropBridge = null;
+        if (bridge is not null) _dropStopping = Task.WhenAll(_dropStopping, DisposeDropBridgeAsync(bridge));
+    }
+    private static async Task DisposeDropBridgeAsync(FilePackDropBridge bridge) => await bridge.DisposeAsync();
+    private async Task SuspendDropBridgeAsync()
+    {
+        await _dropStarting;
+        var bridge = _dropBridge;
+        if (bridge is null) return;
+        _dropPaused = true;
+        await bridge.FlushAsync();
+        if (!ReferenceEquals(bridge, _dropBridge)) return;
+        if (!_closingRuntime && IsVisible && WindowState != WindowState.Minimized) ResumeDrop();
+        else { StopDropBridge(); await _dropStopping; }
+    }
+    internal Task DropCleanup => Task.WhenAll(_dropStopping, _dropStarting, _dropSuspending);
+    internal void ResumeDrop() { _dropPaused = false; UpdateDropPalette(); }
+    internal async Task<bool> FlushDropAsync()
+    {
+        await _dropStarting;
+        _dropPaused = true;
+        if (_dropBridge is null || await _dropBridge.FlushAsync()) return true;
+        _model.SetNotice("拖入的文件尚未接收完成，请稍后再关闭。"); return false;
+    }
     internal void ShowNearCursor() => ShowNearPoint(NotesPositionService.Cursor());
     internal void ShowNearPoint((int X, int Y) point)
     {

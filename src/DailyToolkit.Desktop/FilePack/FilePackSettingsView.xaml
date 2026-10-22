@@ -9,8 +9,7 @@
   <StackPanel Margin="0,0,8,0" IsEnabled="{Binding SettingsLoaded}">
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="文件集装箱" Style="{StaticResource SectionTitle}"/>
-    <WrapPanel><Button Content="快速装载" Command="{Binding OpenQuickWindowCommand}" Margin="0,0,8,8"/><Button Content="详细打包" Command="{Binding OpenPackWindowCommand}" Margin="0,0,0,8"/></WrapPanel>
-    <Grid Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <TextBlock Text="打开窗口快捷键" VerticalAlignment="Center"/>
      <TextBox Grid.Column="1" IsReadOnly="True" Text="{Binding ShortcutText, Mode=OneWay}" PreviewKeyDown="CaptureShortcut" GotKeyboardFocus="ShortcutFocus" LostKeyboardFocus="ShortcutBlur" Margin="12,0,8,0" AutomationProperties.Name="文件集装箱快捷键"/>
      <Button Grid.Column="2" Content="清空" Click="ClearShortcut" Padding="10,6"/>
@@ -21,6 +20,7 @@
      <RadioButton x:Name="QuickShortcutChoice" Content="快速装载" Tag="Quick" GroupName="FilePackShortcutWindow" Style="{StaticResource NavButton}" Checked="SelectShortcutWindow" Margin="0,0,8,0" AutomationProperties.Name="快捷键打开快速装载"/>
      <RadioButton x:Name="DetailedShortcutChoice" Content="详细打包" Tag="Detailed" GroupName="FilePackShortcutWindow" Style="{StaticResource NavButton}" Checked="SelectShortcutWindow" AutomationProperties.Name="快捷键打开详细打包"/>
     </WrapPanel>
+    <WrapPanel Margin="0,12,0,0"><Button Content="快速装载" Command="{Binding OpenQuickWindowCommand}" Margin="0,0,8,8"/><Button Content="详细打包" Command="{Binding OpenPackWindowCommand}" Margin="0,0,0,8"/></WrapPanel>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="快捷打包" Style="{StaticResource SectionTitle}"/>
