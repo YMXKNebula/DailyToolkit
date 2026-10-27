@@ -1,5 +1,12 @@
 # DailyToolkit 项目约束
 
+## 项目接续与云端开发
+
+- 新对话先完整阅读 `docs/CLOUD_HANDOFF.md`；准备 Codex 云端环境时再读 `docs/CODEX_CLOUD.md`，首条接续指令见 `docs/CLOUD_START_PROMPT.md`。先核对现场分支、HEAD 和工作区，不把历史快照当成当前状态。
+- 当前项目接续指定 `gpt-6.1-sol`、`xhigh`，不自行切换模型或推理强度；不能确认云端所选配置时如实说明。没有本次任务的明确要求时，不创建子代理。
+- `scripts/check-cloud.ps1` 仅构建和检查 Core；通过不代表 Windows 桌面功能、管理员拖放或安装已验证。完整 Windows 检查继续使用现有工作流。
+- 未获当前任务授权，不发布版本、不安装更新、不操作实际用户数据、自启、网络或 VPN，不关闭用户程序，不执行实机键鼠或 UAC 测试。保留已有未跟踪文件和本地证据。
+
 ## UI 一致性
 
 - UI 新增、修改或重构前，先检查 `src/DailyToolkit.Desktop/Theme.xaml`、`Presentation/ThemePalette.cs`、现有控件模板，以及具有代表性的功能页面。

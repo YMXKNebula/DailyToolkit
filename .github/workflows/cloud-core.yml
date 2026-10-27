@@ -1,0 +1,53 @@
+name: Cloud core checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/DailyToolkit.Core/**
+      - tests/DailyToolkit.Tests/**
+      - scripts/check-cloud.ps1
+      - .github/workflows/cloud-core.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - src/DailyToolkit.Core/**
+      - tests/DailyToolkit.Tests/**
+      - scripts/check-cloud.ps1
+      - .github/workflows/cloud-core.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Prepare core dependencies
+        shell: pwsh
+        run: ./scripts/check-cloud.ps1 -RestoreOnly
+      - name: Build and run core checks
+        shell: pwsh
+        run: |
+          ./scripts/check-cloud.ps1 -NoRestore
+          Write-Output ('CLOUD_CORE_SUMMARY_JSON=' + ((Get-Content -LiteralPath .local/cloud-core-checks/summary.json -Raw | ConvertFrom-Json) | ConvertTo-Json -Depth 4 -Compress))
+      - name: Keep core results and explicit skips
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cloud-core-${{ runner.os }}
+          path: .local/cloud-core-checks/
+          if-no-files-found: warn
+          retention-days: 14
