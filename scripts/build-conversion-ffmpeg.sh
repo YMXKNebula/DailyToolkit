@@ -15,11 +15,13 @@ export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" PKG_CONFIG_PATH="$prefix/lib/pk
 export CFLAGS='-O2' CXXFLAGS='-O2'
 
 python3 - "$root/scripts/conversion-sources.json" "$build" <<'PY'
-import hashlib,json,pathlib,subprocess,sys,tarfile
+import hashlib,json,os,pathlib,shutil,subprocess,sys,tarfile
 spec=pathlib.Path(sys.argv[1]); root=pathlib.Path(sys.argv[2])
 for item in json.loads(spec.read_text()):
     name=item['name']; archive=root/'output'/'sources'/(name+'.tar.gz')
-    subprocess.run(['curl','--fail','--silent','--show-error','--location','--connect-timeout','20','--max-time','180','--output',str(archive),item['url']],check=True)
+    local=pathlib.Path(os.environ.get('CONVERSION_SOURCE_DIRECTORY',str(root)))/(name+'.tar.gz')
+    if local.is_file(): shutil.copyfile(local,archive)
+    else: subprocess.run(['curl','--fail','--silent','--show-error','--location','--connect-timeout','20','--max-time','180','--output',str(archive),item['url']],check=True)
     if hashlib.sha256(archive.read_bytes()).hexdigest()!=item['sha256']: raise RuntimeError('Source checksum mismatch: '+name)
     target=root/name; target.mkdir()
     subprocess.run(['tar','-xzf',str(archive),'--strip-components=1','-C',str(target)],check=True)
@@ -57,7 +59,11 @@ EOF
 run() {
     local label=$1; shift
     echo "Building $label"
-    if ! "$@" >"$build/$label.log" 2>&1; then tail -n 100 "$build/$label.log"; return 1; fi
+    if ! "$@" >"$build/$label.log" 2>&1; then
+        tail -n 100 "$build/$label.log"
+        if [[ "$label" == ffmpeg-configure ]]; then tail -n 100 "$build/ffmpeg/ffbuild/config.log"; fi
+        return 1
+    fi
 }
 cmake_lib() {
     local name=$1; shift
@@ -69,6 +75,10 @@ cmake_lib() {
 }
 cmake_lib ogg -DINSTALL_DOCS=OFF
 cmake_lib zlib -DZLIB_BUILD_EXAMPLES=OFF -DZLIB_BUILD_TESTING=OFF -DZLIB_BUILD_SHARED=OFF
+# Upstream's Windows static archive has a suffix while its pkg-config file
+# advertises -lz. Keep a link inside this private cross-build prefix only.
+if [[ ! -f "$prefix/lib/libz.a" && -f "$prefix/lib/libzs.a" ]]; then ln -s libzs.a "$prefix/lib/libz.a"; fi
+if [[ ! -f "$prefix/lib/libz.a" && -f "$prefix/lib/libzstatic.a" ]]; then ln -s libzstatic.a "$prefix/lib/libz.a"; fi
 cmake_lib vorbis
 cmake_lib opus -DOPUS_BUILD_TESTING=OFF -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_DRED=OFF -DOPUS_DEEP_PLC=OFF -DOPUS_OSCE=OFF
 cmake_lib webp -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
@@ -126,11 +136,17 @@ run dav1d-install meson install -C "$build/dav1d-build"
 )
 # Full preferred source and exact build recipe travel with the executable.
 cp "$root/scripts/build-conversion-ffmpeg.sh" "$root/scripts/conversion-sources.json" "$out/sources/"
+mkdir -p "$out/licenses/toolchain"
+for notice in /usr/share/doc/gcc-mingw-w64-base/copyright /usr/share/doc/mingw-w64-common/copyright; do
+    [[ -f "$notice" ]] || { echo "Missing toolchain notice: $notice"; exit 1; }
+    cp "$notice" "$out/licenses/toolchain/$(basename "$(dirname "$notice")").txt"
+done
 printf '%s\n' 'FFmpeg 9.0.2, GPL-2.0-or-later, with x264 and the codecs listed in sources/conversion-sources.json.' \
     'Unmodified upstream source archives, notices and the cross-build recipe are included in sources/ and licenses/.' \
     'No ffplay, ffprobe, network protocols, capture devices, neural audio options or AI filters are built.' \
     'Build dependencies on Ubuntu: gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix nasm cmake ninja-build meson pkg-config make curl python3.' \
-    'Rebuild from the DailyToolkit repository with: bash scripts/build-conversion-ffmpeg.sh' > "$out/SOURCE.txt"
+    'Rebuild from the DailyToolkit repository with: bash scripts/build-conversion-ffmpeg.sh' \
+    'For source-only rebuilding, copy the two recipe files to an empty scripts/ directory and set CONVERSION_SOURCE_DIRECTORY to this sources/ directory.' > "$out/SOURCE.txt"
 x86_64-w64-mingw32-objdump -p "$out/ffmpeg.exe" | sed -n 's/.*DLL Name: //p' > "$out/system-dependencies.txt"
 if grep -Eiq 'libgcc|libstdc|libwinpthread|libav|\.dll[^[:space:]]' "$out/system-dependencies.txt"; then
     echo 'Unexpected external runtime DLL'; cat "$out/system-dependencies.txt"; exit 1
@@ -138,6 +154,8 @@ fi
 mkdir -p "$root/.local/conversion-tools/tools"
 if [[ -e "$root/.local/conversion-tools/tools/ffmpeg" ]]; then echo 'Refuse to replace an existing engine directory'; exit 1; fi
 mv "$out" "$root/.local/conversion-tools/tools/ffmpeg"
+python3 "$root/scripts/conversion-manifest.py" create "$root/.local/conversion-tools/tools/ffmpeg" ffmpeg \
+    "$root/scripts/build-conversion-ffmpeg.sh" "$root/scripts/conversion-sources.json"
 echo 'FFmpeg bundle ready:'
 du -sh "$root/.local/conversion-tools/tools/ffmpeg"
 cat "$root/.local/conversion-tools/tools/ffmpeg/system-dependencies.txt"

@@ -93,8 +93,9 @@ def stage(source, target, crt):
     crt_files = {p.name.lower(): p for p in crt.glob('*.dll')}
     additional = {}
     checked = set()
-    system = set('advapi32 avrt bcrypt cabinet cfgmgr32 comctl32 comdlg32 credui crypt32 cryptbase cryptsp d2d1 d3d11 d3d12 d3d9 d3dcompiler_47 dcomp dhcpcsvc dnsapi dsound dwmapi dwrite dxgi dxva2 faultrep gdi32 gdiplus glu32 hid imagehlp imm32 iphlpapi kernel32 mpr mprapi msimg32 msvcrt mswsock msxml6 ncrypt netapi32 ntdll ole32 oleacc oleaut32 opengl32 powrprof propsys psapi rasapi32 rpcrt4 secur32 setupapi shcore shell32 shlwapi urlmon user32 userenv usp10 uxtheme version winhttp wininet winmm winscard winspool.drv wintrust wlanapi wldap32 ws2_32 wtsapi32'.split())
+    system = set('advapi32 avrt bcrypt cabinet cfgmgr32 comctl32 comdlg32 combase credui crypt32 cryptbase cryptsp d2d1 d3d11 d3d12 d3d9 d3dcompiler_47 dcomp dhcpcsvc dnsapi dsound dwmapi dwrite dxgi dxva2 faultrep fontsub gdi32 gdiplus glu32 hid imagehlp imm32 iphlpapi kernel32 kernelbase mpr mprapi msimg32 msvcrt mswsock msxml6 ncrypt netapi32 ntdll ole32 oleacc oleaut32 opengl32 powrprof profapi propsys psapi rasapi32 rpcrt4 secur32 setupapi shcore shell32 shlwapi sspicli ucrtbase urlmon user32 userenv usp10 uxtheme version winhttp wininet winmm winscard winspool.drv wintrust wlanapi wldap32 ws2_32 wtsapi32'.split())
     system = {x if '.' in x else x + '.dll' for x in system}
+    missing = set()
     while True:
         pending = {rel: source_files[rel] for rel in chosen if rel not in checked and pathlib.PurePosixPath(rel).suffix.lower() in ('.dll', '.exe', '.com', '.bin')}
         pending.update({rel: p for rel, p in additional.items() if rel not in checked})
@@ -108,7 +109,9 @@ def stage(source, target, crt):
                 elif dep in crt_files:
                     additional['program/' + dep] = crt_files[dep]
                 elif dep not in system and not dep.startswith(('api-ms-win-', 'ext-ms-win-')):
-                    raise ValueError(f'Unresolved dependency {dep} imported by {rel}')
+                    missing.add(f'{dep} imported by {rel}')
+    if missing:
+        raise ValueError('Unresolved dependencies:\n' + '\n'.join(sorted(missing)))
     for rel in sorted(chosen):
         dest = target / rel
         if rel.startswith('Fonts/'):

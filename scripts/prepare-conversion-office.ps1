@@ -61,3 +61,5 @@ $input = Join-Path $work '离线检查.txt'
 & (Join-Path $OutputDirectory 'program/soffice.com') ('-env:UserInstallation=' + ([uri]($profile + '\')).AbsoluteUri) --headless --nologo --nodefault --nofirststartwizard --norestore --convert-to pdf --outdir $work $input
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $work '离线检查.pdf'))) { throw 'Selected app-local office runtime did not convert Unicode text to PDF.' }
 Write-Host 'PASS Selected app-local LibreOffice: Unicode TXT to PDF without installation.'
+& python (Join-Path $PSScriptRoot 'conversion-manifest.py') create $OutputDirectory libreoffice $PSCommandPath (Join-Path $PSScriptRoot 'stage-conversion-office.py')
+if ($LASTEXITCODE -ne 0) { throw 'Office component manifest creation failed.' }
