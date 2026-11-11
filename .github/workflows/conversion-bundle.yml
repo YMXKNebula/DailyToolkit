@@ -5,6 +5,32 @@ on:
 permissions:
   contents: read
 jobs:
+  ffmpeg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Prepare cross compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix nasm cmake ninja-build meson pkg-config make
+      - name: Build only the conversion engine
+        run: bash scripts/build-conversion-ffmpeg.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: conversion-ffmpeg-win-x64
+          path: .local/conversion-tools/tools/ffmpeg/**
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: conversion-ffmpeg-build-logs
+          path: |
+            .local/conversion-ffmpeg/**/*.log
+            .local/conversion-ffmpeg/**/config.log
+          retention-days: 7
   inspect:
     runs-on: windows-latest
     timeout-minutes: 15
