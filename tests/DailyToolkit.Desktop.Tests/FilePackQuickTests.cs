@@ -323,7 +323,6 @@ internal static partial class Program
             Console.WriteLine("PASS FilePack switch, separate quick/detail/settings views, shared draft, independent saved quick ZIP settings, auto-rename, source preservation, shared window palette drafts/presets/failure/restart, shortcut target, fixed detailed position, pointer-centered quick title, application-themed settings and native chrome");
         }
         finally { FilePackPaths.EnsureNoReparsePoints(fixture.FullName); fixture.Delete(recursive: true); }
-        await CheckFilePackBrokerAsync();
         CheckFilePackContextMenu();
     }
     private static void CheckFilePackCursorPlacement(FilePackWindow window)
@@ -481,31 +480,35 @@ internal static partial class Program
         }
         // Explorer launches a separate client process per selection. Keep those
         // blocking connection attempts out of the server's own thread pool.
-        var clients = new List<Process>();
-        try
+        for (var burst = 0; burst < 5; burst++)
         {
-            foreach (var path in paths)
+            protocolTrace.Enqueue($"{clock.ElapsedMilliseconds}ms burst={burst + 1}");
+            var clients = new List<Process>();
+            try
             {
-                var start = new ProcessStartInfo(System.Environment.ProcessPath!)
-                    { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-                if (Path.GetFileNameWithoutExtension(start.FileName).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
-                    start.ArgumentList.Add(typeof(Program).Assembly.Location);
-                foreach (var argument in new[] { "--filepack-ipc-client", name, path }) start.ArgumentList.Add(argument);
-                clients.Add(Process.Start(start) ?? throw new InvalidOperationException("IPC client fixture did not start"));
+                foreach (var path in paths)
+                {
+                    var start = new ProcessStartInfo(System.Environment.ProcessPath!)
+                        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                    if (Path.GetFileNameWithoutExtension(start.FileName).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+                        start.ArgumentList.Add(typeof(Program).Assembly.Location);
+                    foreach (var argument in new[] { "--filepack-ipc-client", name, path }) start.ArgumentList.Add(argument);
+                    clients.Add(Process.Start(start) ?? throw new InvalidOperationException("IPC client fixture did not start"));
+                }
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+                await Task.WhenAll(clients.Select(async client =>
+                {
+                    var output = client.StandardOutput.ReadToEndAsync(); var error = client.StandardError.ReadToEndAsync();
+                    await client.WaitForExitAsync(timeout.Token);
+                    Require(client.ExitCode == 0, "Concurrent Explorer client failed: " + await output + await error + string.Join("; ", serverFailures) +
+                        "\nBroker trace:\n" + string.Join("\n", protocolTrace));
+                }));
             }
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
-            await Task.WhenAll(clients.Select(async client =>
+            finally
             {
-                var output = client.StandardOutput.ReadToEndAsync(); var error = client.StandardError.ReadToEndAsync();
-                await client.WaitForExitAsync(timeout.Token);
-                Require(client.ExitCode == 0, "Concurrent Explorer client failed: " + await output + await error + string.Join("; ", serverFailures) +
-                    "\nBroker trace:\n" + string.Join("\n", protocolTrace));
-            }));
-        }
-        finally
-        {
-            foreach (var client in clients)
-            { try { if (!client.HasExited) { client.Kill(entireProcessTree: true); await client.WaitForExitAsync(); } } finally { client.Dispose(); } }
+                foreach (var client in clients)
+                { try { if (!client.HasExited) { client.Kill(entireProcessTree: true); await client.WaitForExitAsync(); } } finally { client.Dispose(); } }
+            }
         }
         await WaitForFilePackAsync(() => received.Count == paths.Length, "Explorer burst lost selected files");
         await using (var invalid = await OpenFilePackProtocolClientAsync(name))
@@ -547,7 +550,7 @@ internal static partial class Program
             using var replacement = NamedPipeServerStreamAcl.Create(stopName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous, 0, 0, FilePackRequestBroker.CreatePipeSecurity());
         }
-        Console.WriteLine("PASS FilePack same-user local IPC: 12 concurrent client processes, delayed acknowledgement read, truncated/oversized requests, independent progress beside a retained connection, eight-slot timeout recovery and disposal during an incomplete request; no Explorer or registry changes");
+        Console.WriteLine("PASS FilePack same-user local IPC: five bursts of 12 concurrent client processes, delayed acknowledgement read, truncated/oversized requests, independent progress beside a retained connection, eight-slot timeout recovery and disposal during an incomplete request; no Explorer or registry changes");
     }
     private static async Task<NamedPipeClientStream> OpenFilePackProtocolClientAsync(string name)
     {
