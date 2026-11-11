@@ -73,7 +73,9 @@ def stage(source, target, crt):
                 chosen.add(rel)
             if p.name in ('soffice.com', 'soffice.exe', 'soffice.bin'):
                 chosen.add(rel)
-        elif rel.startswith(('program/types/', 'program/resource/en_US/', 'program/resource/zh_CN/')):
+        elif rel.startswith(('program/types/', 'program/resource/en_US/', 'program/resource/zh_CN/',
+                             'program/resource/common/fonts/', 'share/resource/common/fonts/',
+                             'presets/', 'share/presets/')):
             chosen.add(rel)
         elif rel == 'program/services/services.rdb':
             chosen.add(rel)
@@ -86,6 +88,8 @@ def stage(source, target, crt):
     for required in ('program/soffice.com', 'program/soffice.bin', 'program/mergedlo.dll', 'license.txt', 'NOTICE'):
         if required not in chosen:
             raise ValueError('Missing required upstream file: ' + required)
+    if not any(rel.startswith(('presets/', 'share/presets/')) for rel in chosen):
+        raise ValueError('The upstream profile presets required by desktop/app/userinstall.cxx are missing')
 
     # Recover any transitive dependency excluded by role above. Runtime DLLs
     # must come from this archive or the Microsoft app-local CRT, never PATH.

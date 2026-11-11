@@ -71,6 +71,14 @@ $probeProfile = Join-Path ([IO.Path]::GetTempPath()) ('dtk-lo-' + [guid]::NewGui
 $probeInput = Join-Path $work '离线检查.txt'
 [IO.File]::WriteAllText($probeInput, '格式转换离线检查', [Text.UTF8Encoding]::new($false))
 try {
+    New-Item -ItemType Directory -Path (Join-Path $probeProfile 'user') -Force | Out-Null
+    @'
+<?xml version="1.0" encoding="UTF-8"?>
+<oor:items xmlns:oor="http://openoffice.org/2001/registry">
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item>
+<item oor:path="/org.openoffice.Office.Jobs/Jobs/UpdateCheck/Arguments"><prop oor:name="AutoCheckEnabled" oor:op="fuse"><value>false</value></prop></item>
+</oor:items>
+'@ | Set-Content -LiteralPath (Join-Path $probeProfile 'user/registrymodifications.xcu') -Encoding utf8
     $probeLog = Join-Path $work 'probe.log'
     $probeError = Join-Path $work 'probe-error.log'
     $arguments = @(('-env:UserInstallation=' + ([uri]($probeProfile + '\')).AbsoluteUri), '--headless', '--nologo', '--nodefault', '--nofirststartwizard', '--norestore', '--convert-to', 'pdf', '--outdir', ('"' + $work + '"'), ('"' + $probeInput + '"'))
