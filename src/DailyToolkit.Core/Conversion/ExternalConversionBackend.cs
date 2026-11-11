@@ -10,6 +10,9 @@ namespace DailyToolkit.Core.Conversion;
 
 public sealed class ExternalConversionBackend : IConversionBackend
 {
+    public static Task RunOwnedWorkerAsync(string executable, IReadOnlyList<string> arguments, CancellationToken cancellationToken) =>
+        RunProcessAsync(executable, arguments, cancellationToken);
+
     public async Task<IReadOnlyList<ConvertedFile>> ConvertAsync(ConversionRequest request, string workspace,
         IProgress<double>? progress, CancellationToken cancellationToken)
     {

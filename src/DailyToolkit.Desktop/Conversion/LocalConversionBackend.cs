@@ -56,7 +56,7 @@ public sealed class LocalConversionBackend : IConversionBackend
         return request.Kind switch
         {
             ConversionKind.Pdf => await ConvertPdfAsync(request, workspace, progress, cancellationToken).ConfigureAwait(false),
-            ConversionKind.Media => await ConvertMediaAsync(request, workspace, progress, cancellationToken).ConfigureAwait(false),
+            ConversionKind.Media => await NativeMediaWorker.ConvertAsync(request, workspace, progress, cancellationToken).ConfigureAwait(false),
             _ => throw new InvalidOperationException("不支持此转换类型。")
         };
     }, cancellationToken);
@@ -144,7 +144,7 @@ public sealed class LocalConversionBackend : IConversionBackend
         return result;
     }
 
-    private static async Task<IReadOnlyList<ConvertedFile>> ConvertMediaAsync(ConversionRequest request, string workspace,
+    internal static async Task<IReadOnlyList<ConvertedFile>> ConvertMediaInWorkerAsync(ConversionRequest request, string workspace,
         IProgress<double>? progress, CancellationToken cancellationToken)
     {
         var profile = request.Target switch

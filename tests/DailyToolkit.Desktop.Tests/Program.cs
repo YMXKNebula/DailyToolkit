@@ -22,6 +22,14 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == DailyToolkit.Desktop.Conversion.NativeMediaWorker.Argument)
+            return DailyToolkit.Desktop.Conversion.NativeMediaWorker.Run(args);
+        if (args is ["--conversion-worker-hold", var conversionSource, var conversionReady] && System.Environment.GetEnvironmentVariable("CI") == "true")
+        {
+            using var heldConversionFile = new System.IO.FileStream(conversionSource, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
+            System.IO.File.WriteAllText(conversionReady, "ready");
+            Task.Delay(Timeout.Infinite).GetAwaiter().GetResult(); return 0;
+        }
         if (args.Length == 6 && args[0] == "--filepack-drop-host-fixture")
             return RunFilePackDropHostFixture(args);
         if (args is ["--filepack-ipc-client", var pipe, var file])

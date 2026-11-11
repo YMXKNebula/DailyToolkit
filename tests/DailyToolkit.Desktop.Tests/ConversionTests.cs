@@ -82,6 +82,7 @@ internal static partial class Program
             await CheckOfficeConversionAsync(fixture.FullName, runner);
             await CheckNativeMediaConversionAsync(fixture.FullName, runner);
         }
+        catch (Exception exception) { Console.WriteLine("FAIL Conversion fixture: " + exception); throw; }
         finally { fixture.Delete(true); }
     }
 
@@ -150,6 +151,7 @@ internal static partial class Program
             await CheckOfficeConversionAsync(fixture.FullName, runner);
             await CheckNativeMediaConversionAsync(fixture.FullName, runner);
         }
+        catch (Exception exception) { Console.WriteLine("FAIL Headless conversion fixture: " + exception); throw; }
         finally { fixture.Delete(true); }
     }
 
@@ -169,9 +171,36 @@ internal static partial class Program
             writer.Write((short)1); writer.Write((short)1); writer.Write(44100); writer.Write(88200); writer.Write((short)2); writer.Write((short)16);
             writer.Write("data"u8.ToArray()); writer.Write(pcm.Length); writer.Write(pcm);
         }
+        if (System.Environment.GetEnvironmentVariable("CI") == "true")
+        {
+            var ready = Path.Combine(fixture, "worker-ready");
+            using var cancellation = new CancellationTokenSource();
+            var worker = ExternalConversionBackend.RunOwnedWorkerAsync(System.Environment.ProcessPath!,
+                ["--conversion-worker-hold", source, ready], cancellation.Token);
+            try
+            {
+                var deadline = DateTime.UtcNow.AddSeconds(10);
+                while (!File.Exists(ready))
+                {
+                    if (worker.IsCompleted) await worker;
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Conversion worker did not start.");
+                    await Task.Delay(25);
+                }
+                cancellation.Cancel();
+                await ClipboardThrowsAsync<OperationCanceledException>(() => worker.WaitAsync(TimeSpan.FromSeconds(5)));
+                using var released = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.None);
+            }
+            finally
+            {
+                cancellation.Cancel();
+                try { await worker.WaitAsync(TimeSpan.FromSeconds(5)); } catch (OperationCanceledException) { }
+            }
+            Console.WriteLine("PASS Owned conversion worker cancellation releases its file handles");
+        }
         foreach (var format in new[] { "mp3", "m4a", "wav" })
         {
-            var result = await runner.RunAsync(new(source, Path.Combine(fixture, "native-media"), ConversionKind.Media, format, new()));
+            using var operation = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            var result = await runner.RunAsync(new(source, Path.Combine(fixture, "native-media"), ConversionKind.Media, format, new()), cancellationToken: operation.Token);
             Require(result.Count == 1 && new FileInfo(result[0]).Length > 0, "Windows media conversion produced no output");
             using var originalLock = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.None);
             using var resultLock = new FileStream(result[0], FileMode.Open, FileAccess.Read, FileShare.None);
@@ -197,7 +226,8 @@ internal static partial class Program
         }
         foreach (var format in new[] { "mp4", "wmv" })
         {
-            var result = await runner.RunAsync(new(video, Path.Combine(fixture, "native-media"), ConversionKind.Media, format, new()));
+            using var operation = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            var result = await runner.RunAsync(new(video, Path.Combine(fixture, "native-media"), ConversionKind.Media, format, new()), cancellationToken: operation.Token);
             var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(result.Single());
             using (var stream = await file.OpenReadAsync())
             {
