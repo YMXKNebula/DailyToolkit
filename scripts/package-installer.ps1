@@ -12,12 +12,7 @@ if (-not (Test-Path -LiteralPath $executable)) { throw 'Run scripts/publish.ps1 
 if ((Get-Item -LiteralPath $executable).VersionInfo.ProductVersion -notmatch ('^' + [regex]::Escape($version) + '(?:\+|$)')) {
     throw 'The application and installer versions must match.'
 }
-$expected = @('DailyToolkit.exe','LICENSE-DailyToolkit.txt','README.txt','THIRD_PARTY_NOTICES.txt',
-    'microsoft.netcore.app.runtime-LICENSE.TXT','microsoft.netcore.app.runtime-THIRD-PARTY-NOTICES.TXT',
-    'microsoft.windowsdesktop.app.runtime-LICENSE','licenses\Windows-SDK-License.rtf',
-    'tools\7zip\7za.exe','tools\7zip\License.txt','tools\7zip\Readme.txt','tools\7zip\SOURCE.txt',
-    'tools\7zip\COPYING.txt','tools\7zip\7z2604-src.7z')
-$expected += @(Get-ConversionPayloadFiles $PayloadDirectory)
+$expected = @(Get-ApplicationPayloadFiles $PayloadDirectory)
 $actual = @(Get-ChildItem -LiteralPath $PayloadDirectory -Recurse -File | ForEach-Object {
     [IO.Path]::GetRelativePath($PayloadDirectory, $_.FullName)
 })

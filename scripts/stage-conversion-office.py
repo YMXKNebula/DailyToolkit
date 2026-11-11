@@ -75,7 +75,7 @@ def stage(source, target, crt):
                 chosen.add(rel)
         elif rel.startswith(('program/types/', 'program/resource/en_US/', 'program/resource/zh_CN/',
                              'program/resource/common/fonts/', 'share/resource/common/fonts/',
-                             'presets/', 'share/presets/')):
+                             'presets/', 'share/presets/', 'share/config/soffice.cfg/')):
             chosen.add(rel)
         elif rel == 'program/services/services.rdb':
             chosen.add(rel)

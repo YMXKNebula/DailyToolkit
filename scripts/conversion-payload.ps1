@@ -1,4 +1,13 @@
 # Dot-source from publish/package/test scripts. No downloads or system changes.
+function Get-ApplicationPayloadFiles([string]$Directory) {
+    @('DailyToolkit.exe','LICENSE-DailyToolkit.txt','README.txt','THIRD_PARTY_NOTICES.txt',
+        'microsoft.netcore.app.runtime-LICENSE.TXT','microsoft.netcore.app.runtime-THIRD-PARTY-NOTICES.TXT',
+        'microsoft.windowsdesktop.app.runtime-LICENSE','licenses\Windows-SDK-License.rtf',
+        'tools\7zip\7za.exe','tools\7zip\License.txt','tools\7zip\Readme.txt','tools\7zip\SOURCE.txt',
+        'tools\7zip\COPYING.txt','tools\7zip\7z2604-src.7z')
+    Get-ConversionPayloadFiles $Directory
+}
+
 function Get-ConversionPayloadFiles([string]$Directory) {
     $result = [Collections.Generic.List[string]]::new()
     foreach ($engine in @('ffmpeg','libreoffice')) {

@@ -49,6 +49,26 @@ if ($LASTEXITCODE -ne 0 -or (Get-FileHash -LiteralPath $font).Hash.ToLowerInvari
 $fontLicense = Join-Path $OutputDirectory 'LICENSE-NotoSansCJK.txt'
 & curl.exe --fail --silent --show-error --location --connect-timeout 15 --max-time 60 --output $fontLicense "https://raw.githubusercontent.com/notofonts/noto-cjk/$fontRevision/LICENSE"
 if ($LASTEXITCODE -ne 0 -or (Get-FileHash -LiteralPath $fontLicense).Hash.ToLowerInvariant() -ne '6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2') { throw 'Bundled Chinese font license checksum mismatch.' }
+$runtimeLicense = Join-Path $OutputDirectory 'LICENSE-Microsoft-VC-Runtime.docx'
+$runtimeLicenseUrl = 'https://visualstudio.microsoft.com/wp-content/uploads/2025/10/Visual-C-V14-License-Redistributable_and_Runtime_ENU.docx'
+& curl.exe --fail --silent --show-error --location --connect-timeout 15 --max-time 60 --output $runtimeLicense $runtimeLicenseUrl
+if ($LASTEXITCODE -ne 0) { throw 'The Microsoft runtime license could not be preserved.' }
+$licenseArchive = [IO.Compression.ZipFile]::OpenRead($runtimeLicense)
+try {
+    $document = $licenseArchive.GetEntry('word/document.xml')
+    if (-not $document) { throw 'The Microsoft runtime license is not a valid source document.' }
+    $reader = [IO.StreamReader]::new($document.Open())
+    try { [xml]$licenseXml = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    $paragraphs = @($licenseXml.SelectNodes('//*[local-name()="p"]') | ForEach-Object { ($_.SelectNodes('.//*[local-name()="t"]') | ForEach-Object InnerText) -join '' })
+    Write-Host ('Microsoft runtime license SHA-256: ' + (Get-FileHash -LiteralPath $runtimeLicense).Hash.ToLowerInvariant())
+    $paragraphs | Write-Host
+} finally { $licenseArchive.Dispose() }
+foreach ($relative in $summary.microsoftRuntime) {
+    $file = Join-Path $OutputDirectory $relative
+    $signature = Get-AuthenticodeSignature -LiteralPath $file
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') { throw 'The selected CRT is not an unchanged, signed Microsoft redistributable.' }
+    Write-Host ("CRT {0}: {1}; SHA-256 {2}" -f $relative, (Get-Item -LiteralPath $file).VersionInfo.FileVersion, (Get-FileHash -LiteralPath $file).Hash.ToLowerInvariant())
+}
 @"
 LibreOffice 26.2.6.3, The Document Foundation and contributors.
 Unmodified upstream runtime files selected for Writer, Calc and Impress conversion.
@@ -62,7 +82,8 @@ The source archive includes download.lst and external/ with versions, checksums 
 This selection does not change upstream binaries. Selection recipe: scripts/stage-conversion-office.py in DailyToolkit source.
 Microsoft Visual C++ CRT files are included app-local; no runtime installer or system registration is used.
 Copyright (C) Microsoft Corporation. All rights reserved.
-Runtime terms: https://visualstudio.microsoft.com/license-terms/vs2022-cruntime/
+Runtime terms: LICENSE-Microsoft-VC-Runtime.docx
+https://visualstudio.microsoft.com/license-terms/vs2026-ga-visualcpp-v14-redist-runtime/
 Noto Sans CJK SC 2.004 is included as a private document font, with no system font registration.
 Copyright 2014-2021 Adobe and Noto contributors; SIL Open Font License 1.1 in LICENSE-NotoSansCJK.txt.
 Font source: https://github.com/notofonts/noto-cjk/tree/$fontRevision
@@ -90,7 +111,21 @@ try {
         throw 'The selected app-local office probe exceeded one minute.'
     }
     Get-Content -LiteralPath $probeLog, $probeError -ErrorAction SilentlyContinue | Write-Host
-    if ($probe.ExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $work '离线检查.pdf'))) { throw 'Selected app-local office runtime did not convert Unicode text to PDF.' }
+    if ($probe.ExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $work '离线检查.pdf'))) {
+        Write-Host "Probe source exists: $(Test-Path -LiteralPath $probeInput); bytes: $((Get-Item -LiteralPath $probeInput).Length)"
+        $arguments | ForEach-Object { Write-Host "Probe argument: [$_]" }
+        $controlOutput = Join-Path $work 'untrimmed-control'
+        New-Item -ItemType Directory -Path $controlOutput -Force | Out-Null
+        $controlProfile = Join-Path ([IO.Path]::GetTempPath()) ('dtk-lo-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $controlArguments = @(('-env:UserInstallation=' + ([uri]($controlProfile + '\')).AbsoluteUri), '--headless', '--nologo', '--nodefault', '--nofirststartwizard', '--norestore', '--convert-to', 'pdf', '--outdir', ('"' + $controlOutput + '"'), ('"' + $probeInput + '"'))
+            $control = Start-Process -FilePath (Join-Path $source 'program/soffice.com') -ArgumentList $controlArguments -RedirectStandardOutput (Join-Path $work 'control.log') -RedirectStandardError (Join-Path $work 'control-error.log') -PassThru
+            if (-not $control.WaitForExit(60000)) { $control.Kill($true); $control.WaitForExit() }
+            Get-Content -LiteralPath (Join-Path $work 'control.log'), (Join-Path $work 'control-error.log') -ErrorAction SilentlyContinue | Write-Host
+            Write-Host "Untrimmed control produced PDF: $(Test-Path -LiteralPath (Join-Path $controlOutput '离线检查.pdf'))"
+        } finally { if (Test-Path -LiteralPath $controlProfile) { Remove-Item -LiteralPath $controlProfile -Recurse -Force } }
+        throw 'Selected app-local office runtime did not convert Unicode text to PDF.'
+    }
 } finally { if (Test-Path -LiteralPath $probeProfile) { Remove-Item -LiteralPath $probeProfile -Recurse -Force } }
 Write-Host 'PASS Selected app-local LibreOffice: Unicode TXT to PDF without installation.'
 & python (Join-Path $PSScriptRoot 'conversion-manifest.py') create $OutputDirectory libreoffice $PSCommandPath (Join-Path $PSScriptRoot 'stage-conversion-office.py')
