@@ -94,6 +94,7 @@ internal static partial class Program
             Console.WriteLine("SKIP Real LibreOffice conversion: DAILYTOOLKIT_TEST_LIBREOFFICE is not configured."); return;
         }
         var options = new ConversionOptions { LibreOfficePath = engine };
+        var existingProfiles = Directory.GetDirectories(Path.GetTempPath(), "dtk-lo-*").ToHashSet(StringComparer.OrdinalIgnoreCase);
         var output = Path.Combine(fixture, "office-output");
         var word = Path.Combine(fixture, "文档 example.docx");
         using (var zip = System.IO.Compression.ZipFile.Open(word, System.IO.Compression.ZipArchiveMode.Create))
@@ -136,6 +137,7 @@ internal static partial class Program
         var slidePdf = (await runner.RunAsync(new(pptx, output, ConversionKind.Document, "pdf", options))).Single();
         Require((await runner.RunAsync(new(slidePdf, output, ConversionKind.Pdf, "png", new()))).Count > 0, "Presentation PDF did not render");
         Require(original.SequenceEqual(SHA256.HashData(File.ReadAllBytes(word))) && !Directory.EnumerateDirectories(output).Any(), "Office changed original or leaked its isolated profile");
+        Require(Directory.GetDirectories(Path.GetTempPath(), "dtk-lo-*").All(existingProfiles.Contains), "Office retained a temporary profile after conversion");
         Console.WriteLine("PASS Real local LibreOffice: DOCX/ODT/TXT/PDF, XLSX/ODS/CSV and ODP/PPTX/PDF with Unicode and readable PDF pages");
     }
 

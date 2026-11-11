@@ -18,42 +18,52 @@ public sealed class ExternalConversionBackend : IConversionBackend
         if (request.Kind == ConversionKind.Document)
         {
             ValidateDocument(request.Source, cancellationToken);
-            var profile = Path.Combine(workspace, "profile");
-            Directory.CreateDirectory(Path.Combine(profile, "user"));
-            File.WriteAllText(Path.Combine(profile, "user", "registrymodifications.xcu"), OfficeProfile);
-            var inputDirectory = Path.Combine(workspace, "input");
-            Directory.CreateDirectory(inputDirectory);
-            var input = Path.Combine(inputDirectory, Path.GetFileName(request.Source));
-            await using (var source = new FileStream(request.Source, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, true))
-            await using (var copy = new FileStream(input, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true))
-                await source.CopyToAsync(copy, cancellationToken).ConfigureAwait(false);
-            var filter = request.Target switch
+            // LibreOffice creates deeply nested extension-cache paths. Keep its
+            // private profile short even when the output path is already long.
+            var profile = Directory.CreateTempSubdirectory("dtk-lo-").FullName;
+            try
             {
-                "csv" => "csv:Text - txt - csv (StarCalc):44,34,76,1",
-                "txt" => "txt:Text (encoded):UTF8",
-                _ => request.Target
-            };
-            var office = request.Options.LibreOfficePath;
-            if (OperatingSystem.IsWindows() && Path.GetFileName(office).Equals("soffice.exe", StringComparison.OrdinalIgnoreCase))
-            {
-                var console = Path.Combine(Path.GetDirectoryName(office) ?? "", "soffice.com");
-                if (File.Exists(console)) office = console;
+                Directory.CreateDirectory(Path.Combine(profile, "user"));
+                File.WriteAllText(Path.Combine(profile, "user", "registrymodifications.xcu"), OfficeProfile);
+                var inputDirectory = Path.Combine(workspace, "input");
+                Directory.CreateDirectory(inputDirectory);
+                var input = Path.Combine(inputDirectory, Path.GetFileName(request.Source));
+                await using (var source = new FileStream(request.Source, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, true))
+                await using (var copy = new FileStream(input, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true))
+                    await source.CopyToAsync(copy, cancellationToken).ConfigureAwait(false);
+                var filter = request.Target switch
+                {
+                    "csv" => "csv:Text - txt - csv (StarCalc):44,34,76,1",
+                    "txt" => "txt:Text (encoded):UTF8",
+                    _ => request.Target
+                };
+                var office = request.Options.LibreOfficePath;
+                if (OperatingSystem.IsWindows() && Path.GetFileName(office).Equals("soffice.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    var console = Path.Combine(Path.GetDirectoryName(office) ?? "", "soffice.com");
+                    if (File.Exists(console)) office = console;
+                }
+                var engineLog = await RunProcessAsync(office,
+                    ["-env:UserInstallation=" + new Uri(profile + Path.DirectorySeparatorChar).AbsoluteUri,
+                        "--headless", "--nologo", "--nodefault", "--nofirststartwizard", "--norestore",
+                        "--convert-to", filter, "--outdir", workspace, input], cancellationToken).ConfigureAwait(false);
+                output = Path.Combine(workspace, Path.GetFileNameWithoutExtension(request.Source) + "." + request.Target);
+                if (!File.Exists(output))
+                    throw new IOException("文档转换未生成结果，请检查文件格式或保护状态。",
+                        new IOException(engineLog + "\nInput=" + input + "; profile=" + new Uri(profile + Path.DirectorySeparatorChar).AbsoluteUri +
+                            "\nGenerated files: " + string.Join(", ", Directory.EnumerateFiles(workspace).Select(Path.GetFileName))));
+                if (File.Exists(output) && request.Target is not ("pdf" or "csv" or "txt")) ValidateDocument(output, cancellationToken);
+                if (File.Exists(output) && request.Target == "pdf")
+                {
+                    using var document = File.OpenRead(output);
+                    var signature = new byte[5];
+                    if (document.Read(signature) != 5 || !signature.SequenceEqual("%PDF-"u8.ToArray())) throw new IOException("文档引擎未生成有效 PDF。");
+                }
             }
-            var engineLog = await RunProcessAsync(office,
-                ["-env:UserInstallation=" + new Uri(profile + Path.DirectorySeparatorChar).AbsoluteUri,
-                    "--headless", "--nologo", "--nodefault", "--nofirststartwizard", "--norestore",
-                    "--convert-to", filter, "--outdir", workspace, input], cancellationToken).ConfigureAwait(false);
-            output = Path.Combine(workspace, Path.GetFileNameWithoutExtension(request.Source) + "." + request.Target);
-            if (!File.Exists(output))
-                throw new IOException("文档转换未生成结果，请检查文件格式或保护状态。",
-                    new IOException(engineLog + "\nInput=" + input + "; profile=" + new Uri(profile + Path.DirectorySeparatorChar).AbsoluteUri +
-                        "\nGenerated files: " + string.Join(", ", Directory.EnumerateFiles(workspace).Select(Path.GetFileName))));
-            if (File.Exists(output) && request.Target is not ("pdf" or "csv" or "txt")) ValidateDocument(output, cancellationToken);
-            if (File.Exists(output) && request.Target == "pdf")
+            finally
             {
-                using var document = File.OpenRead(output);
-                var signature = new byte[5];
-                if (document.Read(signature) != 5 || !signature.SequenceEqual("%PDF-"u8.ToArray())) throw new IOException("文档引擎未生成有效 PDF。");
+                try { Directory.Delete(profile, recursive: true); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Trace.WriteLine(e); }
             }
         }
         else

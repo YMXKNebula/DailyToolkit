@@ -24,9 +24,10 @@ $installerLog = Join-Path $PSScriptRoot '../.local/conversion-test-engines/libre
 if (Test-Path -LiteralPath $installerLog) {
     Select-String -LiteralPath $installerLog -Pattern 'Feature: gm_p_Wrt;', 'Feature: gm_p_Calc;', 'Feature: gm_p_Impress;' | Select-Object -Last 6 | ForEach-Object { Write-Output $_.Line }
 }
-foreach ($kind in @('shell-empty', 'redirect-empty', 'redirect-configured', 'redirect-job', 'redirect-word', 'redirect-word-job')) {
+foreach ($kind in @('shell-empty', 'redirect-empty', 'redirect-configured', 'redirect-job', 'redirect-word', 'redirect-word-job', 'redirect-long-profile')) {
     $output = Join-Path $root $kind
     $profile = Join-Path $output 'profile'
+    if ($kind -eq 'redirect-long-profile') { $profile = Join-Path $profile ('long-' + ('p' * 90)) }
     New-Item -ItemType Directory -Path (Join-Path $profile 'user') -Force | Out-Null
     if ($kind -eq 'redirect-configured') {
         $code = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../src/DailyToolkit.Core/Conversion/ExternalConversionBackend.cs') -Raw
