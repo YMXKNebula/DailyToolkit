@@ -37,6 +37,7 @@ jobs:
       - name: Check conversion before the full regression suite
         shell: pwsh
         run: |
+          ./scripts/diagnose-conversion-engine.ps1
           ./scripts/build.ps1 -SkipTests
           & ./tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyToolkit.Desktop.Tests.exe --conversion-document-media-checks
           if ($LASTEXITCODE -ne 0) { throw 'Headless document/media fixture failed; see the retained log.' }
