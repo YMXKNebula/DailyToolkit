@@ -323,6 +323,7 @@ internal static partial class Program
             Console.WriteLine("PASS FilePack switch, separate quick/detail/settings views, shared draft, independent saved quick ZIP settings, auto-rename, source preservation, shared window palette drafts/presets/failure/restart, shortcut target, fixed detailed position, pointer-centered quick title, application-themed settings and native chrome");
         }
         finally { FilePackPaths.EnsureNoReparsePoints(fixture.FullName); fixture.Delete(recursive: true); }
+        await CheckFilePackBrokerAsync();
         CheckFilePackContextMenu();
     }
     private static void CheckFilePackCursorPlacement(FilePackWindow window)
@@ -498,9 +499,14 @@ internal static partial class Program
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
                 await Task.WhenAll(clients.Select(async client =>
                 {
-                    var output = client.StandardOutput.ReadToEndAsync(); var error = client.StandardError.ReadToEndAsync();
+                    // Process redirects use synchronous anonymous-pipe handles.
+                    // Do not occupy 24 pool threads waiting for helpers that have
+                    // not exited: the server's accept callback needs that pool.
+                    // Helpers emit no success output and bound failure text below.
                     await client.WaitForExitAsync(timeout.Token);
-                    Require(client.ExitCode == 0, "Concurrent Explorer client failed: " + await output + await error + string.Join("; ", serverFailures) +
+                    var output = await client.StandardOutput.ReadToEndAsync(timeout.Token);
+                    var error = await client.StandardError.ReadToEndAsync(timeout.Token);
+                    Require(client.ExitCode == 0, "Concurrent Explorer client failed: " + output + error + string.Join("; ", serverFailures) +
                         "\nBroker trace:\n" + string.Join("\n", protocolTrace));
                 }));
             }
@@ -577,7 +583,8 @@ internal static partial class Program
         try
         {
             if (await FilePackRequestBroker.SendAsync([path], name)) return 0;
-            Console.Error.WriteLine("pid=" + System.Environment.ProcessId + " " + (diagnostic ?? "IPC request was not acknowledged")); return 1;
+            var message = diagnostic ?? "IPC request was not acknowledged";
+            Console.Error.WriteLine("pid=" + System.Environment.ProcessId + " " + message[..Math.Min(1024, message.Length)]); return 1;
         }
         finally
         {

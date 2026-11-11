@@ -188,18 +188,18 @@ public sealed class ExternalConversionBackend : IConversionBackend
         catch (IOException e) { throw new IOException("无法建立本次转换的进程保护。", e); }
     }
 
-    private static async Task<string> DrainAsync(StreamReader reader)
+    private static Task<string> DrainAsync(StreamReader reader) => Task.Factory.StartNew(() =>
     {
-        var tail = new StringBuilder();
-        var buffer = new char[4096];
-        int count;
-        while ((count = await reader.ReadAsync(buffer).ConfigureAwait(false)) != 0)
+        // Process redirects have synchronous pipe handles. Dedicated, operation-
+        // scoped readers keep those blocking reads out of the shared thread pool.
+        var tail = new StringBuilder(); var buffer = new char[4096]; int count;
+        while ((count = reader.Read(buffer, 0, buffer.Length)) != 0)
         {
             tail.Append(buffer, 0, count);
             if (tail.Length > 16384) tail.Remove(0, tail.Length - 16384);
         }
         return tail.ToString();
-    }
+    }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
     public static void ValidateDocument(string path, CancellationToken cancellationToken = default)
     {
