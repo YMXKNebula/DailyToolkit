@@ -139,6 +139,18 @@ internal static partial class Program
         Console.WriteLine("PASS Real local LibreOffice: DOCX/ODT/TXT/PDF, XLSX/ODS/CSV and ODP/PPTX/PDF with Unicode and readable PDF pages");
     }
 
+    private static async Task CheckConversionDocumentMediaAsync()
+    {
+        var fixture = Directory.CreateTempSubdirectory("DailyToolkit-headless-conversion-");
+        try
+        {
+            var runner = new ConversionRunner(new LocalConversionBackend());
+            await CheckOfficeConversionAsync(fixture.FullName, runner);
+            await CheckNativeMediaConversionAsync(fixture.FullName, runner);
+        }
+        finally { fixture.Delete(true); }
+    }
+
     private static void AddZipText(System.IO.Compression.ZipArchive zip, string name, string text)
     {
         using var stream = zip.CreateEntry(name, System.IO.Compression.CompressionLevel.NoCompression).Open();

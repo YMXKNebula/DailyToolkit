@@ -64,6 +64,12 @@ internal static partial class Program
         {
             try
             {
+                if (args is ["--conversion-document-media-checks"])
+                {
+                    if (System.Environment.GetEnvironmentVariable("CI") != "true")
+                        throw new InvalidOperationException("Headless document/media fixture checks require disposable CI.");
+                    await CheckConversionDocumentMediaAsync(); exitCode = 0; return;
+                }
                 if (args is ["--clipboard-native-conversion-checks", var conversionImages])
                 { await CheckFormatConversionAsync(conversionImages); exitCode = 0; return; }
                 if (args is ["--diagnostic-checks"])

@@ -34,17 +34,10 @@ public sealed class ExternalConversionBackend : IConversionBackend
                 _ => request.Target
             };
             var office = request.Options.LibreOfficePath;
-            if (OperatingSystem.IsWindows() &&
-                (Path.GetFileName(office).Equals("soffice.exe", StringComparison.OrdinalIgnoreCase) ||
-                 Path.GetFileName(office).Equals("soffice.com", StringComparison.OrdinalIgnoreCase)))
+            if (OperatingSystem.IsWindows() && Path.GetFileName(office).Equals("soffice.exe", StringComparison.OrdinalIgnoreCase))
             {
-                var directory = Path.GetDirectoryName(office) ?? "";
-                // Run the workhorse in our private job rather than a launcher
-                // that can hand off execution and return before conversion ends.
-                var worker = Path.Combine(directory, "soffice.bin");
-                var console = Path.Combine(directory, "soffice.com");
-                if (File.Exists(worker)) office = worker;
-                else if (File.Exists(console)) office = console;
+                var console = Path.Combine(Path.GetDirectoryName(office) ?? "", "soffice.com");
+                if (File.Exists(console)) office = console;
             }
             var engineLog = await RunProcessAsync(office,
                 ["-env:UserInstallation=" + new Uri(profile + Path.DirectorySeparatorChar).AbsoluteUri,
@@ -147,7 +140,8 @@ public sealed class ExternalConversionBackend : IConversionBackend
             if (process.ExitCode != 0)
             {
                 var detail = (await stderr).Trim();
-                throw new IOException("本地引擎转换失败：" + detail[..Math.Min(detail.Length, 1200)]);
+                throw new IOException("本地引擎转换失败：" + detail[..Math.Min(detail.Length, 1200)],
+                    new IOException($"Engine={Path.GetFileName(executable)}; exit={process.ExitCode}; output={(await stdout).Trim()}"));
             }
             return (await stdout).Trim() + "\n" + (await stderr).Trim();
         }
