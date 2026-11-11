@@ -22,7 +22,7 @@ jobs:
   windows:
     if: github.event_name != 'schedule'
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -31,6 +31,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Prepare local conversion test engines
+        timeout-minutes: 12
         shell: pwsh
         run: ./scripts/prepare-conversion-checks.ps1
       - name: Build and check
@@ -47,6 +48,7 @@ jobs:
           path: |
             .local/quality-checks/**
             .local/dependency-audit/**
+            .local/conversion-test-engines/**
           if-no-files-found: warn
           retention-days: 14
       - name: Package portable app
