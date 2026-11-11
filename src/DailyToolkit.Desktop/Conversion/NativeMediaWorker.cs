@@ -23,8 +23,10 @@ internal static class NativeMediaWorker
         var arguments = new List<string>();
         if (Path.GetFileNameWithoutExtension(executable).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
         {
-            var assembly = System.Reflection.Assembly.GetEntryAssembly()?.Location;
-            if (string.IsNullOrWhiteSpace(assembly)) throw new IOException("无法找到系统转换程序。");
+            var name = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
+            if (string.IsNullOrWhiteSpace(name)) throw new IOException("无法找到系统转换程序。");
+            var assembly = Path.Combine(AppContext.BaseDirectory, name + ".dll");
+            if (!File.Exists(assembly)) throw new IOException("无法找到系统转换程序。");
             arguments.Add(assembly);
         }
         arguments.Add(Argument); arguments.Add(path);
