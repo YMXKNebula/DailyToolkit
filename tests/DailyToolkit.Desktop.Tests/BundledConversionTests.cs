@@ -58,6 +58,19 @@ internal static partial class Program
             Require(!Directory.EnumerateDirectories(output).Any(), "Bundled conversion retained staging files");
             foreach (var path in Directory.EnumerateFiles(fixture.FullName, "*", SearchOption.AllDirectories))
             { using var released = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None); }
+            foreach (var process in System.Diagnostics.Process.GetProcesses())
+            {
+                using (process)
+                {
+                    string? executable;
+                    try { executable = process.HasExited ? null : process.MainModule?.FileName; }
+                    catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException) { continue; }
+                    if (executable is not null &&
+                        (executable.StartsWith(Path.Combine(root, "tools", "ffmpeg") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                         executable.StartsWith(Path.Combine(root, "tools", "libreoffice") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+                        Require(process.WaitForExit(2000), "A packaged conversion process remained after the batch finished");
+                }
+            }
             Console.WriteLine("PASS Actual packaged engines: empty paths, stale settings, WebP alpha, all audio/video targets, Office families/PDF and exclusive file reopening");
         }
         finally { fixture.Delete(true); }

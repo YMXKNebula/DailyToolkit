@@ -5,6 +5,7 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 work="$root/.local/conversion-ffmpeg"
 mkdir -p "$work"
 build=$(mktemp -d "$work/build-XXXXXX")
+export GIT_CEILING_DIRECTORIES="$build"
 prefix="$build/prefix"
 out="$build/output"
 mkdir -p "$prefix" "$out/licenses" "$out/sources"
@@ -117,6 +118,7 @@ run dav1d-install meson install -C "$build/dav1d-build"
     # Keep decoding broad within the advertised containers; only encode our
     # exposed targets. There is no network protocol, capture device or AI filter.
     decoders='aac,aac_fixed,ac3,eac3,alac,mp1,mp1float,mp2,mp2float,mp3,mp3float,flac,vorbis,opus,wmav1,wmav2,wmapro,wmalossless,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_u8,pcm_alaw,pcm_mulaw,adpcm_ms,adpcm_ima_wav,h264,hevc,mpeg1video,mpeg2video,mpeg4,msmpeg4v1,msmpeg4v2,msmpeg4v3,wmv1,wmv2,wmv3,vc1,vp8,vp9,libdav1d,prores,ffv1,dvvideo,mjpeg,png,bmp,tiff,gif,webp,rawvideo,qtrle'
+    decoders+=',aac_latm,dca,mlp,truehd,mss1,mss2,huffyuv,ffvhuff,adpcm_ima_qt'
     run ffmpeg-configure ./configure --target-os=mingw32 --arch=x86_64 --enable-cross-compile \
         --cross-prefix=x86_64-w64-mingw32- --cc="$CC" --cxx="$CXX" --pkg-config=pkg-config --pkg-config-flags=--static \
         --extra-cflags="-I$prefix/include" --extra-ldflags="-L$prefix/lib -static" \
@@ -126,9 +128,9 @@ run dav1d-install meson install -C "$build/dav1d-build"
         --enable-zlib --enable-libx264 --enable-libmp3lame --enable-libvorbis --enable-libopus --enable-libvpx --enable-libwebp --enable-libdav1d \
         --enable-protocol=file,pipe --enable-decoder="$decoders" \
         --enable-encoder=libmp3lame,aac,pcm_s16le,flac,libvorbis,libvpx_vp9,libopus,libx264,wmv2,wmav2,png,libwebp,ffv1,wrapped_avframe \
-        --enable-demuxer=aac,mov,matroska,avi,asf,mpegps,mpegts,mp3,wav,flac,ogg,image2,image2pipe,png_pipe,webp_pipe,jpeg_pipe,bmp_pipe,tiff_pipe,gif,rawvideo \
+        --enable-demuxer=aac,loas,mov,matroska,avi,asf,mpegps,mpegts,mpegvideo,mp3,wav,flac,ogg,image2,image2pipe,png_pipe,webp_pipe,jpeg_pipe,bmp_pipe,tiff_pipe,gif,rawvideo \
         --enable-muxer=image2,image2pipe,mp3,ipod,wav,flac,ogg,mp4,asf,matroska,webm,null \
-        --enable-parser=aac,ac3,flac,h264,hevc,mjpeg,mpeg4video,mpegaudio,mpegvideo,opus,vorbis,vp8,vp9,av1,png \
+        --enable-parser=aac,aac_latm,ac3,dca,mlp,flac,h264,hevc,mjpeg,mpeg4video,mpegaudio,mpegvideo,opus,vorbis,vp8,vp9,av1,png \
         --enable-bsf=aac_adtstoasc,h264_mp4toannexb,hevc_mp4toannexb,extract_extradata \
         --enable-filter=pad,format,scale,aresample,aformat,null,anull,trim,atrim,setpts,asetpts,fps
     run ffmpeg-build make -j "$jobs" ffmpeg.exe
