@@ -71,10 +71,10 @@ public sealed class ConversionViewModel : ObservableObject, IDisposable
     public bool ShowImageQuality => (Kind == ConversionKind.Image || Kind == ConversionKind.Pdf) && (Target == "jpg" || Target == "webp");
     public string FormatHint => Kind switch
     {
-        ConversionKind.Image => "PNG、JPG、BMP、TIFF、静态 GIF。WebP 需要本地 FFmpeg。JPG、BMP 和 PDF 使用白底。",
+        ConversionKind.Image => "PNG、JPG、BMP、TIFF、静态 GIF、WebP。JPG、BMP 和 PDF 使用白底。",
         ConversionKind.Pdf => "每页保存为一张图片，保留页面顺序。",
-        ConversionKind.Media => "使用系统编解码器，或已选择的本地 FFmpeg。视频转换不保留字幕轨道。",
-        _ => "需要本地 LibreOffice。文字、表格和演示文稿分别转换；CSV 仅保存一张表。"
+        ConversionKind.Media => "视频转换不保留字幕轨道。",
+        _ => "文字、表格和演示文稿分别转换；CSV 仅保存一张表。"
     };
     public ConversionItem? SelectedItem { get => _selected; set { if (Set(ref _selected, value)) RemoveCommand.Refresh(); } }
     public ConversionKind Kind
@@ -136,11 +136,6 @@ public sealed class ConversionViewModel : ObservableObject, IDisposable
         try
         {
             if (!string.IsNullOrWhiteSpace(OutputDirectory)) ConversionRunner.LocalPath(OutputDirectory);
-            var engines = Kind == ConversionKind.Document ? new[] { LibreOfficePath } :
-                Kind == ConversionKind.Media || Target == "webp" || Items.Any(i => i.State != "完成" && Path.GetExtension(i.Source).Equals(".webp", StringComparison.OrdinalIgnoreCase))
-                    ? new[] { FFmpegPath } : [];
-            foreach (var engine in engines.Where(p => !string.IsNullOrWhiteSpace(p)))
-                if (!File.Exists(ConversionRunner.LocalPath(engine))) throw new FileNotFoundException("本地引擎程序不存在。");
             if (!_store.Save(_draft)) throw new IOException("设置未能保存，请检查文件权限或磁盘空间。");
             _saved = _draft; _saveFailed = false; Notice = "设置已保存。"; Changed(); return true;
         }
@@ -151,12 +146,15 @@ public sealed class ConversionViewModel : ObservableObject, IDisposable
     private void Start()
     {
         if (!CanStart) return;
-        if (Kind == ConversionKind.Document && string.IsNullOrWhiteSpace(LibreOfficePath))
-        { Notice = "文档转换需要本地 LibreOffice，请先在“本地引擎”中选择程序。"; return; }
-        var needsFFmpeg = Kind == ConversionKind.Media && Target is "flac" or "ogg" or "mkv" or "webm" ||
+        var needsFFmpeg = Kind == ConversionKind.Media ||
             Kind == ConversionKind.Image && (Target == "webp" || Items.Any(i => i.State != "完成" && Path.GetExtension(i.Source).Equals(".webp", StringComparison.OrdinalIgnoreCase)));
-        if (needsFFmpeg && string.IsNullOrWhiteSpace(FFmpegPath))
-        { Notice = "此格式需要本地 FFmpeg，请先在“本地引擎”中选择程序。"; return; }
+        try
+        {
+            var engines = BundledConversionEngines.Resolve(_draft.Options);
+            if (Kind == ConversionKind.Document) BundledConversionEngines.Require(engines.LibreOfficePath);
+            if (needsFFmpeg) BundledConversionEngines.Require(engines.FFmpegPath);
+        }
+        catch (IOException e) { Notice = e.Message; return; }
         if (!SaveSettings()) return;
         var batch = Items.Where(i => i.State != "完成").ToArray();
         var settings = _draft;

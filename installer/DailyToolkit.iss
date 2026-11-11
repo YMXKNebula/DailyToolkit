@@ -75,6 +75,8 @@ Source: "{#PayloadDir}\tools\7zip\Readme.txt"; DestDir: "{app}\tools\7zip"; Flag
 Source: "{#PayloadDir}\tools\7zip\SOURCE.txt"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
 Source: "{#PayloadDir}\tools\7zip\COPYING.txt"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
 Source: "{#PayloadDir}\tools\7zip\7z2604-src.7z"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
+Source: "{#PayloadDir}\tools\ffmpeg\*"; DestDir: "{app}\tools\ffmpeg"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PayloadDir}\tools\libreoffice\*"; DestDir: "{app}\tools\libreoffice"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\docs\INSTALLER_README.txt"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion
 
 [Icons]

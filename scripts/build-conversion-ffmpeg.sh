@@ -122,7 +122,7 @@ run dav1d-install meson install -C "$build/dav1d-build"
         --enable-ffmpeg --disable-ffplay --disable-ffprobe \
         --enable-zlib --enable-libx264 --enable-libmp3lame --enable-libvorbis --enable-libopus --enable-libvpx --enable-libwebp --enable-libdav1d \
         --enable-protocol=file,pipe --enable-decoder="$decoders" \
-        --enable-encoder=libmp3lame,aac,pcm_s16le,flac,libvorbis,libvpx_vp9,libopus,libx264,wmv2,wmav2,png,libwebp,ffv1 \
+        --enable-encoder=libmp3lame,aac,pcm_s16le,flac,libvorbis,libvpx_vp9,libopus,libx264,wmv2,wmav2,png,libwebp,ffv1,wrapped_avframe \
         --enable-demuxer=aac,mov,matroska,avi,asf,mpegps,mpegts,mp3,wav,flac,ogg,image2,image2pipe,png_pipe,webp_pipe,jpeg_pipe,bmp_pipe,tiff_pipe,gif,rawvideo \
         --enable-muxer=image2,image2pipe,mp3,ipod,wav,flac,ogg,mp4,asf,matroska,webm,null \
         --enable-parser=aac,ac3,flac,h264,hevc,mjpeg,mpeg4video,mpegaudio,mpegvideo,opus,vorbis,vp8,vp9,av1,png \

@@ -15,15 +15,28 @@ public sealed class LocalConversionBackend : IConversionBackend
 {
     private const long MaximumPixels = 40_000_000;
     private readonly ExternalConversionBackend _external = new();
+    private readonly string? _bundleDirectory;
+    private readonly bool _useBundledEngines;
+
+    public LocalConversionBackend() : this(null, true) { }
+    internal LocalConversionBackend(string? bundleDirectory, bool useBundledEngines)
+    { _bundleDirectory = bundleDirectory; _useBundledEngines = useBundledEngines; }
 
     public Task<IReadOnlyList<ConvertedFile>> ConvertAsync(ConversionRequest request, string workspace,
         IProgress<double>? progress, CancellationToken cancellationToken) => Task.Run(async () =>
     {
+        if (_useBundledEngines)
+            request = request with { Options = BundledConversionEngines.Resolve(request.Options, _bundleDirectory) };
         if (request.Kind == ConversionKind.Document ||
             request.Kind == ConversionKind.Media && !string.IsNullOrWhiteSpace(request.Options.FFmpegPath))
+        {
+            BundledConversionEngines.Require(request.Kind == ConversionKind.Document ? request.Options.LibreOfficePath : request.Options.FFmpegPath);
             return await _external.ConvertAsync(request, workspace, progress, cancellationToken).ConfigureAwait(false);
+        }
         if (request.Kind == ConversionKind.Image)
         {
+            if (request.Target == "webp" || Path.GetExtension(request.Source).Equals(".webp", StringComparison.OrdinalIgnoreCase))
+                BundledConversionEngines.Require(request.Options.FFmpegPath);
             var originalStem = Path.GetFileNameWithoutExtension(request.Source);
             if (Path.GetExtension(request.Source).Equals(".webp", StringComparison.OrdinalIgnoreCase))
             {

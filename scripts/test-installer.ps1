@@ -1,6 +1,7 @@
 param([Parameter(Mandatory)][string]$Compiler, [string]$PayloadDirectory)
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+. (Join-Path $PSScriptRoot 'conversion-payload.ps1')
 [xml]$properties = Get-Content -LiteralPath (Join-Path $root 'Directory.Build.props') -Raw
 $newerVersion = [version]$properties.Project.PropertyGroup.Version
 if ($newerVersion.Build -gt 0) { $olderVersion = [version]::new($newerVersion.Major, $newerVersion.Minor, $newerVersion.Build - 1) }
@@ -125,6 +126,13 @@ try {
     Assert-Installer ((Test-Path -LiteralPath $shortcut) -and $shell.CreateShortcut($shortcut).TargetPath -eq $installedExe) 'Start Menu shortcut does not target the installed application.'
     Assert-Installer (Test-Path -LiteralPath (Join-Path $destination 'microsoft.windowsdesktop.app.runtime-LICENSE')) 'Desktop runtime license is missing.'
     $checks.Add('fresh install, Windows registration, shortcut, exact payload, runtime license')
+    $installedConversionFiles = @(Get-ConversionPayloadFiles $destination)
+    foreach ($relative in $installedConversionFiles) {
+        Assert-Installer ((Get-FileHash -LiteralPath (Join-Path $destination $relative)).Hash -eq (Get-FileHash -LiteralPath (Join-Path $PayloadDirectory $relative)).Hash) "Installed conversion component differs: $relative"
+    }
+    & (Join-Path $PSScriptRoot 'build.ps1') -SkipTests
+    & (Join-Path $PSScriptRoot 'test-conversion-bundle.ps1') -PayloadDirectory $destination
+    $checks.Add('installed component inventory and actual offline conversion without external engine paths')
 
     $ready = Start-TestHost 'refuse' 'refused-upgrade'
     $before = (Get-FileHash -LiteralPath $installedExe).Hash
@@ -161,6 +169,7 @@ try {
     Register-TestTask ('DailyToolkit automatic startup. Owner: ' + $sid) $installedExe
     [IO.File]::WriteAllText((Join-Path $destination 'keep-user-file.txt'), 'retain')
     Assert-Installer ((Invoke-TestSetup (Get-TestUninstaller) 'owned-uninstall') -eq 0) 'Owned-startup uninstall failed.'
+    Assert-Installer (-not (Test-Path -LiteralPath (Join-Path $destination 'tools/ffmpeg')) -and -not (Test-Path -LiteralPath (Join-Path $destination 'tools/libreoffice'))) 'Uninstall retained bundled conversion components.'
     [pscustomobject]@{Run=(Get-ItemProperty -LiteralPath $runKey -Name $testName -ErrorAction SilentlyContinue).$testName;Task=Test-TaskExists} |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $work 'owned-cleanup-observed.json') -Encoding utf8
     Assert-Installer (-not (Test-Path -LiteralPath $installedExe) -and -not (Test-Path -LiteralPath $uninstallKey)) 'Uninstall left the program or Windows registration.'

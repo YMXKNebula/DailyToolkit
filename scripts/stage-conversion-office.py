@@ -81,7 +81,7 @@ def stage(source, target, crt):
             chosen.add(rel)
         elif rel.startswith(('share/registry/res/en-US/', 'share/registry/res/zh-CN/')):
             chosen.add(rel)
-        elif rel.startswith('Fonts/') or p.name in ('license.txt', 'LICENSE.html', 'NOTICE', 'CREDITS.fodt'):
+        elif rel.startswith('Fonts/') or (p.parent.as_posix() == '.' and p.name in ('license.txt', 'LICENSE.html', 'NOTICE', 'CREDITS.fodt')):
             chosen.add(rel)
     for required in ('program/soffice.com', 'program/soffice.bin', 'program/mergedlo.dll', 'license.txt', 'NOTICE'):
         if required not in chosen:
@@ -93,7 +93,7 @@ def stage(source, target, crt):
     crt_files = {p.name.lower(): p for p in crt.glob('*.dll')}
     additional = {}
     checked = set()
-    system = set('advapi32 avrt bcrypt cabinet cfgmgr32 comctl32 comdlg32 combase credui crypt32 cryptbase cryptsp d2d1 d3d11 d3d12 d3d9 d3dcompiler_47 dcomp dhcpcsvc dnsapi dsound dwmapi dwrite dxgi dxva2 faultrep fontsub gdi32 gdiplus glu32 hid imagehlp imm32 iphlpapi kernel32 kernelbase mpr mprapi msimg32 msvcrt mswsock msxml6 ncrypt netapi32 ntdll ole32 oleacc oleaut32 opengl32 powrprof profapi propsys psapi rasapi32 rpcrt4 secur32 setupapi shcore shell32 shlwapi sspicli ucrtbase urlmon user32 userenv usp10 uxtheme version winhttp wininet winmm winscard winspool.drv wintrust wlanapi wldap32 ws2_32 wtsapi32'.split())
+    system = set('activeds dbghelp httpapi mfplat mfplay mfreadwrite oledlg wer wsock32 advapi32 avrt bcrypt cabinet cfgmgr32 comctl32 comdlg32 combase credui crypt32 cryptbase cryptsp d2d1 d3d11 d3d12 d3d9 d3dcompiler_47 dcomp dhcpcsvc dnsapi dsound dwmapi dwrite dxgi dxva2 faultrep fontsub gdi32 gdiplus glu32 hid imagehlp imm32 iphlpapi kernel32 kernelbase mpr mprapi msimg32 msvcrt mswsock msxml6 ncrypt netapi32 ntdll ole32 oleacc oleaut32 opengl32 powrprof profapi propsys psapi rasapi32 rpcrt4 secur32 setupapi shcore shell32 shlwapi sspicli ucrtbase urlmon user32 userenv usp10 uxtheme version winhttp wininet winmm winscard winspool.drv wintrust wlanapi wldap32 ws2_32 wtsapi32'.split())
     system = {x if '.' in x else x + '.dll' for x in system}
     missing = set()
     while True:

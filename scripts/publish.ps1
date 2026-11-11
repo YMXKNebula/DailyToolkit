@@ -4,6 +4,16 @@ $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
 $dotnetPath = if ($dotnetCommand) { $dotnetCommand.Source } else { Join-Path $env:ProgramFiles 'dotnet\dotnet.exe' }
 if (-not (Test-Path -LiteralPath $dotnetPath)) { throw 'Install the .NET 10 SDK before publishing.' }
+if ($Runtime -ne 'win-x64') { throw 'The offline conversion payload is validated for Windows x64 only.' }
+. (Join-Path $PSScriptRoot 'conversion-payload.ps1')
+$conversionDirectory = Join-Path $projectRoot '.local/conversion-tools'
+foreach ($engine in @('ffmpeg','libreoffice')) {
+    $recipes = if ($engine -eq 'ffmpeg') { @('build-conversion-ffmpeg.sh','conversion-sources.json') } else { @('prepare-conversion-office.ps1','stage-conversion-office.py') }
+    $recipePaths = @($recipes | ForEach-Object { Join-Path $PSScriptRoot $_ })
+    & python (Join-Path $PSScriptRoot 'conversion-manifest.py') verify (Join-Path $conversionDirectory "tools/$engine") $engine @recipePaths
+    if ($LASTEXITCODE -ne 0) { throw "Prepare the matching $engine bundle before publishing." }
+}
+$conversionFiles = @(Get-ConversionPayloadFiles $conversionDirectory)
 $env:DOTNET_CLI_HOME = Join-Path $projectRoot '.local\dotnet'
 $env:NUGET_PACKAGES = Join-Path $projectRoot '.local\nuget'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
@@ -20,6 +30,11 @@ Push-Location -LiteralPath $projectRoot
 try {
     & $dotnetPath publish src/DailyToolkit.Desktop/DailyToolkit.Desktop.csproj -c Release -r $Runtime --self-contained true --disable-build-servers -m:1 --nologo -o $outputDirectory -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false @versionArguments
     if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
+    foreach ($relative in $conversionFiles) {
+        $destination = Join-Path $outputDirectory $relative
+        New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($destination)) -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $conversionDirectory $relative) -Destination $destination
+    }
     Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination (Join-Path $outputDirectory 'LICENSE-DailyToolkit.txt')
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\PORTABLE_README.txt') -Destination (Join-Path $outputDirectory 'README.txt')
     Copy-Item -LiteralPath (Join-Path $projectRoot 'THIRD_PARTY_NOTICES.txt') -Destination (Join-Path $outputDirectory 'THIRD_PARTY_NOTICES.txt')

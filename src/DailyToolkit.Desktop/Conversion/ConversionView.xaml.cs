@@ -31,14 +31,6 @@ public partial class ConversionView : UserControl
         if (dialog.ShowDialog(Window.GetWindow(this)) == true) model.OutputDirectory = dialog.FolderName;
     }
 
-    private void BrowseEngine(object sender, RoutedEventArgs e)
-    {
-        if (Model is not { CanEdit: true } model || sender is not Button { Tag: string tag }) return;
-        var dialog = new OpenFileDialog { Title = tag == "ffmpeg" ? "选择 FFmpeg" : "选择 LibreOffice", Filter = "程序|*.exe;*.com", CheckFileExists = true };
-        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
-        if (tag == "ffmpeg") model.FFmpegPath = dialog.FileName; else model.LibreOfficePath = dialog.FileName;
-    }
-
     private void FilesDragOver(object sender, DragEventArgs e)
     {
         e.Handled = true;

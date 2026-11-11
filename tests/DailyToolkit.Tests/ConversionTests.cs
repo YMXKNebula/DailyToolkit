@@ -8,6 +8,17 @@ internal static partial class Program
 {
     private static void RegisterConversionTests()
     {
+        Test("Bundled conversion paths follow the moved application and ignore old engine settings", () =>
+        {
+            var moved = Path.Combine(Path.GetTempPath(), "移动后的便携目录");
+            var resolved = BundledConversionEngines.Resolve(new() { Quality = 73, FFmpegPath = "obsolete.exe", LibreOfficePath = "obsolete-office.exe" }, moved);
+            Require(Path.Combine(moved, "tools", "ffmpeg", "ffmpeg.exe") == resolved.FFmpegPath);
+            Require(Path.Combine(moved, "tools", "libreoffice", "program", "soffice.com") == resolved.LibreOfficePath);
+            Require(resolved.Quality == 73);
+            var rejected = false;
+            try { BundledConversionEngines.Require(resolved.FFmpegPath); } catch (FileNotFoundException) { rejected = true; }
+            Require(rejected, "Missing bundle silently fell back to a system program");
+        });
         Test("Conversion validates source families and rejects remote paths", () =>
         {
             ConversionFormats.Validate(ConversionKind.Document, "演示.pptx", "pdf");
@@ -197,9 +208,11 @@ internal static partial class Program
                 Require(result.Count == 1 && new FileInfo(result[0]).Length > 0, "Audio encode/decode validation failed: " + format);
             }
             var video = Path.Combine(fixture.FullName, "视频 sample.mkv");
+            var rawVideo = Path.Combine(fixture.FullName, "fixture.rgb");
+            await File.WriteAllBytesAsync(rawVideo, Enumerable.Range(0, 64 * 48 * 3 * 12).Select(i => (byte)(i % 251)).ToArray());
             var start = new System.Diagnostics.ProcessStartInfo(engine) { UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardError = true, RedirectStandardOutput = true };
-            foreach (var argument in new[] { "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=blue:s=64x48:r=12:d=1",
+            foreach (var argument in new[] { "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pixel_format", "rgb24", "-video_size", "64x48", "-framerate", "12", "-i", rawVideo,
                 "-i", source, "-shortest", "-c:v", "ffv1", "-c:a", "pcm_s16le", video }) start.ArgumentList.Add(argument);
             using (var process = System.Diagnostics.Process.Start(start)!)
             {

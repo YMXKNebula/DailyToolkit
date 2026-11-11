@@ -137,6 +137,12 @@ public sealed class ExternalConversionBackend : IConversionBackend
             RedirectStandardOutput = true, RedirectStandardError = true,
             WorkingDirectory = Path.GetDirectoryName(executable)!
         };
+        if (Path.GetFileName(executable).Equals("soffice.com", StringComparison.OrdinalIgnoreCase) ||
+            Path.GetFileName(executable).Equals("soffice.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var name in new[] { "URE_BOOTSTRAP", "UNO_PATH", "UNO_SERVICES", "UNO_TYPES", "PYTHONHOME", "PYTHONPATH" })
+                start.Environment.Remove(name);
+        }
         foreach (var arg in arguments) start.ArgumentList.Add(arg);
         using var process = new Process { StartInfo = start };
         using var job = CreateProcessJob();

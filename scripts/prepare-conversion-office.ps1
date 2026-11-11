@@ -40,6 +40,15 @@ $metrics | Set-Content -LiteralPath (Join-Path $work 'selection.json') -Encoding
 $summary = $metrics | ConvertFrom-Json
 Write-Host ("Office: selected {0:N1} MiB / {1:N1} MiB; {2} files; {3} checked binaries" -f ($summary.selectedBytes/1MB),($summary.upstreamBytes/1MB),$summary.selectedFiles,$summary.checkedBinaries)
 Write-Host ('App-local CRT: ' + ($summary.microsoftRuntime -join ', '))
+$fontRevision = '523d033d6cb47f4a80c58a35753646f5c3608a78'
+$fontDirectory = Join-Path $OutputDirectory 'share/fonts/truetype'
+New-Item -ItemType Directory -Path $fontDirectory -Force | Out-Null
+$font = Join-Path $fontDirectory 'NotoSansCJKsc-Regular.otf'
+& curl.exe --fail --silent --show-error --location --connect-timeout 15 --max-time 90 --output $font "https://raw.githubusercontent.com/notofonts/noto-cjk/$fontRevision/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf"
+if ($LASTEXITCODE -ne 0 -or (Get-FileHash -LiteralPath $font).Hash.ToLowerInvariant() -ne '2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b') { throw 'Bundled Chinese font checksum mismatch.' }
+$fontLicense = Join-Path $OutputDirectory 'LICENSE-NotoSansCJK.txt'
+& curl.exe --fail --silent --show-error --location --connect-timeout 15 --max-time 60 --output $fontLicense "https://raw.githubusercontent.com/notofonts/noto-cjk/$fontRevision/LICENSE"
+if ($LASTEXITCODE -ne 0 -or (Get-FileHash -LiteralPath $fontLicense).Hash.ToLowerInvariant() -ne '6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2') { throw 'Bundled Chinese font license checksum mismatch.' }
 @"
 LibreOffice 26.2.6.3, The Document Foundation and contributors.
 Unmodified upstream runtime files selected for Writer, Calc and Impress conversion.
@@ -54,6 +63,9 @@ This selection does not change upstream binaries. Selection recipe: scripts/stag
 Microsoft Visual C++ CRT files are included app-local; no runtime installer or system registration is used.
 Copyright (C) Microsoft Corporation. All rights reserved.
 Runtime terms: https://visualstudio.microsoft.com/license-terms/vs2022-cruntime/
+Noto Sans CJK SC 2.004 is included as a private document font, with no system font registration.
+Copyright 2014-2021 Adobe and Noto contributors; SIL Open Font License 1.1 in LICENSE-NotoSansCJK.txt.
+Font source: https://github.com/notofonts/noto-cjk/tree/$fontRevision
 "@ | Set-Content -LiteralPath (Join-Path $OutputDirectory 'SOURCE.txt') -Encoding utf8
 $profile = Join-Path $work 'probe-profile'
 $input = Join-Path $work '离线检查.txt'
