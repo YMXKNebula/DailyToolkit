@@ -12,7 +12,9 @@ def digest(path):
 
 def inventory(root):
     files = []
-    for path in sorted(root.rglob('*')):
+    # Path ordering follows the host OS (case-insensitive on Windows). Use the
+    # archive's exact relative strings on both builders and Windows verification.
+    for path in sorted(root.rglob('*'), key=lambda p: p.relative_to(root).as_posix()):
         if path.is_symlink():
             raise ValueError('A bundle cannot include links: ' + str(path))
         if path.is_file() and path != root / 'bundle.json':
