@@ -46,7 +46,8 @@ public sealed class ExternalConversionBackend : IConversionBackend
             output = Path.Combine(workspace, Path.GetFileNameWithoutExtension(request.Source) + "." + request.Target);
             if (!File.Exists(output))
                 throw new IOException("文档转换未生成结果，请检查文件格式或保护状态。",
-                    new IOException(engineLog + "\nGenerated files: " + string.Join(", ", Directory.EnumerateFiles(workspace).Select(Path.GetFileName))));
+                    new IOException(engineLog + "\nInput=" + input + "; profile=" + new Uri(profile + Path.DirectorySeparatorChar).AbsoluteUri +
+                        "\nGenerated files: " + string.Join(", ", Directory.EnumerateFiles(workspace).Select(Path.GetFileName))));
             if (File.Exists(output) && request.Target is not ("pdf" or "csv" or "txt")) ValidateDocument(output, cancellationToken);
             if (File.Exists(output) && request.Target == "pdf")
             {
