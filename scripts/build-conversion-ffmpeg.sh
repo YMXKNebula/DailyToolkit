@@ -111,6 +111,9 @@ run dav1d-install meson install -C "$build/dav1d-build"
 )
 (
     cd "$build/ffmpeg"
+    # This source archive sits below DailyToolkit's Git checkout. Use FFmpeg's
+    # release metadata so version.sh cannot pick up the parent repository hash.
+    printf '%s\n' '9.0.2' > VERSION
     # Keep decoding broad within the advertised containers; only encode our
     # exposed targets. There is no network protocol, capture device or AI filter.
     decoders='aac,aac_fixed,ac3,eac3,alac,mp1,mp1float,mp2,mp2float,mp3,mp3float,flac,vorbis,opus,wmav1,wmav2,wmapro,wmalossless,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_u8,pcm_alaw,pcm_mulaw,adpcm_ms,adpcm_ima_wav,h264,hevc,mpeg1video,mpeg2video,mpeg4,msmpeg4v1,msmpeg4v2,msmpeg4v3,wmv1,wmv2,wmv3,vc1,vp8,vp9,libdav1d,prores,ffv1,dvvideo,mjpeg,png,bmp,tiff,gif,webp,rawvideo,qtrle'
@@ -131,7 +134,7 @@ run dav1d-install meson install -C "$build/dav1d-build"
     run ffmpeg-build make -j "$jobs" ffmpeg.exe
     "$STRIP" ffmpeg.exe
     cp ffmpeg.exe "$out/ffmpeg.exe"
-    cp config.h config_components.h ffbuild/config.mak "$out/sources/"
+    cp VERSION config.h config_components.h ffbuild/config.mak "$out/sources/"
     cp COPYING.GPLv2 "$out/LICENSE.txt"
 )
 # Full preferred source and exact build recipe travel with the executable.

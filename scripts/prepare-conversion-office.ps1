@@ -52,7 +52,7 @@ if ($LASTEXITCODE -ne 0 -or (Get-FileHash -LiteralPath $fontLicense).Hash.ToLowe
 $runtimeLicense = Join-Path $OutputDirectory 'LICENSE-Microsoft-VC-Runtime.docx'
 $runtimeLicenseUrl = 'https://visualstudio.microsoft.com/wp-content/uploads/2025/10/Visual-C-V14-License-Redistributable_and_Runtime_ENU.docx'
 & curl.exe --fail --silent --show-error --location --connect-timeout 15 --max-time 60 --output $runtimeLicense $runtimeLicenseUrl
-if ($LASTEXITCODE -ne 0) { throw 'The Microsoft runtime license could not be preserved.' }
+if ($LASTEXITCODE -ne 0 -or (Get-FileHash -LiteralPath $runtimeLicense).Hash.ToLowerInvariant() -ne '08651651a7602fc7c0e2763de0fde1ff9f868df2780597cd1775ee9d6441c783') { throw 'The pinned Microsoft runtime license could not be preserved.' }
 $licenseArchive = [IO.Compression.ZipFile]::OpenRead($runtimeLicense)
 try {
     $document = $licenseArchive.GetEntry('word/document.xml')
@@ -84,6 +84,8 @@ Microsoft Visual C++ CRT files are included app-local; no runtime installer or s
 Copyright (C) Microsoft Corporation. All rights reserved.
 Runtime terms: LICENSE-Microsoft-VC-Runtime.docx
 https://visualstudio.microsoft.com/license-terms/vs2026-ga-visualcpp-v14-redist-runtime/
+Redistribution is governed by the Visual Studio 2026 Distributable Code terms for the licensed build environment:
+https://visualstudio.microsoft.com/license-terms/vs2026-ga-pro-enterprise/
 Noto Sans CJK SC 2.004 is included as a private document font, with no system font registration.
 Copyright 2014-2021 Adobe and Noto contributors; SIL Open Font License 1.1 in LICENSE-NotoSansCJK.txt.
 Font source: https://github.com/notofonts/noto-cjk/tree/$fontRevision

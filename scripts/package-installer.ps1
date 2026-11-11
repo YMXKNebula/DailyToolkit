@@ -13,7 +13,7 @@ if ((Get-Item -LiteralPath $executable).VersionInfo.ProductVersion -notmatch ('^
     throw 'The application and installer versions must match.'
 }
 $expected = @(Get-ApplicationPayloadFiles $PayloadDirectory)
-$actual = @(Get-ChildItem -LiteralPath $PayloadDirectory -Recurse -File | ForEach-Object {
+$actual = @(Get-ChildItem -LiteralPath $PayloadDirectory -Recurse -File -Force | ForEach-Object {
     [IO.Path]::GetRelativePath($PayloadDirectory, $_.FullName)
 })
 if (@(Compare-Object $expected $actual).Count -ne 0) { throw 'The portable payload has unexpected or missing files; refuse to package user data or development output.' }

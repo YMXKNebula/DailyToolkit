@@ -52,7 +52,7 @@ try {
         }
     }
     $expected = @(Get-ApplicationPayloadFiles $outputDirectory)
-    $actual = @(Get-ChildItem -LiteralPath $outputDirectory -Recurse -File | ForEach-Object { [IO.Path]::GetRelativePath($outputDirectory, $_.FullName) })
+    $actual = @(Get-ChildItem -LiteralPath $outputDirectory -Recurse -File -Force | ForEach-Object { [IO.Path]::GetRelativePath($outputDirectory, $_.FullName) })
     if (@(Compare-Object $expected $actual).Count) { throw 'Unexpected or missing payload files; refuse to archive user data or development output.' }
     $zipPath = Join-Path $projectRoot ('artifacts\' + $packageName + '-portable.zip')
     Compress-Archive -Path (Join-Path $outputDirectory '*') -DestinationPath $zipPath -Force
