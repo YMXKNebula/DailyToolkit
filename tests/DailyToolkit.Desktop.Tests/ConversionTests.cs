@@ -126,11 +126,15 @@ internal static partial class Program
         var docx = (await runner.RunAsync(new(odt, output, ConversionKind.Document, "docx", options))).Single();
         var text = (await runner.RunAsync(new(docx, output, ConversionKind.Document, "txt", options))).Single();
         Require(File.ReadAllText(text).Contains("格式转换离线检查", StringComparison.Ordinal), "Word/ODT/TXT conversion lost Unicode text");
+        var textWord = (await runner.RunAsync(new(text, output, ConversionKind.Document, "docx", options))).Single();
+        Require(new FileInfo(textWord).Length > 0, "Text input did not convert back to Word");
         var csv = Path.Combine(fixture, "表格.csv"); File.WriteAllText(csv, "项目,数量\r\n苹果,2\r\n", new System.Text.UTF8Encoding(false));
         var xlsx = (await runner.RunAsync(new(csv, output, ConversionKind.Document, "xlsx", options))).Single();
         var ods = (await runner.RunAsync(new(xlsx, output, ConversionKind.Document, "ods", options))).Single();
         var csvBack = (await runner.RunAsync(new(ods, output, ConversionKind.Document, "csv", options))).Single();
         Require(File.ReadAllText(csvBack).Contains("苹果", StringComparison.Ordinal), "Spreadsheet conversion lost UTF-8 cell text");
+        var sheetPdf = (await runner.RunAsync(new(xlsx, output, ConversionKind.Document, "pdf", options))).Single();
+        Require((await runner.RunAsync(new(sheetPdf, output, ConversionKind.Pdf, "png", new()))).Count > 0, "Spreadsheet PDF did not render");
         var presentation = Path.Combine(fixture, "演示.odp");
         using (var zip = System.IO.Compression.ZipFile.Open(presentation, System.IO.Compression.ZipArchiveMode.Create))
         {
@@ -143,6 +147,8 @@ internal static partial class Program
                 """);
         }
         var pptx = (await runner.RunAsync(new(presentation, output, ConversionKind.Document, "pptx", options))).Single();
+        var odp = (await runner.RunAsync(new(pptx, output, ConversionKind.Document, "odp", options))).Single();
+        Require(new FileInfo(odp).Length > 0, "PowerPoint input did not convert back to ODP");
         var slidePdf = (await runner.RunAsync(new(pptx, output, ConversionKind.Document, "pdf", options))).Single();
         Require((await runner.RunAsync(new(slidePdf, output, ConversionKind.Pdf, "png", new()))).Count > 0, "Presentation PDF did not render");
         Require(original.SequenceEqual(SHA256.HashData(File.ReadAllBytes(word))) && !Directory.EnumerateDirectories(output).Any(), "Office changed original or leaked its isolated profile");

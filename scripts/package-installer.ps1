@@ -58,4 +58,8 @@ $sums = @($setup, $zip) | ForEach-Object {
     (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + [IO.Path]::GetFileName($_)
 }
 [IO.File]::WriteAllLines((Join-Path $output 'SHA256SUMS.txt'), $sums, [Text.UTF8Encoding]::new($false))
+foreach ($file in Get-Item -LiteralPath $setup, $zip) {
+    Write-Host ("Package {0}: {1} bytes" -f $file.Name, $file.Length)
+}
+$sums | ForEach-Object { Write-Host $_ }
 Write-Output $setup
