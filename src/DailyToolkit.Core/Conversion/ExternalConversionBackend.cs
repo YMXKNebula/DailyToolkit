@@ -34,10 +34,17 @@ public sealed class ExternalConversionBackend : IConversionBackend
                 _ => request.Target
             };
             var office = request.Options.LibreOfficePath;
-            if (OperatingSystem.IsWindows() && Path.GetFileName(office).Equals("soffice.exe", StringComparison.OrdinalIgnoreCase))
+            if (OperatingSystem.IsWindows() &&
+                (Path.GetFileName(office).Equals("soffice.exe", StringComparison.OrdinalIgnoreCase) ||
+                 Path.GetFileName(office).Equals("soffice.com", StringComparison.OrdinalIgnoreCase)))
             {
-                var console = Path.Combine(Path.GetDirectoryName(office) ?? "", "soffice.com");
-                if (File.Exists(console)) office = console;
+                var directory = Path.GetDirectoryName(office) ?? "";
+                // Run the workhorse in our private job rather than a launcher
+                // that can hand off execution and return before conversion ends.
+                var worker = Path.Combine(directory, "soffice.bin");
+                var console = Path.Combine(directory, "soffice.com");
+                if (File.Exists(worker)) office = worker;
+                else if (File.Exists(console)) office = console;
             }
             var engineLog = await RunProcessAsync(office,
                 ["-env:UserInstallation=" + new Uri(profile + Path.DirectorySeparatorChar).AbsoluteUri,
