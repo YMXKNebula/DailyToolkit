@@ -124,6 +124,9 @@
                 <DataTrigger Binding="{Binding DataContext.ShowFilePack, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
                   <Setter Property="Visibility" Value="Visible"/><Setter Property="DataContext" Value="{Binding DataContext.FilePack, RelativeSource={RelativeSource AncestorType=Window}}"/>
                 </DataTrigger>
+                <DataTrigger Binding="{Binding DataContext.ShowConversion, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                  <Setter Property="Visibility" Value="Visible"/><Setter Property="DataContext" Value="{Binding DataContext.Conversion, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                </DataTrigger>
               </Style.Triggers>
             </Style></Button.Style>
             <Path x:Name="ToolFavoriteIcon" Width="28" Height="28" Stretch="Uniform"
@@ -353,6 +356,9 @@
       <ContentControl x:Name="FilePackSettingsHost" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
                     Visibility="{Binding DataContext.ShowFilePack, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
                     DataContext="{Binding FilePack}" />
+      <ContentControl x:Name="ConversionHost" Grid.Row="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                    Visibility="{Binding DataContext.ShowConversion, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource VisibleWhen}}"
+                    DataContext="{Binding Conversion}" />
       <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                     Visibility="{Binding ShowSettingsContent, Converter={StaticResource VisibleWhen}}">
         <StackPanel Margin="0,0,8,0">

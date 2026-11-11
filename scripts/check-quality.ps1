@@ -17,10 +17,10 @@ $runCompleted = $false
 $infrastructureFailure = $false
 $overallFailed = $true
 $plannedChecks = @('reporting-self-check', 'build', 'core', 'desktop', 'diagnostics', 'background-resources', 'clipboard-media',
-    'clipboard-native', 'clipboard-visuals', 'palettes', 'filepack-recovery', 'interface-visuals',
+    'clipboard-native', 'clipboard-visuals', 'palettes', 'filepack-recovery', 'format-conversion', 'interface-visuals',
     'mixed-monitor-dpi', 'gpu-device-loss', 'sleep-lock-game', 'physical-disk-full', 'real-upgrade-data', 'code-signing')
 $requiredChecks = @('reporting-self-check', 'build', 'core', 'desktop', 'diagnostics', 'background-resources', 'clipboard-media')
-if ($IsolatedCi) { $requiredChecks += @('clipboard-native', 'clipboard-visuals', 'palettes', 'filepack-recovery', 'interface-visuals') }
+if ($IsolatedCi) { $requiredChecks += @('clipboard-native', 'clipboard-visuals', 'palettes', 'filepack-recovery', 'format-conversion', 'interface-visuals') }
 function Invoke-QualityCheck([string]$name, [scriptblock]$action, [string]$skipReason = '') {
     $entry = [ordered]@{ name = $name; status = 'skipped'; durationMs = 0; reason = $skipReason; log = "$name.log" }
     if ($skipReason) { $results.Add([pscustomobject]$entry); return }
@@ -94,6 +94,7 @@ try {
     Invoke-QualityCheck 'clipboard-visuals' { Invoke-DesktopCheck -CheckArguments @('--clipboard-native-visuals', (Join-Path $output 'clipboard-panel-checks')) } $nativeReason
     Invoke-QualityCheck 'palettes' { Invoke-DesktopCheck -CheckArguments @('--clipboard-native-palette-checks', (Join-Path $output 'palette-checks')) } $nativeReason
     Invoke-QualityCheck 'filepack-recovery' { Invoke-DesktopCheck -CheckArguments @('--clipboard-native-filepack-checks', (Join-Path $output 'filepack-checks')) } $nativeReason
+    Invoke-QualityCheck 'format-conversion' { Invoke-DesktopCheck -CheckArguments @('--clipboard-native-conversion-checks', (Join-Path $output 'conversion-checks')) } $nativeReason
     Invoke-QualityCheck 'interface-visuals' { Invoke-DesktopCheck -CheckArguments @('--interface-checks', (Join-Path $output 'interface-checks')) } $nativeReason
     foreach ($manual in @('mixed-monitor-dpi', 'gpu-device-loss', 'sleep-lock-game', 'physical-disk-full', 'real-upgrade-data', 'code-signing')) {
         Invoke-QualityCheck $manual { } 'Manual acceptance or external signing identity required; see docs/QUALITY_087.md.'

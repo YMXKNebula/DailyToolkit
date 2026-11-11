@@ -1,8 +1,8 @@
 # DailyToolkit
 
-Windows 桌面工具集：放大镜、浮笺、剪贴回溯、文件集装箱和电脑信息。
+Windows 桌面工具集：放大镜、浮笺、剪贴回溯、文件集装箱、格式转换和电脑信息。
 
-[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [更新说明](docs/RELEASE_087.md)
+[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [更新说明](docs/RELEASE_091.md)
 
 ## 下载
 
@@ -21,6 +21,7 @@ Windows 桌面工具集：放大镜、浮笺、剪贴回溯、文件集装箱和
 | [浮笺](docs/FLOATING_NOTES.md) | 桌面笔记，自动保存 | `Ctrl + Alt + N` |
 | [剪贴回溯](docs/CLIPRECALL.md) | 查找、重新复制和管理剪贴历史 | `Ctrl + Alt + V` |
 | [文件集装箱](docs/FILEPACK.md) | 收集不同磁盘的文件，打包为 ZIP、7z 或 TAR | `Ctrl + Alt + P` |
+| [格式转换](docs/FORMAT_CONVERSION.md) | 本地批量转换图片、PDF、音视频和文档 | — |
 
 快捷键均可修改。“设置 → 快捷键”可集中查看，并提示软件内重复、已知 Windows 组合和注册失败。工具可收藏、排序和单独开关；支持托盘运行、开机自启和自定义配色。
 
@@ -35,6 +36,8 @@ Windows 桌面工具集：放大镜、浮笺、剪贴回溯、文件集装箱和
 配色预设点击即保存；自定义颜色只改变预览，保存后应用。剪贴历史面板和文件集装箱可单独配色；文件集装箱两个窗口共用配色。
 
 剪贴回溯默认关闭，开启后持续记录剪贴板，仅在本机加密保存。复制敏感内容前请暂停记录或排除来源应用，无法自动识别所有密码。文件默认只记路径，开启缓存后可保存文件副本。
+
+格式转换不调用在线服务或 AI，原文件保留。文档转换需要本机 LibreOffice，WebP 和部分音视频格式需要 FFmpeg；引擎不随程序捆绑，也不会自动下载。
 
 > 放大镜用于带反作弊的游戏时可能导致封号，请谨慎使用。
 

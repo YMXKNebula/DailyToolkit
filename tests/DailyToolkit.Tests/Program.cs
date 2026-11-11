@@ -35,6 +35,7 @@ internal static partial class Program
         RegisterNotesTests();
         RegisterClipboardTests();
         RegisterFilePackPlanningTests();
+        RegisterConversionTests();
         RegisterZoomTests();
         RegisterLensMovementTests();
         RegisterFrameSizeTests();

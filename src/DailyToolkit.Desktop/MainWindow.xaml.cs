@@ -294,8 +294,8 @@ public partial class MainWindow : Window
         e.Cancel = true;
         if (_closing) return;
         _closing = true;
-        if (_viewModel.FilePack.HasUnfinishedTasks && MessageBox.Show(this,
-            "退出会停止正在打包的任务。外部软件工作区会保留。", "退出 DailyToolkit",
+        if ((_viewModel.FilePack.HasUnfinishedTasks || _viewModel.Conversion.IsBusy) && MessageBox.Show(this,
+            "退出会停止正在打包或转换的任务。已完成文件和外部软件工作区会保留。", "退出 DailyToolkit",
             MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
         {
             _closing = false; _exitRequested = false; return;
@@ -336,6 +336,7 @@ public partial class MainWindow : Window
             if (!IsVisible) Show();
             RegisterLensHotkey(); _filePack?.Suspend(false); UpdateLocalPolling(); return;
         }
+        await _viewModel.Conversion.ShutdownAsync();
         _viewModel.CancelPending();
         await _viewModel.PendingWork;
         await _viewModel.ClipRecall.DisposeAsync();

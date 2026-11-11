@@ -1,0 +1,81 @@
+<UserControl x:Class="DailyToolkit.Desktop.Conversion.ConversionView"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Foreground="{DynamicResource TextBrush}" AllowDrop="True" PreviewDragOver="FilesDragOver" Drop="FilesDrop">
+ <UserControl.Resources>
+  <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+   <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+   <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/><Setter Property="Padding" Value="8,6"/>
+  </Style>
+  <Style x:Key="ConversionProgress" TargetType="ProgressBar">
+   <Setter Property="Height" Value="6"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ProgressBar">
+    <Grid x:Name="PART_Track"><Border Background="{DynamicResource BorderBrush}" CornerRadius="3"/>
+     <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{DynamicResource AccentBrush}" CornerRadius="3"/>
+    </Grid>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+ </UserControl.Resources>
+ <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+  <StackPanel Margin="0,0,8,0">
+   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+    <TextBlock Text="转换选项" Style="{StaticResource SectionTitle}"/>
+    <WrapPanel IsEnabled="{Binding CanEdit}">
+     <StackPanel Margin="0,0,16,12"><TextBlock Text="类型"/><ComboBox ItemsSource="{Binding Categories}" SelectedValuePath="Value" DisplayMemberPath="Name" SelectedValue="{Binding Kind}" Width="120" Margin="0,6,0,0" AutomationProperties.Name="转换类型"/></StackPanel>
+     <StackPanel Margin="0,0,16,12"><TextBlock Text="输出格式"/><ComboBox ItemsSource="{Binding Formats}" SelectedValuePath="Id" DisplayMemberPath="Name" SelectedValue="{Binding Target}" Width="160" Margin="0,6,0,0" AutomationProperties.Name="输出格式"/></StackPanel>
+     <StackPanel Margin="0,0,16,12" Visibility="{Binding IsPdf, Converter={StaticResource VisibleWhen}}"><TextBlock Text="分辨率（DPI）"/><ComboBox ItemsSource="{Binding PdfResolutions}" SelectedItem="{Binding PdfDpi}" Width="96" Margin="0,6,0,0" AutomationProperties.Name="PDF 输出分辨率"/></StackPanel>
+    </WrapPanel>
+    <Grid IsEnabled="{Binding CanEdit}" Visibility="{Binding ShowImageQuality, Converter={StaticResource VisibleWhen}}" Margin="0,0,0,12">
+     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <TextBlock Text="JPG / WebP 质量" VerticalAlignment="Center" Margin="0,0,12,0"/>
+     <Slider Grid.Column="1" Minimum="1" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Quality}" AutomationProperties.Name="图片输出质量"/>
+     <TextBlock Grid.Column="2" Text="{Binding Quality}" Width="32" TextAlignment="Right" VerticalAlignment="Center"/>
+    </Grid>
+    <TextBlock Text="{Binding FormatHint}" Style="{StaticResource MutedText}"/>
+   </StackPanel></Border>
+   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+    <TextBlock Text="文件" Style="{StaticResource SectionTitle}"/>
+    <WrapPanel Margin="0,0,0,10">
+     <Button Content="添加文件" Click="AddFiles" IsEnabled="{Binding CanEdit}" Margin="0,0,8,8"/>
+     <Button Content="移除所选" Command="{Binding RemoveCommand}" Margin="0,0,8,8"/>
+     <Button Content="清空" Command="{Binding ClearCommand}" Margin="0,0,0,8"/>
+    </WrapPanel>
+    <DataGrid x:Name="FileList" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" SelectionMode="Single" SelectionUnit="FullRow" Height="220" AutomationProperties.Name="待转换文件">
+     <DataGrid.Columns>
+      <DataGridTextColumn Header="文件名" Binding="{Binding Name}" Width="*" MinWidth="100"><DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding Source}"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style></DataGridTextColumn.ElementStyle></DataGridTextColumn>
+      <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="74"/>
+      <DataGridTextColumn Header="结果" Binding="{Binding Detail}" Width="180"><DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding Detail}"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style></DataGridTextColumn.ElementStyle></DataGridTextColumn>
+     </DataGrid.Columns>
+    </DataGrid>
+    <TextBlock Text="可拖入文件。每批最多 100 个，原文件保留。" Style="{StaticResource MutedText}" Margin="0,10,0,0"/>
+   </StackPanel></Border>
+   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+    <TextBlock Text="保存位置" Style="{StaticResource SectionTitle}"/>
+    <Grid IsEnabled="{Binding CanEdit}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <TextBox Text="{Binding OutputDirectory, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="转换输出位置"/>
+     <Button Grid.Column="1" Content="选择" Click="BrowseOutput" Margin="8,0,0,0"/>
+    </Grid>
+    <TextBlock Text="同名文件自动更名。JPG、音视频转换可能有损，转换后请检查结果。" Style="{StaticResource MutedText}" Margin="0,8,0,12"/>
+    <WrapPanel>
+     <Button Content="开始转换" Style="{StaticResource AccentButton}" Command="{Binding StartCommand}" Margin="0,0,8,8"/>
+     <Button Content="取消" Command="{Binding CancelCommand}" Margin="0,0,8,8"/>
+     <Button Content="打开输出位置" Command="{Binding OpenOutputCommand}" Margin="0,0,0,8"/>
+    </WrapPanel>
+    <StackPanel Visibility="{Binding IsBusy, Converter={StaticResource VisibleWhen}}" Margin="0,8,0,0">
+     <ProgressBar Style="{StaticResource ConversionProgress}" Value="{Binding Progress, Mode=OneWay}" Maximum="100"/>
+     <TextBlock Text="{Binding Progress, StringFormat={}{0:0}%}" Style="{StaticResource MutedText}" Margin="0,6,0,0"/>
+    </StackPanel>
+   </StackPanel></Border>
+   <Border Style="{StaticResource Card}"><Expander Header="本地引擎" Foreground="{DynamicResource TextBrush}"><StackPanel Margin="0,12,0,0" IsEnabled="{Binding CanEdit}">
+    <TextBlock Text="FFmpeg（可选）"/><Grid Margin="0,6,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <TextBox Text="{Binding FFmpegPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="FFmpeg 程序路径"/><Button Grid.Column="1" Content="选择" Tag="ffmpeg" Click="BrowseEngine" Margin="8,0,0,0"/>
+    </Grid>
+    <TextBlock Text="未选择时使用系统音视频转换。WebP、FLAC、OGG、MKV 和 WebM 需要 FFmpeg。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
+    <TextBlock Text="LibreOffice"/><Grid Margin="0,6,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <TextBox Text="{Binding LibreOfficePath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="LibreOffice 程序路径"/><Button Grid.Column="1" Content="选择" Tag="office" Click="BrowseEngine" Margin="8,0,0,0"/>
+    </Grid>
+    <TextBlock Text="文档转换需选择本机的 soffice.exe。仅使用本地程序，不自动下载。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
+    <Button Content="保存设置" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left"/>
+   </StackPanel></Expander></Border>
+   <TextBlock Text="{Binding Notice}" Style="{StaticResource MutedText}" Visibility="{Binding HasNotice, Converter={StaticResource VisibleWhen}}" Margin="0,12,0,0"/>
+  </StackPanel>
+ </ScrollViewer>
+</UserControl>

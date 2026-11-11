@@ -22,7 +22,7 @@ jobs:
   windows:
     if: github.event_name != 'schedule'
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,6 +30,16 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      - name: Prepare local conversion test engines
+        timeout-minutes: 12
+        shell: pwsh
+        run: ./scripts/prepare-conversion-checks.ps1
+      - name: Check conversion before the full regression suite
+        shell: pwsh
+        run: |
+          ./scripts/build.ps1 -SkipTests
+          & ./tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyToolkit.Desktop.Tests.exe --clipboard-native-conversion-checks .local/quality-checks/conversion-checks
+          if ($LASTEXITCODE -ne 0) { throw 'Conversion preflight failed; see the retained log.' }
       - name: Build and check
         shell: pwsh
         run: ./scripts/check-quality.ps1 -IsolatedCi
@@ -44,6 +54,7 @@ jobs:
           path: |
             .local/quality-checks/**
             .local/dependency-audit/**
+            .local/conversion-test-engines/**
           if-no-files-found: warn
           retention-days: 14
       - name: Package portable app

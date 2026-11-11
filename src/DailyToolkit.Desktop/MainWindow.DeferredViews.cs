@@ -3,6 +3,7 @@ using DailyToolkit.Desktop.ClipRecall;
 using DailyToolkit.Desktop.FilePack;
 using DailyToolkit.Desktop.Notes;
 using DailyToolkit.Desktop.Runtime;
+using DailyToolkit.Desktop.Conversion;
 
 namespace DailyToolkit.Desktop;
 
@@ -11,11 +12,12 @@ public partial class MainWindow
     private NotesSettingsView? _notesSettingsView;
     private ClipboardSettingsView? _clipRecallSettingsView;
     private FilePackSettingsView? _filePackSettingsView;
+    private ConversionView? _conversionView;
     private bool _deferredRuntimeBindingsEnabled;
     private Task<bool[]> _deferredAutomationCleanup = Task.FromResult(Array.Empty<bool>());
 
     internal int CreatedSettingsViewCount => (_notesSettingsView is null ? 0 : 1) +
-        (_clipRecallSettingsView is null ? 0 : 1) + (_filePackSettingsView is null ? 0 : 1);
+        (_clipRecallSettingsView is null ? 0 : 1) + (_filePackSettingsView is null ? 0 : 1) + (_conversionView is null ? 0 : 1);
     internal bool IsDeferredAutomationCleanupComplete => _deferredAutomationCleanup.IsCompletedSuccessfully &&
         _deferredAutomationCleanup.Result.All(success => success);
     internal Task<bool[]> DeferredAutomationCleanup => _deferredAutomationCleanup;
@@ -27,13 +29,15 @@ public partial class MainWindow
         foreach (var (id, values) in CaptureUiScopes(includeMain: false))
             _pendingUiScopes[id] = values;
         AttachUiStateHooks();
-        var cleanup = new List<Task<bool>>(3);
+        var cleanup = new List<Task<bool>>(4);
         Release(NotesSettingsHost, _notesSettingsView);
         Release(ClipRecallSettingsHost, _clipRecallSettingsView);
         Release(FilePackSettingsHost, _filePackSettingsView);
+        Release(ConversionHost, _conversionView);
         _notesSettingsView = null;
         _clipRecallSettingsView = null;
         _filePackSettingsView = null;
+        _conversionView = null;
         _deferredAutomationCleanup = Task.WhenAll(cleanup);
         return true;
 
@@ -95,6 +99,13 @@ public partial class MainWindow
             _filePackSettingsView = view;
             RegisterName(view.Name, view);
             FilePackSettingsHost.Content = view;
+        }
+        else if (_viewModel.ShowConversion && _conversionView is null)
+        {
+            var view = new ConversionView { Name = "FormatConversion", DataContext = _viewModel.Conversion };
+            _conversionView = view;
+            RegisterName(view.Name, view);
+            ConversionHost.Content = view;
         }
         // Visible navigation keeps the current editing session. Hidden idle
         // release retains only values and recreates a page on its next visit.
