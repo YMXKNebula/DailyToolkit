@@ -67,17 +67,6 @@ jobs:
       - name: Retain direct and transitive dependency audit
         shell: pwsh
         run: ./scripts/audit-dependencies.ps1
-      - name: Keep quality reports, logs and fixture images
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: quality-check-diagnostics
-          path: |
-            .local/quality-checks/**
-            .local/dependency-audit/**
-            .local/conversion-test-engines/**
-          if-no-files-found: warn
-          retention-days: 14
       - name: Package portable app
         shell: pwsh
         run: ./scripts/publish.ps1
@@ -97,6 +86,19 @@ jobs:
             artifacts/DailyToolkit-*-win-x64-setup.exe
             artifacts/SHA256SUMS.txt
           if-no-files-found: error
+          retention-days: 14
+      - name: Keep quality reports, logs and fixture images
+        if: always()
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-check-diagnostics
+          path: |
+            .local/quality-checks/**
+            .local/dependency-audit/**
+            .local/conversion-test-engines/**
+          if-no-files-found: warn
           retention-days: 14
   installer:
     needs: windows
