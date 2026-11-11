@@ -1,0 +1,22 @@
+name: Inspect conversion bundle
+on:
+  push:
+    branches: [codex/bundle-offline-conversion]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - shell: pwsh
+        run: ./scripts/inspect-conversion-bundle.ps1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: conversion-bundle-inspection
+          path: .local/conversion-bundle-inspection/**
+          retention-days: 7
