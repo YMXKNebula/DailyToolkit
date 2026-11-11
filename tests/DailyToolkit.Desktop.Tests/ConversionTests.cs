@@ -113,11 +113,13 @@ internal static partial class Program
                 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>
                 """);
             AddZipText(zip, "word/document.xml", """
-                <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>格式转换离线检查</w:t></w:r></w:p><w:p><w:r><w:t>Original file stays unchanged.</w:t></w:r></w:p></w:body></w:document>
+                <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:rPr><w:rFonts w:ascii="Noto Sans CJK SC" w:eastAsia="Noto Sans CJK SC" w:hAnsi="Noto Sans CJK SC"/></w:rPr><w:t>格式转换离线检查</w:t></w:r></w:p><w:p><w:r><w:t>Original file stays unchanged.</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>表格内容</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>
                 """);
         }
         var original = SHA256.HashData(File.ReadAllBytes(word));
         var pdf = (await runner.RunAsync(new(word, output, ConversionKind.Document, "pdf", options))).Single();
+        if (bundledEngine is not null)
+            Require(System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(pdf)).Contains("NotoSansCJKsc", StringComparison.Ordinal), "The packaged Chinese font was not privately loaded and embedded in PDF");
         var rendered = await runner.RunAsync(new(pdf, output, ConversionKind.Pdf, "png", new()));
         Require(rendered.Count > 0, "Office PDF was not readable by the Windows PDF renderer");
         var odt = (await runner.RunAsync(new(word, output, ConversionKind.Document, "odt", options))).Single();

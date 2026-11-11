@@ -67,11 +67,22 @@ Noto Sans CJK SC 2.004 is included as a private document font, with no system fo
 Copyright 2014-2021 Adobe and Noto contributors; SIL Open Font License 1.1 in LICENSE-NotoSansCJK.txt.
 Font source: https://github.com/notofonts/noto-cjk/tree/$fontRevision
 "@ | Set-Content -LiteralPath (Join-Path $OutputDirectory 'SOURCE.txt') -Encoding utf8
-$profile = Join-Path $work 'probe-profile'
-$input = Join-Path $work '离线检查.txt'
-[IO.File]::WriteAllText($input, '格式转换离线检查', [Text.UTF8Encoding]::new($false))
-& (Join-Path $OutputDirectory 'program/soffice.com') ('-env:UserInstallation=' + ([uri]($profile + '\')).AbsoluteUri) --headless --nologo --nodefault --nofirststartwizard --norestore --convert-to pdf --outdir $work $input
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $work '离线检查.pdf'))) { throw 'Selected app-local office runtime did not convert Unicode text to PDF.' }
+$probeProfile = Join-Path ([IO.Path]::GetTempPath()) ('dtk-lo-' + [guid]::NewGuid().ToString('N'))
+$probeInput = Join-Path $work '离线检查.txt'
+[IO.File]::WriteAllText($probeInput, '格式转换离线检查', [Text.UTF8Encoding]::new($false))
+try {
+    $probeLog = Join-Path $work 'probe.log'
+    $probeError = Join-Path $work 'probe-error.log'
+    $arguments = @(('-env:UserInstallation=' + ([uri]($probeProfile + '\')).AbsoluteUri), '--headless', '--nologo', '--nodefault', '--nofirststartwizard', '--norestore', '--convert-to', 'pdf', '--outdir', ('"' + $work + '"'), ('"' + $probeInput + '"'))
+    $probe = Start-Process -FilePath (Join-Path $OutputDirectory 'program/soffice.com') -ArgumentList $arguments -RedirectStandardOutput $probeLog -RedirectStandardError $probeError -PassThru
+    if (-not $probe.WaitForExit(60000)) {
+        $probe.Kill($true); $probe.WaitForExit()
+        Get-Content -LiteralPath $probeLog, $probeError -ErrorAction SilentlyContinue | Write-Host
+        throw 'The selected app-local office probe exceeded one minute.'
+    }
+    Get-Content -LiteralPath $probeLog, $probeError -ErrorAction SilentlyContinue | Write-Host
+    if ($probe.ExitCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $work '离线检查.pdf'))) { throw 'Selected app-local office runtime did not convert Unicode text to PDF.' }
+} finally { if (Test-Path -LiteralPath $probeProfile) { Remove-Item -LiteralPath $probeProfile -Recurse -Force } }
 Write-Host 'PASS Selected app-local LibreOffice: Unicode TXT to PDF without installation.'
 & python (Join-Path $PSScriptRoot 'conversion-manifest.py') create $OutputDirectory libreoffice $PSCommandPath (Join-Path $PSScriptRoot 'stage-conversion-office.py')
 if ($LASTEXITCODE -ne 0) { throw 'Office component manifest creation failed.' }

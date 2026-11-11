@@ -17,6 +17,6 @@ public static class BundledConversionEngines
     public static void Require(string path)
     {
         if (!File.Exists(path))
-            throw new FileNotFoundException("转换组件缺失，请重新解压完整软件包。", path);
+            throw new FileNotFoundException("转换组件缺失，请重新安装或解压完整软件包。", path);
     }
 }

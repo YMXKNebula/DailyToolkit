@@ -10,7 +10,7 @@ internal static partial class Program
     {
         Test("Bundled conversion paths follow the moved application and ignore old engine settings", () =>
         {
-            var moved = Path.Combine(Path.GetTempPath(), "移动后的便携目录");
+            var moved = Path.Combine(Path.GetTempPath(), "移动后的便携目录-" + Guid.NewGuid().ToString("N"));
             var resolved = BundledConversionEngines.Resolve(new() { Quality = 73, FFmpegPath = "obsolete.exe", LibreOfficePath = "obsolete-office.exe" }, moved);
             Require(Path.Combine(moved, "tools", "ffmpeg", "ffmpeg.exe") == resolved.FFmpegPath);
             Require(Path.Combine(moved, "tools", "libreoffice", "program", "soffice.com") == resolved.LibreOfficePath);
