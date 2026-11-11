@@ -11,6 +11,7 @@ using DailyToolkit.Desktop.Notes;
 using DailyToolkit.Desktop.ClipRecall;
 using DailyToolkit.Core.FilePack;
 using DailyToolkit.Desktop.FilePack;
+using DailyToolkit.Desktop.Conversion;
 
 namespace DailyToolkit.Desktop.Presentation;
 
@@ -48,7 +49,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly NavigationItem[] _navigation=[new("screen-lens","放大镜","\uE71E",canToggle:true),
         new("floating-notes","浮笺","\uE70B",canToggle:true),
         new("clip-recall","剪贴回溯","\uE8C8",canToggle:true),
-        new("file-pack","文件集装箱","\uE7B8",canToggle:true)];
+        new("file-pack","文件集装箱","\uE7B8",canToggle:true),
+        new("format-conversion","格式转换","\uE8AB",canToggle:true)];
     private string _softwareSearch = "";
     private string _notice = "";
     private bool _isRefreshing;
@@ -68,7 +70,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         TimeProvider? clock = null, FavoritesStore? favoritesStore = null, GamingPreferencesStore? gamingPreferencesStore = null,
         NavigationOrderStore? navigationStore = null, AppPreferencesStore? appPreferencesStore = null,
         Runtime.IStartupRegistration? startupRegistration = null, NotesStore? notesStore = null,
-        ClipboardSettingsStore? clipboardSettingsStore = null, FilePackStore? filePackStore = null)
+        ClipboardSettingsStore? clipboardSettingsStore = null, FilePackStore? filePackStore = null,
+        ConversionSettingsStore? conversionSettingsStore = null)
     {
         _probe = probe;
         _display = display;
@@ -87,7 +90,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Notes = new(notesStore);
         ClipRecall = new(clipboardSettingsStore);
         FilePack = new(filePackStore);
+        Conversion = new(conversionSettingsStore);
         Shortcuts = new(this);
+        Conversion.IsFavorite = _favoriteIds.Contains("format-conversion");
+        _navigation[4].IsEnabled = Conversion.IsEnabled;
         FilePack.IsFavorite = _favoriteIds.Contains("file-pack");
         _navigation[3].IsEnabled = FilePack.IsEnabled;
         ClipRecall.IsFavorite = _favoriteIds.Contains("clip-recall");
@@ -111,6 +117,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             else if (parameter is NavigationItem { Id:"floating-notes",CanToggle:true }) Notes.IsEnabled=!Notes.IsEnabled;
             else if (parameter is NavigationItem { Id:"clip-recall",CanToggle:true }) ClipRecall.RequestEnabled(!ClipRecall.IsEnabled);
             else if (parameter is NavigationItem { Id:"file-pack",CanToggle:true }) FilePack.ToggleEnabledCommand.Execute(null);
+            else if (parameter is NavigationItem { Id:"format-conversion",CanToggle:true }) Conversion.ToggleEnabledCommand.Execute(null);
         });
         OpenFavoritesCommand=new(_ => OpenFavorites());
         ExitFavoritesCommand=new(_ => ExitFavorites());
@@ -120,13 +127,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         MoveDownCommand=new(parameter => MoveBy(parameter,1),() => !IsSettings && NavigationItems.Count > 1);
         RefreshCommand = new(_ =>
         {
-            if (IsSettings && !IsHome || ShowFilePack) return;
+            if (IsSettings && !IsHome || ShowFilePack || ShowConversion) return;
             if (ShowScreenLens) Gaming.RefreshMonitors(); else _ = InitializeAsync();
-        }, () => !ShowFilePack && (!IsSettings || IsHome) && (ShowScreenLens ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus));
+        }, () => !ShowFilePack && !ShowConversion && (!IsSettings || IsHome) && (ShowScreenLens ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus));
         Gaming.PropertyChanged += OnGamingChanged;
         Notes.PropertyChanged += OnNotesChanged;
         ClipRecall.PropertyChanged += OnClipRecallChanged;
         FilePack.PropertyChanged += OnFilePackChanged;
+        Conversion.PropertyChanged += OnConversionChanged;
         RefreshNavigation();
         NotifyNavigation();
     }
@@ -157,11 +165,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public NotesViewModel Notes { get; }
     public ClipboardHistoryViewModel ClipRecall { get; }
     public FilePackViewModel FilePack { get; }
+    public ConversionViewModel Conversion { get; }
     public ShortcutCatalog Shortcuts { get; }
     public RelayCommand RefreshCommand { get; }
     public Task CurrentProbeTask { get; private set; } = Task.CompletedTask;
     public Task CurrentLocalStatusTask { get; private set; } = Task.CompletedTask;
-    public Task PendingWork => Task.WhenAll(CurrentProbeTask, CurrentLocalStatusTask, Notes.Ready, ClipRecall.Ready, ClipRecall.PendingSettings, FilePack.Ready);
+    public Task PendingWork => Task.WhenAll(CurrentProbeTask, CurrentLocalStatusTask, Notes.Ready, ClipRecall.Ready, ClipRecall.PendingSettings, FilePack.Ready, Conversion.PendingWork);
     public MachineReport Report => _report;
     public ICollectionView SoftwareView => _softwareView;
 
@@ -200,15 +209,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool ShowFloatingNotes => Page == "floating-notes";
     public bool ShowClipRecall => Page == "clip-recall";
     public bool ShowFilePack => Page == "file-pack";
+    public bool ShowConversion => Page == "format-conversion";
     public bool ShowFavoritesEmpty => IsFavorites && !HasFavorites;
     public bool ShowAllTools => !IsFavorites && !IsSettings;
-    public bool ShowRefresh => (!IsSettings || IsHome) && !ShowFloatingNotes && !ShowClipRecall && !ShowFilePack;
+    public bool ShowRefresh => (!IsSettings || IsHome) && !ShowFloatingNotes && !ShowClipRecall && !ShowFilePack && !ShowConversion;
     public string FavoritesToggleHint => IsFavorites ? "关闭收藏夹" : "打开收藏夹";
     public string SettingsToggleHint => IsSettings ? "关闭软件设置" : "打开软件设置";
     public string PageTitle => IsSettings ? _settingsNavigation.First(item => item.Id == Page).Name : ShowFavoritesEmpty ? "收藏夹" : _navigation.First(item => item.Id == Page).Name;
     public string RefreshText => ShowScreenLens ? "刷新屏幕" : "刷新";
-    public string FooterStatusText => IsHome ? StatusText : IsSettings || ShowFavoritesEmpty ? "" : ShowFilePack ? FilePack.Status : ShowClipRecall ? ClipRecall.Status : ShowFloatingNotes ? Notes.Status : !Gaming.IsEnabled ? "功能已停用" : Gaming.IsActive ? "放大运行中" : "未开启";
-    public string FooterSourceText => IsHome ? LocalSourceText : IsSettings || ShowFavoritesEmpty ? "" : ShowFilePack ? "本地文件打包" : ShowClipRecall ? "本地剪贴板历史" : ShowFloatingNotes ? "本地笔记" : "本机显示";
+    public string FooterStatusText => IsHome ? StatusText : IsSettings || ShowFavoritesEmpty ? "" : ShowConversion ? Conversion.Status : ShowFilePack ? FilePack.Status : ShowClipRecall ? ClipRecall.Status : ShowFloatingNotes ? Notes.Status : !Gaming.IsEnabled ? "功能已停用" : Gaming.IsActive ? "放大运行中" : "未开启";
+    public string FooterSourceText => IsHome ? LocalSourceText : IsSettings || ShowFavoritesEmpty ? "" : ShowConversion ? "本地格式转换" : ShowFilePack ? "本地文件打包" : ShowClipRecall ? "本地剪贴板历史" : ShowFloatingNotes ? "本地笔记" : "本机显示";
     public bool PageAnimationsEnabled
     {
         get => _appPreferences.PageAnimationsEnabled;
@@ -591,7 +601,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public void CancelPending() => _lifetime.Cancel();
-    public void Dispose() { _startupDisposed=true; Shortcuts.Dispose(); FilePack.PropertyChanged -= OnFilePackChanged; FilePack.Dispose(); ClipRecall.PropertyChanged -= OnClipRecallChanged; ClipRecall.Dispose(); Notes.PropertyChanged -= OnNotesChanged; Notes.Dispose(); Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose() { _startupDisposed=true; Shortcuts.Dispose(); Conversion.PropertyChanged -= OnConversionChanged; Conversion.Dispose(); FilePack.PropertyChanged -= OnFilePackChanged; FilePack.Dispose(); ClipRecall.PropertyChanged -= OnClipRecallChanged; ClipRecall.Dispose(); Notes.PropertyChanged -= OnNotesChanged; Notes.Dispose(); Gaming.PropertyChanged -= OnGamingChanged; Gaming.Dispose(); _lifetime.Cancel(); _lifetime.Dispose(); }
 
     private static string FormatBytes(long? bytes) => bytes is null ? "未知" :
         bytes >= 1024L * 1024 * 1024 ? $"{bytes.Value / (1024d * 1024 * 1024):0.#} GB" :

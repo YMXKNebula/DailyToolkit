@@ -25,7 +25,7 @@ internal sealed partial class ApplicationRuntimeHost
         _idleMemoryOperation?.Status is DispatcherOperationStatus.Pending or DispatcherOperationStatus.Executing;
 
     private bool AllToolsDisabled => !_viewModel.Gaming.IsEnabled && !_viewModel.Notes.IsEnabled &&
-        !_viewModel.ClipRecall.IsEnabled && !_viewModel.FilePack.IsEnabled;
+        !_viewModel.ClipRecall.IsEnabled && !_viewModel.FilePack.IsEnabled && !_viewModel.Conversion.IsEnabled;
 
     private void ObserveIdleMemoryChanges(bool subscribe)
     {
@@ -37,6 +37,7 @@ internal sealed partial class ApplicationRuntimeHost
             _viewModel.Notes.IdleStateChanged += ScheduleIdleMemoryAttempt;
             _viewModel.ClipRecall.PropertyChanged += IdleMemoryStateChanged;
             _viewModel.FilePack.PropertyChanged += IdleMemoryStateChanged;
+            _viewModel.Conversion.PropertyChanged += IdleMemoryStateChanged;
         }
         else
         {
@@ -46,6 +47,7 @@ internal sealed partial class ApplicationRuntimeHost
             _viewModel.Notes.IdleStateChanged -= ScheduleIdleMemoryAttempt;
             _viewModel.ClipRecall.PropertyChanged -= IdleMemoryStateChanged;
             _viewModel.FilePack.PropertyChanged -= IdleMemoryStateChanged;
+            _viewModel.Conversion.PropertyChanged -= IdleMemoryStateChanged;
         }
     }
 
@@ -119,7 +121,7 @@ internal sealed partial class ApplicationRuntimeHost
             model.ClipRecall.Ready, model.ClipRecall.PendingSettings, model.ClipRecall.PendingAppearanceSave,
             ClipRecall?.Ready, ClipRecall?.Pending, model.FilePack.Ready, model.FilePack.PendingOperations,
             model.FilePack.IdleWork, model.FilePack.Manager.Ready, FilePack?.Ready, FilePack?.PendingDropCleanup,
-            window.DeferredAutomationCleanup
+            model.Conversion.PendingWork, window.DeferredAutomationCleanup
         }.Concat(model.FilePack.Appearances.Select(appearance => (Task?)appearance.PendingSave))
             .Where(task => task is { IsCompleted: false }).Cast<Task>().Distinct().ToArray();
         if (tasks.Length == 0) return;
@@ -202,7 +204,7 @@ internal sealed partial class ApplicationRuntimeHost
             !model.Notes.IsIdleForMemoryCollection || model.ClipRecall.IsEnabled || model.ClipRecall.IsBusy ||
             model.ClipRecall.IsVisible || model.ClipRecall.HasMaintenanceTimer || model.ClipRecall.Repository.IsReady ||
             !model.ClipRecall.Ready.IsCompletedSuccessfully || !model.ClipRecall.PendingSettings.IsCompletedSuccessfully ||
-            !model.ClipRecall.PendingAppearanceSave.IsCompletedSuccessfully || !model.FilePack.IsIdleForMemoryCollection ||
+            !model.ClipRecall.PendingAppearanceSave.IsCompletedSuccessfully || !model.FilePack.IsIdleForMemoryCollection || !model.Conversion.IsIdleForMemoryCollection ||
             model.IsRefreshing || !model.CurrentProbeTask.IsCompleted || !model.CurrentLocalStatusTask.IsCompleted ||
             !model.CanEditStartup || !model.PendingStartupChange.IsCompletedSuccessfully)
             return false;

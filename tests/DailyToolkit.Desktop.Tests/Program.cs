@@ -30,7 +30,8 @@ internal static partial class Program
             return RunFilePackCrashWorkerAsync(fixture, engine).GetAwaiter().GetResult();
         try
         {
-            if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _] or ["--clipboard-native-filepack-quick-checks", _] or ["--clipboard-native-filepack-ipc-checks"] or ["--clipboard-native-shortcut-overview-checks", _]
+            if (args.FirstOrDefault() == "--clipboard-native-conversion-checks") ClipboardTestStation.Connect();
+            else if (args is ["--clipboard-native-checks"] or ["--clipboard-native-visuals", _] or ["--clipboard-native-palette-checks", _] or ["--clipboard-native-filepack-checks", _] or ["--clipboard-native-filepack-quick-checks", _] or ["--clipboard-native-filepack-ipc-checks"] or ["--clipboard-native-shortcut-overview-checks", _]
                 or ["--clipboard-native-filepack-drop-host-checks"] or ["--background-resource-checks", _] or ["--background-resource-soak", _, _] or ["--window-memory-profile", _] or ["--runtime-memory-profile", _] or ["--runtime-memory-profile-production", _] or ["--runtime-memory-profile-retained", _] or ["--runtime-memory-experiment-optimized", _] or ["--runtime-memory-experiment-aggressive", _] or ["--runtime-memory-experiment-retained-aggressive", _] or ["--runtime-host-checks"] or ["--preview-resource-checks"] or ["--filepack-intake-checks"]) ClipboardTestStation.Connect();
             else if (args.Length is 4 or 5 && args[0] == "--clipboard-native-writer") ClipboardTestStation.Connect(args[1], args[2]);
         }
@@ -63,6 +64,8 @@ internal static partial class Program
         {
             try
             {
+                if (args is ["--clipboard-native-conversion-checks", var conversionImages])
+                { await CheckFormatConversionAsync(conversionImages); exitCode = 0; return; }
                 if (args is ["--diagnostic-checks"])
                 { await CheckDiagnosticReportsAsync(); exitCode = 0; return; }
                 if (args is ["--window-memory-profile", var memoryReport])

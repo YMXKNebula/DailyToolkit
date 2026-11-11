@@ -288,6 +288,7 @@ public partial class MainWindow
         if (_notesSettingsView is not null) yield return ("floating-notes", _notesSettingsView);
         if (_clipRecallSettingsView is not null) yield return ("clip-recall", _clipRecallSettingsView);
         if (_filePackSettingsView is not null) yield return ("file-pack", _filePackSettingsView);
+        if (_conversionView is not null) yield return ("format-conversion", _conversionView);
     }
 
     private IEnumerable<(string Path, DependencyObject Element)> UiElements(DependencyObject root, bool skipDeferred = false)
@@ -297,7 +298,7 @@ public partial class MainWindow
         IEnumerable<(string, DependencyObject)> Walk(DependencyObject current, string path)
         {
             if (!seen.Add(current) || (skipDeferred && (ReferenceEquals(current, _notesSettingsView) ||
-                ReferenceEquals(current, _clipRecallSettingsView) || ReferenceEquals(current, _filePackSettingsView)))) yield break;
+                ReferenceEquals(current, _clipRecallSettingsView) || ReferenceEquals(current, _filePackSettingsView) || ReferenceEquals(current, _conversionView)))) yield break;
             yield return (path, current);
             var logicalIndex = 0;
             foreach (var child in LogicalTreeHelper.GetChildren(current))
