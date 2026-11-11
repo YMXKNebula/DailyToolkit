@@ -61,5 +61,12 @@
     "revision": "",
     "url": "https://deb.debian.org/debian/pool/main/l/lame/lame_3.100.orig.tar.gz",
     "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
+  },
+  {
+    "name": "zlib",
+    "version": "1.4",
+    "revision": "99623ef7097352da7993ba614161fd6a311e046e",
+    "url": "https://codeload.github.com/madler/zlib/tar.gz/99623ef7097352da7993ba614161fd6a311e046e",
+    "sha256": "f0d590dd90243a12f551ee13359bf6c634249c55b316fa2b7dbecabe7ae9a904"
   }
 ]

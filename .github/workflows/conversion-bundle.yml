@@ -39,10 +39,12 @@ jobs:
         with:
           persist-credentials: false
       - shell: pwsh
-        run: ./scripts/inspect-conversion-bundle.ps1
+        run: ./scripts/prepare-conversion-office.ps1
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: conversion-bundle-inspection
-          path: .local/conversion-bundle-inspection/**
+          path: |
+            .local/conversion-office/**/*.json
+            .local/conversion-office/**/*.log
           retention-days: 7

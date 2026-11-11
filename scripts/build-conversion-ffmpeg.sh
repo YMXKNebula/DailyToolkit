@@ -63,11 +63,12 @@ cmake_lib() {
     local name=$1; shift
     run "$name-configure" cmake -S "$build/$name" -B "$build/$name-build" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE="$build/windows.cmake" -DCMAKE_INSTALL_PREFIX="$prefix" \
-        -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF "$@"
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF "$@"
     run "$name-build" cmake --build "$build/$name-build" --parallel "$jobs"
     run "$name-install" cmake --install "$build/$name-build"
 }
 cmake_lib ogg -DINSTALL_DOCS=OFF
+cmake_lib zlib -DZLIB_BUILD_EXAMPLES=OFF -DZLIB_BUILD_TESTING=OFF -DZLIB_BUILD_SHARED=OFF
 cmake_lib vorbis
 cmake_lib opus -DOPUS_BUILD_TESTING=OFF -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_DRED=OFF -DOPUS_DEEP_PLC=OFF -DOPUS_OSCE=OFF
 cmake_lib webp -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
@@ -109,9 +110,9 @@ run dav1d-install meson install -C "$build/dav1d-build"
         --enable-static --disable-shared --enable-gpl --disable-autodetect --disable-debug --disable-doc \
         --disable-network --disable-devices --disable-hwaccels --disable-avdevice --disable-everything \
         --enable-ffmpeg --disable-ffplay --disable-ffprobe \
-        --enable-libx264 --enable-libmp3lame --enable-libvorbis --enable-libopus --enable-libvpx --enable-libwebp --enable-libdav1d \
+        --enable-zlib --enable-libx264 --enable-libmp3lame --enable-libvorbis --enable-libopus --enable-libvpx --enable-libwebp --enable-libdav1d \
         --enable-protocol=file,pipe --enable-decoder="$decoders" \
-        --enable-encoder=libmp3lame,aac,pcm_s16le,flac,libvorbis,libvpx_vp9,libopus,libx264,wmv2,wmav2,png,libwebp \
+        --enable-encoder=libmp3lame,aac,pcm_s16le,flac,libvorbis,libvpx_vp9,libopus,libx264,wmv2,wmav2,png,libwebp,ffv1 \
         --enable-demuxer=aac,mov,matroska,avi,asf,mpegps,mpegts,mp3,wav,flac,ogg,image2,image2pipe,png_pipe,webp_pipe,jpeg_pipe,bmp_pipe,tiff_pipe,gif,rawvideo \
         --enable-muxer=image2,image2pipe,mp3,ipod,wav,flac,ogg,mp4,asf,matroska,webm,null \
         --enable-parser=aac,ac3,flac,h264,hevc,mjpeg,mpeg4video,mpegaudio,mpegvideo,opus,vorbis,vp8,vp9,av1,png \
