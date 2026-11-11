@@ -15,6 +15,7 @@ internal static partial class Program
     private static async Task CheckFormatConversionAsync(string? images = null)
     {
         var fixture = Directory.CreateTempSubdirectory("DailyToolkit-conversion-desktop-");
+        Exception? failure = null;
         try
         {
             var source = Path.Combine(fixture.FullName, "透明图片.png");
@@ -82,8 +83,13 @@ internal static partial class Program
             await CheckOfficeConversionAsync(fixture.FullName, runner);
             await CheckNativeMediaConversionAsync(fixture.FullName, runner);
         }
-        catch (Exception exception) { Console.WriteLine("FAIL Conversion fixture: " + exception); throw; }
-        finally { fixture.Delete(true); }
+        catch (Exception exception) { failure = exception; throw; }
+        finally
+        {
+            try { fixture.Delete(true); }
+            catch (Exception cleanup) when (failure is not null && (cleanup is IOException or UnauthorizedAccessException))
+            { Console.WriteLine("Conversion fixture cleanup also failed: " + cleanup.Message); }
+        }
     }
 
     private static async Task CheckOfficeConversionAsync(string fixture, ConversionRunner runner)
@@ -140,19 +146,6 @@ internal static partial class Program
         Require(original.SequenceEqual(SHA256.HashData(File.ReadAllBytes(word))) && !Directory.EnumerateDirectories(output).Any(), "Office changed original or leaked its isolated profile");
         Require(Directory.GetDirectories(Path.GetTempPath(), "dtk-lo-*").All(existingProfiles.Contains), "Office retained a temporary profile after conversion");
         Console.WriteLine("PASS Real local LibreOffice: DOCX/ODT/TXT/PDF, XLSX/ODS/CSV and ODP/PPTX/PDF with Unicode and readable PDF pages");
-    }
-
-    private static async Task CheckConversionDocumentMediaAsync()
-    {
-        var fixture = Directory.CreateTempSubdirectory("DailyToolkit-headless-conversion-");
-        try
-        {
-            var runner = new ConversionRunner(new LocalConversionBackend());
-            await CheckOfficeConversionAsync(fixture.FullName, runner);
-            await CheckNativeMediaConversionAsync(fixture.FullName, runner);
-        }
-        catch (Exception exception) { Console.WriteLine("FAIL Headless conversion fixture: " + exception); throw; }
-        finally { fixture.Delete(true); }
     }
 
     private static void AddZipText(System.IO.Compression.ZipArchive zip, string name, string text)

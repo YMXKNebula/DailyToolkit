@@ -24,8 +24,9 @@ internal static partial class Program
     {
         if (args.Length > 0 && args[0] == DailyToolkit.Desktop.Conversion.NativeMediaWorker.Argument)
             return DailyToolkit.Desktop.Conversion.NativeMediaWorker.Run(args);
-        if (args is ["--conversion-worker-hold", var conversionSource, var conversionReady] && System.Environment.GetEnvironmentVariable("CI") == "true")
+        if (args is ["--conversion-worker-hold", var conversionSource, var conversionReady])
         {
+            if (System.Environment.GetEnvironmentVariable("CI") != "true") return 1;
             using var heldConversionFile = new System.IO.FileStream(conversionSource, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
             System.IO.File.WriteAllText(conversionReady, "ready");
             Task.Delay(Timeout.Infinite).GetAwaiter().GetResult(); return 0;
@@ -72,12 +73,6 @@ internal static partial class Program
         {
             try
             {
-                if (args is ["--conversion-document-media-checks"])
-                {
-                    if (System.Environment.GetEnvironmentVariable("CI") != "true")
-                        throw new InvalidOperationException("Headless document/media fixture checks require disposable CI.");
-                    await CheckConversionDocumentMediaAsync(); exitCode = 0; return;
-                }
                 if (args is ["--clipboard-native-conversion-checks", var conversionImages])
                 { await CheckFormatConversionAsync(conversionImages); exitCode = 0; return; }
                 if (args is ["--diagnostic-checks"])

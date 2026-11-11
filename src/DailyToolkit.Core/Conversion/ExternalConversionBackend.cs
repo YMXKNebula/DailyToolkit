@@ -145,7 +145,8 @@ public sealed class ExternalConversionBackend : IConversionBackend
         {
             timeout.Token.ThrowIfCancellationRequested();
             if (!process.Start()) throw new IOException("本地引擎未能启动。");
-            job?.Assign(process);
+            try { job?.Assign(process); }
+            catch (IOException e) { throw new IOException("无法保护本次转换，已停止任务。", e); }
             process.StandardInput.Close();
             stdout = DrainAsync(process.StandardOutput);
             stderr = DrainAsync(process.StandardError);
@@ -168,9 +169,10 @@ public sealed class ExternalConversionBackend : IConversionBackend
             try
             {
                 if (process.Id != 0 && !process.HasExited) process.Kill(entireProcessTree: true);
-                job?.Dispose();
-                if (process.Id != 0) await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
             }
+            catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { Trace.WriteLine(e); }
+            job?.Dispose();
+            try { if (process.Id != 0) await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false); }
             catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { Trace.WriteLine(e); }
             if (stdout is not null && stderr is not null)
             {
