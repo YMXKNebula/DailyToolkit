@@ -461,8 +461,13 @@ internal static partial class Program
         var paths = Enumerable.Range(0, 12).Select(index => Path.GetFullPath($"fixture {index}.txt")).ToArray();
         var received = new ConcurrentDictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         var serverFailures = new ConcurrentQueue<string>();
+        var protocolTrace = new ConcurrentQueue<string>(); var clock = Stopwatch.StartNew();
         await using var broker = new FilePackRequestBroker(items => { foreach (var path in items) received.TryAdd(path, true); return Task.CompletedTask; }, name,
-            failure: serverFailures.Enqueue);
+            failure: serverFailures.Enqueue, diagnostic: message =>
+            {
+                protocolTrace.Enqueue($"{clock.ElapsedMilliseconds}ms threads={ThreadPool.ThreadCount} pending={ThreadPool.PendingWorkItemCount} {message}");
+                while (protocolTrace.Count > 256) protocolTrace.TryDequeue(out _);
+            });
         Require(FilePackRequestBroker.TryReadArguments(["--file-pack-load", paths[0], paths[0]], out var normalized) && normalized.Length == 1 &&
             !FilePackRequestBroker.TryReadArguments(["--file-pack-load", "relative.txt"], out _) &&
             !FilePackRequestBroker.TryReadArguments(["--file-pack-load", "--exit"], out _), "Explorer arguments accepted invalid paths or commands");
@@ -493,7 +498,8 @@ internal static partial class Program
             {
                 var output = client.StandardOutput.ReadToEndAsync(); var error = client.StandardError.ReadToEndAsync();
                 await client.WaitForExitAsync(timeout.Token);
-                Require(client.ExitCode == 0, "Concurrent Explorer client failed: " + await output + await error + string.Join("; ", serverFailures));
+                Require(client.ExitCode == 0, "Concurrent Explorer client failed: " + await output + await error + string.Join("; ", serverFailures) +
+                    "\nBroker trace:\n" + string.Join("\n", protocolTrace));
             }));
         }
         finally
@@ -568,7 +574,7 @@ internal static partial class Program
         try
         {
             if (await FilePackRequestBroker.SendAsync([path], name)) return 0;
-            Console.Error.WriteLine(diagnostic ?? "IPC request was not acknowledged"); return 1;
+            Console.Error.WriteLine("pid=" + System.Environment.ProcessId + " " + (diagnostic ?? "IPC request was not acknowledged")); return 1;
         }
         finally
         {
