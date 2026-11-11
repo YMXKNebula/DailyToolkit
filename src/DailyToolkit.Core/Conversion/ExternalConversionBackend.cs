@@ -126,9 +126,9 @@ public sealed class ExternalConversionBackend : IConversionBackend
 
     private static async Task<string> RunProcessAsync(string executable, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(executable)) throw new InvalidOperationException("请先在本地引擎中选择对应的程序。");
+        if (string.IsNullOrWhiteSpace(executable)) throw new InvalidOperationException("转换组件缺失，请重新安装或解压完整软件包。");
         executable = ConversionRunner.LocalPath(executable);
-        if (!File.Exists(executable)) throw new FileNotFoundException("本地引擎程序不存在。", executable);
+        if (!File.Exists(executable)) throw new FileNotFoundException("转换组件缺失，请重新安装或解压完整软件包。", executable);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromHours(2));
         var start = new ProcessStartInfo(executable)
