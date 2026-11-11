@@ -173,8 +173,42 @@ internal static partial class Program
         {
             var result = await runner.RunAsync(new(source, Path.Combine(fixture, "native-media"), ConversionKind.Media, format, new()));
             Require(result.Count == 1 && new FileInfo(result[0]).Length > 0, "Windows media conversion produced no output");
+            using var originalLock = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.None);
+            using var resultLock = new FileStream(result[0], FileMode.Open, FileAccess.Read, FileShare.None);
         }
         Console.WriteLine("PASS Windows native media: WAV to MP3/M4A/WAV without an external engine");
+        var ffmpeg = System.Environment.GetEnvironmentVariable("DAILYTOOLKIT_TEST_FFMPEG");
+        if (string.IsNullOrWhiteSpace(ffmpeg) || !File.Exists(ffmpeg))
+        {
+            if (System.Environment.GetEnvironmentVariable("CI") == "true") throw new InvalidOperationException("CI must configure the synthetic video fixture engine.");
+            Console.WriteLine("SKIP Windows native video fixture: local FFmpeg generator is not configured."); return;
+        }
+        var video = Path.Combine(fixture, "native-video.mp4");
+        var start = new System.Diagnostics.ProcessStartInfo(ffmpeg)
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
+        foreach (var arg in new[] { "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=64x48:rate=10",
+            "-f", "lavfi", "-i", "sine=frequency=440", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", video }) start.ArgumentList.Add(arg);
+        using (var process = System.Diagnostics.Process.Start(start)!)
+        {
+            var errors = process.StandardError.ReadToEndAsync();
+            try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60)); }
+            catch { if (!process.HasExited) process.Kill(entireProcessTree: true); throw; }
+            Require(process.ExitCode == 0, "Synthetic native video fixture failed: " + await errors);
+        }
+        foreach (var format in new[] { "mp4", "wmv" })
+        {
+            var result = await runner.RunAsync(new(video, Path.Combine(fixture, "native-media"), ConversionKind.Media, format, new()));
+            var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(result.Single());
+            using (var stream = await file.OpenReadAsync())
+            {
+                var media = await Windows.Media.MediaProperties.MediaEncodingProfile.CreateFromStreamAsync(stream);
+                Require(media.Video is { Width: 64, Height: 48 } && media.Video.FrameRate.Numerator == 10 * media.Video.FrameRate.Denominator,
+                    "Native video conversion changed source dimensions or frame rate");
+            }
+            using var originalLock = new FileStream(video, FileMode.Open, FileAccess.Read, FileShare.None);
+            using var resultLock = new FileStream(result[0], FileMode.Open, FileAccess.Read, FileShare.None);
+        }
+        Console.WriteLine("PASS Windows native video: MP4/WMV preserve dimensions/frame rate and release file handles");
     }
 
     private static void CheckConversionLayout(ConversionViewModel model, string? images)

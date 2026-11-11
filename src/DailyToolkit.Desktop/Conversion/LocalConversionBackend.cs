@@ -157,22 +157,28 @@ public sealed class LocalConversionBackend : IConversionBackend
             _ => throw new InvalidOperationException("此格式需要本地 FFmpeg，请在本地引擎中选择程序。")
         };
         var input = await StorageFile.GetFileFromPathAsync(request.Source).AsTask(cancellationToken).ConfigureAwait(false);
+        using var inputStream = await input.OpenAsync(FileAccessMode.Read).AsTask(cancellationToken).ConfigureAwait(false);
         // Preserve source video dimensions and frame rate; do not silently force 720p.
         if (ConversionFormats.IsVideoTarget(request.Target))
         {
-            var original = await MediaEncodingProfile.CreateFromFileAsync(input).AsTask(cancellationToken).ConfigureAwait(false);
+            var original = await MediaEncodingProfile.CreateFromStreamAsync(inputStream).AsTask(cancellationToken).ConfigureAwait(false);
             if (original.Video is null || original.Video.Width == 0) throw new InvalidOperationException("原文件没有可转换的视频轨道。");
             profile.Video.Width = original.Video.Width; profile.Video.Height = original.Video.Height;
             profile.Video.FrameRate.Numerator = original.Video.FrameRate.Numerator;
             profile.Video.FrameRate.Denominator = original.Video.FrameRate.Denominator;
             profile.Video.Bitrate = original.Video.Bitrate > 0 ? original.Video.Bitrate : 8_000_000;
+            inputStream.Seek(0);
         }
         var folder = await StorageFolder.GetFolderFromPathAsync(workspace).AsTask(cancellationToken).ConfigureAwait(false);
         var output = await folder.CreateFileAsync("converted." + request.Target, CreationCollisionOption.FailIfExists).AsTask(cancellationToken).ConfigureAwait(false);
+        using var outputStream = await output.OpenAsync(FileAccessMode.ReadWrite).AsTask(cancellationToken).ConfigureAwait(false);
         var transcoder = new MediaTranscoder { HardwareAccelerationEnabled = false };
-        var prepared = await transcoder.PrepareFileTranscodeAsync(input, output, profile).AsTask(cancellationToken).ConfigureAwait(false);
+        // Own both streams explicitly: the file-based overload can retain its
+        // private file handles after the completion callback until WinRT GC.
+        var prepared = await transcoder.PrepareStreamTranscodeAsync(inputStream, outputStream, profile).AsTask(cancellationToken).ConfigureAwait(false);
         if (!prepared.CanTranscode) throw new InvalidOperationException($"系统不支持此编解码组合（{prepared.FailureReason}），可选择本地 FFmpeg 重试。");
         await prepared.TranscodeAsync().AsTask(cancellationToken, progress).ConfigureAwait(false);
+        await outputStream.FlushAsync().AsTask(cancellationToken).ConfigureAwait(false);
         return [new(Path.Combine(workspace, "converted." + request.Target), Path.GetFileNameWithoutExtension(request.Source) + "." + request.Target)];
     }
 
