@@ -20,6 +20,7 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
     private readonly string _name;
     private readonly Func<IReadOnlyList<string>, Task> _receive;
     private readonly Action<string>? _failure;
+    private readonly Action<string>? _diagnostic;
     private readonly CancellationTokenSource _stop = new();
     private readonly Channel<string[]> _requests = Channel.CreateBounded<string[]>(new BoundedChannelOptions(128) { SingleReader = true, SingleWriter = false });
     private readonly Task _server, _consumer;
@@ -29,8 +30,9 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
     {
         get { using var identity = WindowsIdentity.GetCurrent(); return $"DailyToolkit.FilePack.{identity.User!.Value}.{SessionId}"; }
     }
-    internal FilePackRequestBroker(Func<IReadOnlyList<string>, Task> receive, string? name = null, Action<string>? failure = null)
-    { _receive = receive; _failure = failure; _name = name ?? PipeName; _server = ListenAsync(); _consumer = ConsumeAsync(); }
+    internal FilePackRequestBroker(Func<IReadOnlyList<string>, Task> receive, string? name = null, Action<string>? failure = null,
+        Action<string>? diagnostic = null)
+    { _receive = receive; _failure = failure; _diagnostic = diagnostic; _name = name ?? PipeName; _server = ListenAsync(); _consumer = ConsumeAsync(); }
     internal static bool TryReadArguments(string[] args, out string[] paths)
     {
         paths = [];
@@ -79,6 +81,7 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
                 { await completed.ConfigureAwait(false); sessions.Remove(completed); }
                 if (sessions.Count == MaximumConnections)
                 {
+                    _diagnostic?.Invoke($"full sessions={sessions.Count}");
                     await Task.WhenAny(sessions).WaitAsync(_stop.Token).ConfigureAwait(false);
                     continue;
                 }
@@ -89,7 +92,9 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
                 try
                 {
                     _pipes.TryAdd(pending, 0);
+                    _diagnostic?.Invoke($"wait pipe={pending.GetHashCode()} sessions={sessions.Count}");
                     await pending.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
+                    _diagnostic?.Invoke($"connected pipe={pending.GetHashCode()} pid={ClientProcessId(pending)}");
                     sessions.Add(ReceiveAsync(pending));
                     pending = null; // The session now owns disposal.
                 }
@@ -100,7 +105,7 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
             }
         }
         catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException or UnauthorizedAccessException)
-        { if (!_stop.IsCancellationRequested) _failure?.Invoke("文件集装箱右键入口未能启动。"); }
+        { _diagnostic?.Invoke("listener " + exception); if (!_stop.IsCancellationRequested) _failure?.Invoke("文件集装箱右键入口未能启动。"); }
         finally
         {
             try { await Task.WhenAll(sessions).ConfigureAwait(false); }
@@ -114,17 +119,21 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
         {
             var header = new byte[4]; await pipe.ReadExactlyAsync(header, timeout.Token).ConfigureAwait(false);
             var length = BitConverter.ToInt32(header); if (length is < 2 or > MaximumBytes) return;
+            _diagnostic?.Invoke($"header pipe={pipe.GetHashCode()} length={length}");
             var bytes = new byte[length]; await pipe.ReadExactlyAsync(bytes, timeout.Token).ConfigureAwait(false);
             var paths = JsonSerializer.Deserialize<string[]>(bytes);
             var valid = GetNamedPipeClientSessionId(pipe.SafePipeHandle, out var session) && session == SessionId &&
                 paths is not null && TryReadArguments(["--file-pack-load", .. paths], out var normalized) && _requests.Writer.TryWrite(normalized);
             await pipe.WriteAsync(new byte[] { valid ? (byte)1 : (byte)0 }, timeout.Token).ConfigureAwait(false);
             await pipe.FlushAsync(timeout.Token).ConfigureAwait(false);
+            _diagnostic?.Invoke($"ack pipe={pipe.GetHashCode()} valid={valid}");
             // Preserve unread acknowledgements until the client closes or its
             // deadline expires, without blocking unrelated connections.
             await pipe.ReadAsync(new byte[1], timeout.Token).ConfigureAwait(false);
+            _diagnostic?.Invoke($"peer closed pipe={pipe.GetHashCode()}");
         }
-        catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException or JsonException or ArgumentException) { }
+        catch (Exception exception) when (exception is IOException or OperationCanceledException or ObjectDisposedException or JsonException or ArgumentException)
+        { _diagnostic?.Invoke($"receive pipe={pipe.GetHashCode()} {exception.GetType().Name}: {exception.Message}"); }
         finally { _pipes.TryRemove(pipe, out _); await pipe.DisposeAsync().ConfigureAwait(false); }
     }
     internal static PipeSecurity CreatePipeSecurity()
@@ -164,6 +173,10 @@ internal sealed class FilePackRequestBroker : IDisposable, IAsyncDisposable
     public async ValueTask DisposeAsync() { Dispose(); await Task.WhenAll(_server, _consumer).ConfigureAwait(false); _stop.Dispose(); }
     private static uint ReadSessionId()
     { using var process = System.Diagnostics.Process.GetCurrentProcess(); return (uint)process.SessionId; }
+    private static uint ClientProcessId(NamedPipeServerStream pipe) => GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid) ? pid : 0;
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe, out uint pid);
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetNamedPipeServerSessionId(SafePipeHandle pipe, out uint session);

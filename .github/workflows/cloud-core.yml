@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths:
+      - Directory.Build.props
+      - .github/workflows/build.yml
       - src/DailyToolkit.Core/**
       - tests/DailyToolkit.Tests/**
       - scripts/check-cloud.ps1
@@ -11,6 +13,8 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - Directory.Build.props
+      - .github/workflows/build.yml
       - src/DailyToolkit.Core/**
       - tests/DailyToolkit.Tests/**
       - scripts/check-cloud.ps1

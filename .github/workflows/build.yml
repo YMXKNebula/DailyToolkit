@@ -30,6 +30,15 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      - name: Check repeated Explorer IPC bursts
+        shell: pwsh
+        run: |
+          ./scripts/build.ps1 -SkipTests
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            Write-Output "Isolated Explorer IPC attempt $attempt"
+            & ./tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyToolkit.Desktop.Tests.exe --clipboard-native-filepack-ipc-checks
+            if ($LASTEXITCODE -ne 0) { throw 'Explorer IPC fixture failed; see its bounded protocol trace.' }
+          }
       - name: Prepare local conversion test engines
         timeout-minutes: 12
         shell: pwsh
