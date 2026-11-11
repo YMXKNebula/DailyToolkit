@@ -76,6 +76,7 @@ try {
     $arguments = @(('-env:UserInstallation=' + ([uri]($probeProfile + '\')).AbsoluteUri), '--headless', '--nologo', '--nodefault', '--nofirststartwizard', '--norestore', '--convert-to', 'pdf', '--outdir', ('"' + $work + '"'), ('"' + $probeInput + '"'))
     $probe = Start-Process -FilePath (Join-Path $OutputDirectory 'program/soffice.com') -ArgumentList $arguments -RedirectStandardOutput $probeLog -RedirectStandardError $probeError -PassThru
     if (-not $probe.WaitForExit(60000)) {
+        if ($env:CI -eq 'true') { & (Join-Path $PSScriptRoot 'inspect-office-probe.ps1') -ProgramDirectory (Join-Path $OutputDirectory 'program') }
         $probe.Kill($true); $probe.WaitForExit()
         Get-Content -LiteralPath $probeLog, $probeError -ErrorAction SilentlyContinue | Write-Host
         throw 'The selected app-local office probe exceeded one minute.'
