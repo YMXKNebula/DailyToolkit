@@ -44,7 +44,9 @@ public sealed class ConversionRunner(IConversionBackend backend)
                     !seen.Add(path) || !File.Exists(path) || new FileInfo(path).Length == 0 ||
                     (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0 ||
                     !Path.GetExtension(output.Name).Equals("." + request.Target, StringComparison.OrdinalIgnoreCase))
-                    throw new IOException("转换结果校验失败，未替换原文件。");
+                    throw new IOException("转换结果校验失败，未替换原文件。", new IOException(
+                        $"Output={path}; workspace={workspace}; name={output.Name}; exists={File.Exists(path)}; " +
+                        $"length={(File.Exists(path) ? new FileInfo(path).Length : -1)}; attributes={(File.Exists(path) ? File.GetAttributes(path) : 0)}"));
             }
             foreach (var output in outputs)
             {

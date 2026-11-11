@@ -39,11 +39,14 @@ public sealed class ExternalConversionBackend : IConversionBackend
                 var console = Path.Combine(Path.GetDirectoryName(office) ?? "", "soffice.com");
                 if (File.Exists(console)) office = console;
             }
-            await RunProcessAsync(office,
+            var engineLog = await RunProcessAsync(office,
                 ["-env:UserInstallation=" + new Uri(profile + Path.DirectorySeparatorChar).AbsoluteUri,
                     "--headless", "--nologo", "--nodefault", "--nofirststartwizard", "--norestore",
                     "--convert-to", filter, "--outdir", workspace, input], cancellationToken).ConfigureAwait(false);
             output = Path.Combine(workspace, Path.GetFileNameWithoutExtension(request.Source) + "." + request.Target);
+            if (!File.Exists(output))
+                throw new IOException("文档转换未生成结果，请检查文件格式或保护状态。",
+                    new IOException(engineLog + "\nGenerated files: " + string.Join(", ", Directory.EnumerateFiles(workspace).Select(Path.GetFileName))));
             if (File.Exists(output) && request.Target is not ("pdf" or "csv" or "txt")) ValidateDocument(output, cancellationToken);
             if (File.Exists(output) && request.Target == "pdf")
             {
@@ -107,7 +110,7 @@ public sealed class ExternalConversionBackend : IConversionBackend
         return args;
     }
 
-    private static async Task RunProcessAsync(string executable, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    private static async Task<string> RunProcessAsync(string executable, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(executable)) throw new InvalidOperationException("请先在本地引擎中选择对应的程序。");
         executable = ConversionRunner.LocalPath(executable);
@@ -139,6 +142,7 @@ public sealed class ExternalConversionBackend : IConversionBackend
                 var detail = (await stderr).Trim();
                 throw new IOException("本地引擎转换失败：" + detail[..Math.Min(detail.Length, 1200)]);
             }
+            return (await stdout).Trim() + "\n" + (await stderr).Trim();
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         { throw new TimeoutException("转换超过两小时，已停止本次任务。"); }
