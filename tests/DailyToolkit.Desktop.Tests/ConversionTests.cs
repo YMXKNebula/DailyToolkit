@@ -29,7 +29,7 @@ internal static partial class Program
             var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
             using (var file = File.Create(source)) encoder.Save(file);
             var original = SHA256.HashData(File.ReadAllBytes(source));
-            var backend = new LocalConversionBackend(); var runner = new ConversionRunner(backend);
+            var backend = new LocalConversionBackend(null, false); var runner = new ConversionRunner(backend);
             var output = Path.Combine(fixture.FullName, "输出");
             var jpg = (await runner.RunAsync(new(source, output, ConversionKind.Image, "jpg", new()))).Single();
             using (var input = File.OpenRead(jpg))
@@ -92,15 +92,15 @@ internal static partial class Program
         }
     }
 
-    private static async Task CheckOfficeConversionAsync(string fixture, ConversionRunner runner)
+    private static async Task CheckOfficeConversionAsync(string fixture, ConversionRunner runner, string? bundledEngine = null)
     {
-        var engine = System.Environment.GetEnvironmentVariable("DAILYTOOLKIT_TEST_LIBREOFFICE");
+        var engine = bundledEngine ?? System.Environment.GetEnvironmentVariable("DAILYTOOLKIT_TEST_LIBREOFFICE");
         if (string.IsNullOrWhiteSpace(engine) || !File.Exists(engine))
         {
             if (System.Environment.GetEnvironmentVariable("CI") == "true") throw new InvalidOperationException("CI must configure the LibreOffice test engine.");
             Console.WriteLine("SKIP Real LibreOffice conversion: DAILYTOOLKIT_TEST_LIBREOFFICE is not configured."); return;
         }
-        var options = new ConversionOptions { LibreOfficePath = engine };
+        var options = bundledEngine is null ? new ConversionOptions { LibreOfficePath = engine } : new ConversionOptions();
         var existingProfiles = Directory.GetDirectories(Path.GetTempPath(), "dtk-lo-*").ToHashSet(StringComparer.OrdinalIgnoreCase);
         var output = Path.Combine(fixture, "office-output");
         var word = Path.Combine(fixture, "文档 example.docx");
@@ -113,22 +113,28 @@ internal static partial class Program
                 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>
                 """);
             AddZipText(zip, "word/document.xml", """
-                <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>格式转换离线检查</w:t></w:r></w:p><w:p><w:r><w:t>Original file stays unchanged.</w:t></w:r></w:p></w:body></w:document>
+                <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:rPr><w:rFonts w:ascii="Noto Sans CJK SC" w:eastAsia="Noto Sans CJK SC" w:hAnsi="Noto Sans CJK SC"/></w:rPr><w:t>格式转换离线检查</w:t></w:r></w:p><w:p><w:r><w:t>Original file stays unchanged.</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>表格内容</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>
                 """);
         }
         var original = SHA256.HashData(File.ReadAllBytes(word));
         var pdf = (await runner.RunAsync(new(word, output, ConversionKind.Document, "pdf", options))).Single();
+        if (bundledEngine is not null)
+            Require(System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(pdf)).Contains("NotoSansCJKsc", StringComparison.Ordinal), "The packaged Chinese font was not privately loaded and embedded in PDF");
         var rendered = await runner.RunAsync(new(pdf, output, ConversionKind.Pdf, "png", new()));
         Require(rendered.Count > 0, "Office PDF was not readable by the Windows PDF renderer");
         var odt = (await runner.RunAsync(new(word, output, ConversionKind.Document, "odt", options))).Single();
         var docx = (await runner.RunAsync(new(odt, output, ConversionKind.Document, "docx", options))).Single();
         var text = (await runner.RunAsync(new(docx, output, ConversionKind.Document, "txt", options))).Single();
         Require(File.ReadAllText(text).Contains("格式转换离线检查", StringComparison.Ordinal), "Word/ODT/TXT conversion lost Unicode text");
+        var textWord = (await runner.RunAsync(new(text, output, ConversionKind.Document, "docx", options))).Single();
+        Require(new FileInfo(textWord).Length > 0, "Text input did not convert back to Word");
         var csv = Path.Combine(fixture, "表格.csv"); File.WriteAllText(csv, "项目,数量\r\n苹果,2\r\n", new System.Text.UTF8Encoding(false));
         var xlsx = (await runner.RunAsync(new(csv, output, ConversionKind.Document, "xlsx", options))).Single();
         var ods = (await runner.RunAsync(new(xlsx, output, ConversionKind.Document, "ods", options))).Single();
         var csvBack = (await runner.RunAsync(new(ods, output, ConversionKind.Document, "csv", options))).Single();
         Require(File.ReadAllText(csvBack).Contains("苹果", StringComparison.Ordinal), "Spreadsheet conversion lost UTF-8 cell text");
+        var sheetPdf = (await runner.RunAsync(new(xlsx, output, ConversionKind.Document, "pdf", options))).Single();
+        Require((await runner.RunAsync(new(sheetPdf, output, ConversionKind.Pdf, "png", new()))).Count > 0, "Spreadsheet PDF did not render");
         var presentation = Path.Combine(fixture, "演示.odp");
         using (var zip = System.IO.Compression.ZipFile.Open(presentation, System.IO.Compression.ZipArchiveMode.Create))
         {
@@ -141,6 +147,8 @@ internal static partial class Program
                 """);
         }
         var pptx = (await runner.RunAsync(new(presentation, output, ConversionKind.Document, "pptx", options))).Single();
+        var odp = (await runner.RunAsync(new(pptx, output, ConversionKind.Document, "odp", options))).Single();
+        Require(new FileInfo(odp).Length > 0, "PowerPoint input did not convert back to ODP");
         var slidePdf = (await runner.RunAsync(new(pptx, output, ConversionKind.Document, "pdf", options))).Single();
         Require((await runner.RunAsync(new(slidePdf, output, ConversionKind.Pdf, "png", new()))).Count > 0, "Presentation PDF did not render");
         Require(original.SequenceEqual(SHA256.HashData(File.ReadAllBytes(word))) && !Directory.EnumerateDirectories(output).Any(), "Office changed original or leaked its isolated profile");
@@ -206,10 +214,12 @@ internal static partial class Program
             Console.WriteLine("SKIP Windows native video fixture: local FFmpeg generator is not configured."); return;
         }
         var video = Path.Combine(fixture, "native-video.mp4");
+        var rawVideo = Path.Combine(fixture, "native-video.rgb");
+        await File.WriteAllBytesAsync(rawVideo, Enumerable.Range(0, 64 * 48 * 3 * 10).Select(i => (byte)(i % 251)).ToArray());
         var start = new System.Diagnostics.ProcessStartInfo(ffmpeg)
         { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
-        foreach (var arg in new[] { "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=64x48:rate=10",
-            "-f", "lavfi", "-i", "sine=frequency=440", "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", video }) start.ArgumentList.Add(arg);
+        foreach (var arg in new[] { "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pixel_format", "rgb24", "-video_size", "64x48", "-framerate", "10", "-i", rawVideo,
+            "-i", source, "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", video }) start.ArgumentList.Add(arg);
         using (var process = System.Diagnostics.Process.Start(start)!)
         {
             var errors = process.StandardError.ReadToEndAsync();

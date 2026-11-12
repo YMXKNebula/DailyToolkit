@@ -1,0 +1,74 @@
+name: Prepare offline conversion engines
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  ffmpeg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v5
+        id: cache
+        with:
+          path: .local/conversion-tools/tools/ffmpeg
+          key: conversion-ffmpeg-x64-${{ runner.os }}-${{ hashFiles('scripts/build-conversion-ffmpeg.sh', 'scripts/conversion-sources.json', 'scripts/conversion-manifest.py') }}
+      - name: Prepare cross compiler
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix nasm cmake ninja-build meson pkg-config make
+      - name: Build only the conversion engine
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-conversion-ffmpeg.sh
+      - name: Verify engine source and inventory
+        run: python3 scripts/conversion-manifest.py verify .local/conversion-tools/tools/ffmpeg ffmpeg scripts/build-conversion-ffmpeg.sh scripts/conversion-sources.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: conversion-ffmpeg-win-x64
+          path: .local/conversion-tools/tools/ffmpeg/**
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: conversion-ffmpeg-build-logs
+          path: |
+            .local/conversion-ffmpeg/**/*.log
+            .local/conversion-ffmpeg/**/config.log
+          retention-days: 7
+  office:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v5
+        id: cache
+        with:
+          path: .local/conversion-tools/tools/libreoffice
+          key: conversion-office-x64-${{ runner.os }}-${{ hashFiles('scripts/prepare-conversion-office.ps1', 'scripts/stage-conversion-office.py', 'scripts/conversion-manifest.py') }}
+      - shell: pwsh
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./scripts/prepare-conversion-office.ps1
+      - name: Verify office source and inventory
+        shell: pwsh
+        run: |
+          python scripts/conversion-manifest.py verify .local/conversion-tools/tools/libreoffice libreoffice scripts/prepare-conversion-office.ps1 scripts/stage-conversion-office.py
+          if ($LASTEXITCODE -ne 0) { throw 'Prepared office component verification failed.' }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: conversion-office-win-x64
+          path: .local/conversion-tools/tools/libreoffice/**
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: conversion-office-selection
+          path: |
+            .local/conversion-office/**/*.json
+            .local/conversion-office/**/*.log
+          retention-days: 7

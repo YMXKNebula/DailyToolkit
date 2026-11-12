@@ -19,7 +19,11 @@ permissions:
   contents: read
 
 jobs:
+  conversion-engines:
+    if: github.event_name != 'schedule'
+    uses: ./.github/workflows/conversion-bundle.yml
   windows:
+    needs: conversion-engines
     if: github.event_name != 'schedule'
     runs-on: windows-latest
     timeout-minutes: 30
@@ -39,7 +43,15 @@ jobs:
             & ./tests/DailyToolkit.Desktop.Tests/bin/Release/net10.0-windows10.0.26100.0/DailyToolkit.Desktop.Tests.exe --clipboard-native-filepack-ipc-checks
             if ($LASTEXITCODE -ne 0) { throw 'Explorer IPC fixture failed; see its bounded protocol trace.' }
           }
-      - name: Prepare local conversion test engines
+      - uses: actions/download-artifact@v8
+        with:
+          name: conversion-ffmpeg-win-x64
+          path: .local/conversion-tools/tools/ffmpeg
+      - uses: actions/download-artifact@v8
+        with:
+          name: conversion-office-win-x64
+          path: .local/conversion-tools/tools/libreoffice
+      - name: Prepare bundled conversion test engines
         timeout-minutes: 12
         shell: pwsh
         run: ./scripts/prepare-conversion-checks.ps1
@@ -55,20 +67,14 @@ jobs:
       - name: Retain direct and transitive dependency audit
         shell: pwsh
         run: ./scripts/audit-dependencies.ps1
-      - name: Keep quality reports, logs and fixture images
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: quality-check-diagnostics
-          path: |
-            .local/quality-checks/**
-            .local/dependency-audit/**
-            .local/conversion-test-engines/**
-          if-no-files-found: warn
-          retention-days: 14
       - name: Package portable app
         shell: pwsh
         run: ./scripts/publish.ps1
+      - name: Check actual portable engines offline
+        shell: pwsh
+        run: |
+          [xml]$properties = Get-Content -LiteralPath Directory.Build.props -Raw
+          ./scripts/test-conversion-bundle.ps1 -PayloadDirectory "artifacts/DailyToolkit-$($properties.Project.PropertyGroup.Version)-win-x64"
       - name: Package installer
         shell: pwsh
         run: ./scripts/package-installer.ps1 -Compiler (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
@@ -80,6 +86,19 @@ jobs:
             artifacts/DailyToolkit-*-win-x64-setup.exe
             artifacts/SHA256SUMS.txt
           if-no-files-found: error
+          retention-days: 14
+      - name: Keep quality reports, logs and fixture images
+        if: always()
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-check-diagnostics
+          path: |
+            .local/quality-checks/**
+            .local/dependency-audit/**
+            .local/conversion-test-engines/**
+          if-no-files-found: warn
           retention-days: 14
   installer:
     needs: windows

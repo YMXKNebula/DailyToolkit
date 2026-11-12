@@ -10,6 +10,25 @@ https://www.7-zip.org/
 https://github.com/ip7z/7zip/releases/tag/26.04
 Corresponding source: https://github.com/ip7z/7zip/releases/download/26.04/7z2604-src.7z
 
+FFmpeg 9.0.2 (custom Windows x64 conversion build, separate process)
+Copyright (c) the FFmpeg developers and codec library contributors.
+GPL-2.0-or-later; x264 GPL, LAME LGPL, and BSD/Zlib codec libraries.
+Only the exposed conversion targets are included; no player, ffprobe, network
+protocols, capture devices or neural/AI processing is built.
+License: tools/ffmpeg/LICENSE.txt and tools/ffmpeg/licenses/.
+Complete pinned source archives and build recipe: tools/ffmpeg/sources/.
+https://ffmpeg.org/
+https://github.com/FFmpeg/FFmpeg/commit/946fcce07b6dcd0331c8cc609192aeff5e1924f8
+
+LibreOffice 26.2.6.3 (selected unmodified local conversion runtime)
+Copyright (c) The Document Foundation and contributors.
+MPL-2.0 and third-party licenses; includes the app-local Microsoft Visual C++ CRT.
+No LibreOffice installation, updater, shell integration, Java/Python runtime,
+dictionaries, help package or independent office entry points are installed.
+Original notices: tools/libreoffice/license.txt, LICENSE.html and NOTICE.
+Exact upstream binary, source access and runtime terms: tools/libreoffice/SOURCE.txt.
+https://www.libreoffice.org/licenses/
+
 The application packages include the following components under the MIT License:
 
 AMD FidelityFX Contrast Adaptive Sharpening (adapted CAS filter weights)

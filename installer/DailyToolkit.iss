@@ -62,6 +62,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:DesktopIcon}"; Flags: unchecked
 Name: "migratestartup"; Description: "{cm:MigrateStartup}"; Check: HasOtherStartup
 
+[Dirs]
+; LibreOffice creates these empty shared-cache directories on first use.
+; Register them so uninstall removes them only while empty, retaining added files.
+Name: "{app}\tools\libreoffice\share\uno_packages"; Flags: uninsalwaysuninstall
+Name: "{app}\tools\libreoffice\share\uno_packages\cache"; Flags: uninsalwaysuninstall
+Name: "{app}\tools\libreoffice\share\uno_packages\cache\uno_packages"; Flags: uninsalwaysuninstall
+
 [Files]
 Source: "{#PayloadDir}\DailyToolkit.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\LICENSE-DailyToolkit.txt"; DestDir: "{app}"; Flags: ignoreversion
@@ -75,6 +82,8 @@ Source: "{#PayloadDir}\tools\7zip\Readme.txt"; DestDir: "{app}\tools\7zip"; Flag
 Source: "{#PayloadDir}\tools\7zip\SOURCE.txt"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
 Source: "{#PayloadDir}\tools\7zip\COPYING.txt"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
 Source: "{#PayloadDir}\tools\7zip\7z2604-src.7z"; DestDir: "{app}\tools\7zip"; Flags: ignoreversion
+Source: "{#PayloadDir}\tools\ffmpeg\*"; DestDir: "{app}\tools\ffmpeg"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PayloadDir}\tools\libreoffice\*"; DestDir: "{app}\tools\libreoffice"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\docs\INSTALLER_README.txt"; DestDir: "{app}"; DestName: "README.txt"; Flags: ignoreversion
 
 [Icons]

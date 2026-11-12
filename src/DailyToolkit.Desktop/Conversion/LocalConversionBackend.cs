@@ -15,15 +15,28 @@ public sealed class LocalConversionBackend : IConversionBackend
 {
     private const long MaximumPixels = 40_000_000;
     private readonly ExternalConversionBackend _external = new();
+    private readonly string? _bundleDirectory;
+    private readonly bool _useBundledEngines;
+
+    public LocalConversionBackend() : this(null, true) { }
+    internal LocalConversionBackend(string? bundleDirectory, bool useBundledEngines)
+    { _bundleDirectory = bundleDirectory; _useBundledEngines = useBundledEngines; }
 
     public Task<IReadOnlyList<ConvertedFile>> ConvertAsync(ConversionRequest request, string workspace,
         IProgress<double>? progress, CancellationToken cancellationToken) => Task.Run(async () =>
     {
+        if (_useBundledEngines)
+            request = request with { Options = BundledConversionEngines.Resolve(request.Options, _bundleDirectory) };
         if (request.Kind == ConversionKind.Document ||
             request.Kind == ConversionKind.Media && !string.IsNullOrWhiteSpace(request.Options.FFmpegPath))
+        {
+            BundledConversionEngines.Require(request.Kind == ConversionKind.Document ? request.Options.LibreOfficePath : request.Options.FFmpegPath);
             return await _external.ConvertAsync(request, workspace, progress, cancellationToken).ConfigureAwait(false);
+        }
         if (request.Kind == ConversionKind.Image)
         {
+            if (request.Target == "webp" || Path.GetExtension(request.Source).Equals(".webp", StringComparison.OrdinalIgnoreCase))
+                BundledConversionEngines.Require(request.Options.FFmpegPath);
             var originalStem = Path.GetFileNameWithoutExtension(request.Source);
             if (Path.GetExtension(request.Source).Equals(".webp", StringComparison.OrdinalIgnoreCase))
             {
@@ -154,7 +167,7 @@ public sealed class LocalConversionBackend : IConversionBackend
             "wav" => MediaEncodingProfile.CreateWav(AudioEncodingQuality.High),
             "mp4" => MediaEncodingProfile.CreateMp4(VideoEncodingQuality.HD720p),
             "wmv" => MediaEncodingProfile.CreateWmv(VideoEncodingQuality.HD720p),
-            _ => throw new InvalidOperationException("此格式需要本地 FFmpeg，请在本地引擎中选择程序。")
+            _ => throw new InvalidOperationException("系统不支持此输出格式。")
         };
         var input = await StorageFile.GetFileFromPathAsync(request.Source).AsTask(cancellationToken).ConfigureAwait(false);
         using var inputStream = await input.OpenAsync(FileAccessMode.Read).AsTask(cancellationToken).ConfigureAwait(false);
@@ -176,7 +189,7 @@ public sealed class LocalConversionBackend : IConversionBackend
         // Own both streams explicitly: the file-based overload can retain its
         // private file handles after the completion callback until WinRT GC.
         var prepared = await transcoder.PrepareStreamTranscodeAsync(inputStream, outputStream, profile).AsTask(cancellationToken).ConfigureAwait(false);
-        if (!prepared.CanTranscode) throw new InvalidOperationException($"系统不支持此编解码组合（{prepared.FailureReason}），可选择本地 FFmpeg 重试。");
+        if (!prepared.CanTranscode) throw new InvalidOperationException($"系统不支持此编解码组合（{prepared.FailureReason}）。");
         await prepared.TranscodeAsync().AsTask(cancellationToken, progress).ConfigureAwait(false);
         await outputStream.FlushAsync().AsTask(cancellationToken).ConfigureAwait(false);
         return [new(Path.Combine(workspace, "converted." + request.Target), Path.GetFileNameWithoutExtension(request.Source) + "." + request.Target)];

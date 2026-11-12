@@ -2,7 +2,7 @@
 
 Windows 桌面工具集：放大镜、浮笺、剪贴回溯、文件集装箱、格式转换和电脑信息。
 
-[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [更新说明](docs/RELEASE_091.md)
+[下载最新版](https://github.com/YMXKNebula/DailyToolkit/releases/latest) · [安装与更新](docs/INSTALLATION.md) · [更新说明](docs/RELEASE_092.md)
 
 ## 下载
 
@@ -37,7 +37,7 @@ Windows 桌面工具集：放大镜、浮笺、剪贴回溯、文件集装箱、
 
 剪贴回溯默认关闭，开启后持续记录剪贴板，仅在本机加密保存。复制敏感内容前请暂停记录或排除来源应用，无法自动识别所有密码。文件默认只记路径，开启缓存后可保存文件副本。
 
-格式转换不调用在线服务或 AI，原文件保留。文档转换需要本机 LibreOffice，WebP 和部分音视频格式需要 FFmpeg；引擎不随程序捆绑，也不会自动下载。
+格式转换组件已内置，无需另装程序，不调用在线服务或 AI。原文件保留，携带时保留完整软件目录。
 
 > 放大镜用于带反作弊的游戏时可能导致封号，请谨慎使用。
 

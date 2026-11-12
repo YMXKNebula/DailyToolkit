@@ -6,17 +6,14 @@ $version = [string]$properties.Project.PropertyGroup.Version
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'The Windows installer requires a three-part release version.' }
 if (-not $PayloadDirectory) { $PayloadDirectory = Join-Path $projectRoot "artifacts\DailyToolkit-$version-win-x64" }
 $PayloadDirectory = [IO.Path]::GetFullPath($PayloadDirectory)
+. (Join-Path $PSScriptRoot 'conversion-payload.ps1')
 $executable = Join-Path $PayloadDirectory 'DailyToolkit.exe'
 if (-not (Test-Path -LiteralPath $executable)) { throw 'Run scripts/publish.ps1 before packaging the installer.' }
 if ((Get-Item -LiteralPath $executable).VersionInfo.ProductVersion -notmatch ('^' + [regex]::Escape($version) + '(?:\+|$)')) {
     throw 'The application and installer versions must match.'
 }
-$expected = @('DailyToolkit.exe','LICENSE-DailyToolkit.txt','README.txt','THIRD_PARTY_NOTICES.txt',
-    'microsoft.netcore.app.runtime-LICENSE.TXT','microsoft.netcore.app.runtime-THIRD-PARTY-NOTICES.TXT',
-    'microsoft.windowsdesktop.app.runtime-LICENSE','licenses\Windows-SDK-License.rtf',
-    'tools\7zip\7za.exe','tools\7zip\License.txt','tools\7zip\Readme.txt','tools\7zip\SOURCE.txt',
-    'tools\7zip\COPYING.txt','tools\7zip\7z2604-src.7z')
-$actual = @(Get-ChildItem -LiteralPath $PayloadDirectory -Recurse -File | ForEach-Object {
+$expected = @(Get-ApplicationPayloadFiles $PayloadDirectory)
+$actual = @(Get-ChildItem -LiteralPath $PayloadDirectory -Recurse -File -Force | ForEach-Object {
     [IO.Path]::GetRelativePath($PayloadDirectory, $_.FullName)
 })
 if (@(Compare-Object $expected $actual).Count -ne 0) { throw 'The portable payload has unexpected or missing files; refuse to package user data or development output.' }
@@ -32,6 +29,15 @@ try {
     try { $zipExeHash = [Convert]::ToHexString($sha.ComputeHash($stream)) }
     finally { $sha.Dispose(); $stream.Dispose() }
     if ($zipExeHash -ne (Get-FileHash -LiteralPath $executable).Hash) { throw 'The ZIP and installer payload must contain the exact same application.' }
+    foreach ($relative in $expected | Where-Object { $_.StartsWith('tools\ffmpeg\') -or $_.StartsWith('tools\libreoffice\') }) {
+        $entry = $archive.GetEntry($relative.Replace('\','/'))
+        if (-not $entry) { $entry = $archive.GetEntry($relative) }
+        if (-not $entry) { throw "Missing portable component: $relative" }
+        $input = $entry.Open(); $algorithm = [Security.Cryptography.SHA256]::Create()
+        try { $checksum = [Convert]::ToHexString($algorithm.ComputeHash($input)) }
+        finally { $algorithm.Dispose(); $input.Dispose() }
+        if ($checksum -ne (Get-FileHash -LiteralPath (Join-Path $PayloadDirectory $relative)).Hash) { throw "ZIP component differs from installer: $relative" }
+    }
 } finally { $archive.Dispose() }
 if (-not $Compiler) {
     $Compiler = Join-Path $projectRoot '.local\inno-setup\7.1.0\ISCC.exe'
@@ -52,4 +58,8 @@ $sums = @($setup, $zip) | ForEach-Object {
     (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + [IO.Path]::GetFileName($_)
 }
 [IO.File]::WriteAllLines((Join-Path $output 'SHA256SUMS.txt'), $sums, [Text.UTF8Encoding]::new($false))
+foreach ($file in Get-Item -LiteralPath $setup, $zip) {
+    Write-Host ("Package {0}: {1} bytes" -f $file.Name, $file.Length)
+}
+$sums | ForEach-Object { Write-Host $_ }
 Write-Output $setup

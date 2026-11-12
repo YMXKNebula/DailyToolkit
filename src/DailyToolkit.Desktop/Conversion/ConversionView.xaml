@@ -30,6 +30,7 @@
      <TextBlock Grid.Column="2" Text="{Binding Quality}" Width="32" TextAlignment="Right" VerticalAlignment="Center"/>
     </Grid>
     <TextBlock Text="{Binding FormatHint}" Style="{StaticResource MutedText}"/>
+    <Button Content="保存设置" Command="{Binding SaveSettingsCommand}" IsEnabled="{Binding CanEdit}" HorizontalAlignment="Left" Margin="0,12,0,0"/>
    </StackPanel></Border>
    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="文件" Style="{StaticResource SectionTitle}"/>
@@ -64,17 +65,6 @@
      <TextBlock Text="{Binding Progress, StringFormat={}{0:0}%}" Style="{StaticResource MutedText}" Margin="0,6,0,0"/>
     </StackPanel>
    </StackPanel></Border>
-   <Border Style="{StaticResource Card}"><Expander Header="本地引擎" Foreground="{DynamicResource TextBrush}"><StackPanel Margin="0,12,0,0" IsEnabled="{Binding CanEdit}">
-    <TextBlock Text="FFmpeg（可选）"/><Grid Margin="0,6,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-     <TextBox Text="{Binding FFmpegPath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="FFmpeg 程序路径"/><Button Grid.Column="1" Content="选择" Tag="ffmpeg" Click="BrowseEngine" Margin="8,0,0,0"/>
-    </Grid>
-    <TextBlock Text="未选择时使用系统音视频转换。WebP、FLAC、OGG、MKV 和 WebM 需要 FFmpeg。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
-    <TextBlock Text="LibreOffice"/><Grid Margin="0,6,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-     <TextBox Text="{Binding LibreOfficePath, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="LibreOffice 程序路径"/><Button Grid.Column="1" Content="选择" Tag="office" Click="BrowseEngine" Margin="8,0,0,0"/>
-    </Grid>
-    <TextBlock Text="文档转换需选择本机的 soffice.exe。仅使用本地程序，不自动下载。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
-    <Button Content="保存设置" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left"/>
-   </StackPanel></Expander></Border>
    <TextBlock Text="{Binding Notice}" Style="{StaticResource MutedText}" Visibility="{Binding HasNotice, Converter={StaticResource VisibleWhen}}" Margin="0,12,0,0"/>
   </StackPanel>
  </ScrollViewer>
