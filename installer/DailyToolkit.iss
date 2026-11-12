@@ -62,6 +62,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:DesktopIcon}"; Flags: unchecked
 Name: "migratestartup"; Description: "{cm:MigrateStartup}"; Check: HasOtherStartup
 
+[Dirs]
+; LibreOffice creates these empty shared-cache directories on first use.
+; Register them so uninstall removes them only while empty, retaining added files.
+Name: "{app}\tools\libreoffice\share\uno_packages"; Flags: uninsalwaysuninstall
+Name: "{app}\tools\libreoffice\share\uno_packages\cache"; Flags: uninsalwaysuninstall
+Name: "{app}\tools\libreoffice\share\uno_packages\cache\uno_packages"; Flags: uninsalwaysuninstall
+
 [Files]
 Source: "{#PayloadDir}\DailyToolkit.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\LICENSE-DailyToolkit.txt"; DestDir: "{app}"; Flags: ignoreversion

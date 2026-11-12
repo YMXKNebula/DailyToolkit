@@ -179,11 +179,16 @@ try {
 
     Assert-Installer ((Invoke-TestSetup $newer 'reinstall' $installArguments) -eq 0) 'Reinstallation failed.'
     $portableExe = Join-Path $PayloadDirectory 'DailyToolkit.exe'
+    $nestedUserFile = Join-Path $destination 'tools/libreoffice/share/uno_packages/cache/uno_packages/keep-user-file.txt'
+    [IO.File]::WriteAllText($nestedUserFile, 'retain nested user file')
     Set-TestRunEntry $portableExe
     Register-TestTask ('DailyToolkit automatic startup. Owner: ' + $sid) $portableExe
     Assert-Installer ((Invoke-TestSetup (Get-TestUninstaller) 'portable-startup-preserved') -eq 0) 'Uninstall with portable startup failed.'
     Assert-Installer ((Get-ItemProperty -LiteralPath $runKey -Name $testName).$testName -eq ('"' + $portableExe + '" --startup') -and (Test-TaskExists)) 'Uninstall removed startup belonging to the portable directory.'
+    Assert-Installer ((Test-Path -LiteralPath $nestedUserFile) -and [IO.File]::ReadAllText($nestedUserFile) -eq 'retain nested user file' -and
+        -not (Test-Path -LiteralPath (Join-Path $destination 'tools/libreoffice/program/soffice.com'))) 'Uninstall removed an added component-directory file or retained the converter.'
     $checks.Add('portable startup and scheduled task preserved')
+    $checks.Add('empty component caches removed; added files inside component directories preserved')
     $folder.DeleteTask($taskName, 0)
 
     Assert-Installer ((Invoke-TestSetup $newer 'run-migration' @('/TASKS=migratestartup', ('/DIR="' + $destination + '"'))) -eq 0) 'Ordinary startup migration failed.'
@@ -197,6 +202,18 @@ try {
         ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $work 'result.json') -Encoding utf8
     $checks | ForEach-Object { Write-Output "PASS $_" }
 } catch {
+    foreach ($engine in @('ffmpeg', 'libreoffice')) {
+        $component = Join-Path $destination "tools/$engine"
+        if (Test-Path -LiteralPath $component) {
+            $remaining = @(Get-ChildItem -LiteralPath $component -Recurse -Force | ForEach-Object {
+                $relative = [IO.Path]::GetRelativePath($destination, $_.FullName)
+                [pscustomobject]@{Path=$relative; Directory=$_.PSIsContainer; Bytes=if ($_.PSIsContainer) { 0 } else { $_.Length }; Packaged=Test-Path -LiteralPath (Join-Path $PayloadDirectory $relative)}
+            })
+            $remaining | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $work "$engine-remaining.json") -Encoding utf8
+            Write-Host ("Remaining {0}: {1} entries" -f $engine, $remaining.Count)
+            $remaining | Select-Object -First 40 | ConvertTo-Json -Depth 3 | Write-Host
+        }
+    }
     [pscustomobject]@{Error=$_.Exception.Message; Position=$_.InvocationInfo.PositionMessage; Stack=$_.ScriptStackTrace; PassedChecks=$checks} |
         ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $work 'failure.json') -Encoding utf8
     Get-Content -LiteralPath (Join-Path $work 'failure.json') | ForEach-Object { Write-Host $_ }
