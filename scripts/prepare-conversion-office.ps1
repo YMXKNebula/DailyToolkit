@@ -12,15 +12,18 @@ $url = "https://download.documentfoundation.org/libreoffice/stable/$version/win/
 $work = Join-Path $root ('.local/conversion-office/' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 $msi = Join-Path $work "LibreOffice-$version.msi"
-[xml]$meta = (Invoke-WebRequest ($url + '.meta4') -TimeoutSec 60).Content
-$officialHash = @($meta.metalink.file.hash | Where-Object type -eq 'sha-256')[0].InnerText.ToLowerInvariant()
-if ($officialHash -ne $hash) { throw 'Official office metadata differs from the pinned source; review before updating.' }
+# Stable mirror entries can disappear when upstream publishes the next patch.
+# Use the fixed official archive first; every candidate must match the same pin.
+$archive = 'https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.6.3/win/x86_64/'
+$sources = @(($archive + 'LibreOffice_26.2.6.3_Win_x86-64.msi'), ($archive + 'LibreOffice_26.2.6_Win_x86-64.msi'), $url)
 $downloaded = $false
-foreach ($mirror in @($meta.metalink.file.url | Where-Object { $_.InnerText.StartsWith('https://') } | Sort-Object { [int]$_.priority } | Select-Object -First 4)) {
-    & curl.exe --fail --silent --show-error --location --connect-timeout 15 --max-time 90 --output $msi $mirror.InnerText
-    if ($LASTEXITCODE -eq 0 -and (Get-FileHash -LiteralPath $msi).Hash.ToLowerInvariant() -eq $hash) { $downloaded = $true; break }
+foreach ($candidate in $sources) {
+    & curl.exe --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 120 --output $msi $candidate
+    if ($LASTEXITCODE -eq 0 -and (Get-FileHash -LiteralPath $msi).Hash.ToLowerInvariant() -eq $hash) {
+        $downloaded = $true; $downloadUrl = $candidate; break
+    }
 }
-if (-not $downloaded) { throw 'No official mirror returned the checksum-verified archive in time.' }
+if (-not $downloaded) { throw 'No official source returned the checksum-verified archive in time.' }
 $extract = Join-Path $work 'extracted'
 $p = Start-Process msiexec.exe -ArgumentList @('/a', ('"' + $msi + '"'), '/qn', '/norestart', ('TARGETDIR="' + $extract + '"'), '/L*v', ('"' + (Join-Path $work 'extract.log') + '"')) -PassThru
 if (-not $p.WaitForExit(240000)) { throw 'Administrative archive extraction timed out; no installed application was changed.' }
@@ -73,7 +76,7 @@ foreach ($relative in $summary.microsoftRuntime) {
 LibreOffice 26.2.6.3, The Document Foundation and contributors.
 Unmodified upstream runtime files selected for Writer, Calc and Impress conversion.
 MPL-2.0 and third-party licenses: license.txt, LICENSE.html and NOTICE in this folder.
-Official binary archive: $url
+Official binary archive: $downloadUrl
 SHA-256: $hash
 Corresponding source and external dependency manifests:
 https://download.documentfoundation.org/libreoffice/src/26.2.6/libreoffice-26.2.6.3.tar.xz
