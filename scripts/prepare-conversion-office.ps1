@@ -27,23 +27,33 @@ class HTTPS(urllib.request.HTTPRedirectHandler):
         if not newurl.startswith('https://'): raise OSError('Refused a non-HTTPS redirect')
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 def fetch(index):
-    start, end = index * chunk, min(size, (index + 1) * chunk) - 1
+    first, end = index * chunk, min(size, (index + 1) * chunk) - 1
+    expected = end - first + 1
     part = target.with_name(target.name + '.part-' + str(index))
-    request = urllib.request.Request(url, headers={'Range':f'bytes={start}-{end}', 'Accept-Encoding':'identity', 'User-Agent':'DailyToolkit-pinned-source'})
-    deadline = time.monotonic() + 480
-    with urllib.request.build_opener(HTTPS()).open(request, timeout=45) as response:
-        if response.status != 206 or response.headers.get('Content-Range', '').strip() != f'bytes {start}-{end}/{size}':
-            raise OSError('The official server did not return the exact requested range')
-        with part.open('wb') as output:
-            received = 0
-            while block := response.read(65536):
-                if time.monotonic() > deadline: raise TimeoutError('Official source range exceeded its deadline')
-                received += len(block)
-                if received > end - start + 1: raise OSError('Oversized official source range')
-                output.write(block)
-    if part.stat().st_size != end - start + 1: raise OSError('Incomplete official source range')
-    print('Verified source range', index + 1, 'of 8', flush=True)
-    return part
+    deadline = time.monotonic() + 900
+    for attempt in range(3):
+        received = part.stat().st_size if part.exists() else 0
+        if received > expected: raise OSError('Oversized existing source range')
+        if received == expected: return part
+        start = first + received
+        request = urllib.request.Request(url, headers={'Range':f'bytes={start}-{end}', 'Accept-Encoding':'identity', 'User-Agent':'DailyToolkit-pinned-source'})
+        try:
+            with urllib.request.build_opener(HTTPS()).open(request, timeout=45) as response:
+                if response.status != 206 or response.headers.get('Content-Range', '').strip() != f'bytes {start}-{end}/{size}':
+                    raise RuntimeError('The official server did not return the exact requested range')
+                with part.open('ab') as output:
+                    while block := response.read(65536):
+                        if time.monotonic() > deadline: raise TimeoutError('Official source range exceeded its deadline')
+                        received += len(block)
+                        if received > expected: raise RuntimeError('Oversized official source range')
+                        output.write(block)
+            if part.stat().st_size != expected: raise OSError('Incomplete official source range')
+            print('Received complete source range', index + 1, 'of 8', flush=True)
+            return part
+        except OSError as error:
+            if (isinstance(error, urllib.error.HTTPError) and 400 <= error.code < 500) or attempt == 2 or time.monotonic() >= deadline:
+                raise
+            print('Resuming source range', index + 1, flush=True)
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
     parts = list(pool.map(fetch, range(8)))
 with target.open('wb') as output:
