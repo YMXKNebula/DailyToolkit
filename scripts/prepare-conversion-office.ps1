@@ -18,7 +18,7 @@ $archive = 'https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.
 $sources = @(($archive + 'LibreOffice_26.2.6.3_Win_x86-64.msi'), ($archive + 'LibreOffice_26.2.6_Win_x86-64.msi'), $url)
 $downloaded = $false
 foreach ($candidate in $sources) {
-    & curl.exe --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 120 --output $msi $candidate
+    & curl.exe --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 900 --output $msi $candidate
     if ($LASTEXITCODE -eq 0 -and (Get-FileHash -LiteralPath $msi).Hash.ToLowerInvariant() -eq $hash) {
         $downloaded = $true; $downloadUrl = $candidate; break
     }

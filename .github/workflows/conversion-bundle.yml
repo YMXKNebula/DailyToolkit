@@ -41,7 +41,7 @@ jobs:
           retention-days: 7
   office:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
         with:
