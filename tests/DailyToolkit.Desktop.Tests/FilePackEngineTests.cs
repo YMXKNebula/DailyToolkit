@@ -126,7 +126,19 @@ internal static partial class Program
             foreach (var limit in new[] { 2, 4 })
             {
                 var schedulerEngine = new SevenZipAdapter(enginePath); var sync = new object(); var live = new HashSet<int>(); var peak = 0;
-                schedulerEngine.ProcessStarted += id => { lock (sync) { live.Add(id); peak = Math.Max(peak, live.Count); } };
+                using var releaseStarts = new ManualResetEventSlim();
+                var allStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var initialStarts = 0;
+                schedulerEngine.ProcessStarted += id =>
+                {
+                    lock (sync) { live.Add(id); peak = Math.Max(peak, live.Count); }
+                    var ordinal = Interlocked.Increment(ref initialStarts);
+                    if (ordinal > limit) return;
+                    if (ordinal == limit) allStarted.TrySetResult();
+                    // Keep the initial jobs before commit until cancellation is
+                    // requested; a fixed delay can outlive a fast native job.
+                    releaseStarts.Wait(TimeSpan.FromSeconds(30));
+                };
                 schedulerEngine.ProcessExited += id => { lock (sync) live.Remove(id); };
                 var resources = new PackResourceProbe(() => { lock (sync) return live.ToArray(); });
                 using var resourceCancellation = new CancellationTokenSource();
@@ -134,12 +146,18 @@ internal static partial class Program
                 await using var manager = new FilePackManager(new(Path.Combine(directory.FullName, "parallel-" + limit)), schedulerEngine);
                 await manager.InitializeAsync(); await manager.SavePreferencesAsync(new(limit));
                 var tasks = new List<PackTaskInfo>();
-                for (var index = 0; index < limit + 1; index++)
-                    tasks.Add(await manager.EnqueueAsync(EngineSnapshot(largeEntries, outputs, "parallel-" + limit + "-" + index, PackFormat.SevenZip, PackCompression.Maximum)));
-                Require(manager.Tasks.Count(task => task.State == PackState.Queued) >= 1, "Tasks beyond the concurrent limit did not queue");
-                manager.MoveQueued(tasks[^1].TaskId, -1);
-                await WaitPackStateAsync(manager, tasks[0].TaskId, task => task.State == PackState.Compressing);
-                await Task.Delay(100); await manager.CancelAsync(tasks[0].TaskId);
+                try
+                {
+                    for (var index = 0; index < limit + 1; index++)
+                        tasks.Add(await manager.EnqueueAsync(EngineSnapshot(largeEntries, outputs, "parallel-" + limit + "-" + index, PackFormat.SevenZip, PackCompression.Maximum)));
+                    Require(manager.Tasks.Count(task => task.State == PackState.Queued) >= 1, "Tasks beyond the concurrent limit did not queue");
+                    manager.MoveQueued(tasks[^1].TaskId, -1);
+                    await allStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                    var cancellation = manager.CancelAsync(tasks[0].TaskId);
+                    releaseStarts.Set();
+                    await cancellation;
+                }
+                finally { releaseStarts.Set(); }
                 Require(manager.Tasks.Single(task => task.TaskId == tasks[0].TaskId).State == PackState.Cancelled &&
                     !File.Exists(tasks[0].OutputPath), "Cancellation produced a successful output");
                 foreach (var task in tasks.Skip(1))
