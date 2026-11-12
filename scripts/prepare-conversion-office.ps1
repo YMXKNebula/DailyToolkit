@@ -15,10 +15,45 @@ $msi = Join-Path $work "LibreOffice-$version.msi"
 # Stable mirror entries can disappear when upstream publishes the next patch.
 # Use the fixed official archive first; every candidate must match the same pin.
 $archive = 'https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.6.3/win/x86_64/'
-$sources = @(($archive + 'LibreOffice_26.2.6.3_Win_x86-64.msi'), ($archive + 'LibreOffice_26.2.6_Win_x86-64.msi'), $url)
+$sources = @(($archive + 'LibreOffice_26.2.6.3_Win_x86-64.msi'), $url)
+$downloadCode = @'
+import concurrent.futures, pathlib, shutil, sys, time, urllib.request
+url, destination = sys.argv[1:]
+target = pathlib.Path(destination)
+size = 373252096
+chunk = (size + 7) // 8
+class HTTPS(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not newurl.startswith('https://'): raise OSError('Refused a non-HTTPS redirect')
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+def fetch(index):
+    start, end = index * chunk, min(size, (index + 1) * chunk) - 1
+    part = target.with_name(target.name + '.part-' + str(index))
+    request = urllib.request.Request(url, headers={'Range':f'bytes={start}-{end}', 'Accept-Encoding':'identity', 'User-Agent':'DailyToolkit-pinned-source'})
+    deadline = time.monotonic() + 480
+    with urllib.request.build_opener(HTTPS()).open(request, timeout=45) as response:
+        if response.status != 206 or response.headers.get('Content-Range', '').strip() != f'bytes {start}-{end}/{size}':
+            raise OSError('The official server did not return the exact requested range')
+        with part.open('wb') as output:
+            received = 0
+            while block := response.read(65536):
+                if time.monotonic() > deadline: raise TimeoutError('Official source range exceeded its deadline')
+                received += len(block)
+                if received > end - start + 1: raise OSError('Oversized official source range')
+                output.write(block)
+    if part.stat().st_size != end - start + 1: raise OSError('Incomplete official source range')
+    print('Verified source range', index + 1, 'of 8', flush=True)
+    return part
+with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+    parts = list(pool.map(fetch, range(8)))
+with target.open('wb') as output:
+    for part in parts:
+        with part.open('rb') as source: shutil.copyfileobj(source, output, 1048576)
+if target.stat().st_size != size: raise OSError('Incomplete official source archive')
+'@
 $downloaded = $false
 foreach ($candidate in $sources) {
-    & curl.exe --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 900 --output $msi $candidate
+    & python -c $downloadCode $candidate $msi
     if ($LASTEXITCODE -eq 0 -and (Get-FileHash -LiteralPath $msi).Hash.ToLowerInvariant() -eq $hash) {
         $downloaded = $true; $downloadUrl = $candidate; break
     }
