@@ -23,6 +23,10 @@ internal static partial class Program
         var noteData = (Border)notes.FindName("DataManagementCard");
         var clipboardData = (Border)clipboard.FindName("DataManagementCard");
         var lens = (Border)window.FindName("LensSettingsCard");
+        var lensColor = (LensColorPicker)window.FindName("LensFrameColor");
+        var customLensColor = (Button)lensColor.FindName("CustomColorButton");
+        var lensMenu = customLensColor.ContextMenu!;
+        lensMenu.PlacementTarget = customLensColor;
         var more = (Button)clipboard.FindName("DataManagementMoreButton");
         var menu = more.ContextMenu!;
         menu.PlacementTarget = more;
@@ -47,7 +51,8 @@ internal static partial class Program
                 $"Enabled {page.Id} settings were inaccessible");
             foreach (var control in controls) states[control] = control.IsEnabled;
         }
-        Require(reset.IsEnabled && noteReset.IsEnabled, "Enabled tools could not reset their settings");
+        Require(reset.IsEnabled && noteReset.IsEnabled && lensMenu.IsEnabled, "Enabled tools could not reset their settings");
+        model.Gaming.PreviewBorderColor = "#8350A4";
         model.Notes.PreviewBackgroundColor = "#8350A4";
         var noteColor = model.Notes.Preferences.Background.Color;
         var clipboardColor = model.ClipRecall.Appearance;
@@ -67,7 +72,7 @@ internal static partial class Program
         }
         model.Page = "screen-lens";
         Require(!model.RefreshCommand.CanExecute(null), "Disabled magnifier allowed refreshing its configuration");
-        Require(!reset.IsEnabled && !noteReset.IsEnabled && recovery.All(item => item.IsEnabled) &&
+        Require(!reset.IsEnabled && !noteReset.IsEnabled && !lensMenu.IsEnabled && recovery.All(item => item.IsEnabled) &&
             noteActions.Where(button => !ReferenceEquals(button, noteReset)).All(button => button.IsEnabled),
             "Disabling settings blocked recovery/data actions or left a reset entry available");
 
@@ -95,7 +100,8 @@ internal static partial class Program
         model.Page = "screen-lens";
         Require(model.RefreshCommand.CanExecute(null) && reset.IsEnabled && noteReset.IsEnabled &&
             model.ClipRecall.Appearance == clipboardColor && model.ClipRecall.AppearanceColors.First().Value == clipboardDraft &&
-            model.FilePack.SelectedAppearance.Options.First().Value == packDraft && model.Notes.HasColorChanges,
+            model.FilePack.SelectedAppearance.Options.First().Value == packDraft && model.Notes.HasColorChanges &&
+            model.Gaming.PreviewBorderColor == "#8350A4" && model.Gaming.HasBorderColorChanges,
             "Toggle cycle failed to restore settings access or preserved drafts were applied/discarded");
         await SetEnabledAsync(false);
         Console.WriteLine("PASS All disabled tools lock settings, shortcuts, resets and presets; navigation, data recovery, draft retention and re-enable remain available; light/dark 100/150/200% renders retained");
