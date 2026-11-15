@@ -129,7 +129,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             if (IsSettings && !IsHome || ShowFilePack || ShowConversion) return;
             if (ShowScreenLens) Gaming.RefreshMonitors(); else _ = InitializeAsync();
-        }, () => !ShowFilePack && !ShowConversion && (!IsSettings || IsHome) && (ShowScreenLens ? Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus));
+        }, () => !ShowFilePack && !ShowConversion && (!IsSettings || IsHome) && (ShowScreenLens ? Gaming.IsEnabled && Gaming.CanConfigure : !IsRefreshing && !_isReadingStatus));
         Gaming.PropertyChanged += OnGamingChanged;
         Notes.PropertyChanged += OnNotesChanged;
         ClipRecall.PropertyChanged += OnClipRecallChanged;
@@ -142,7 +142,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void OnGamingChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(GamingViewModel.IsActive)) { RefreshCommand.Refresh(); Notify(nameof(FooterStatusText)); }
-        if (e.PropertyName == nameof(GamingViewModel.IsEnabled)) { _navigation[0].IsEnabled=Gaming.IsEnabled; Notify(nameof(FooterStatusText)); }
+        if (e.PropertyName == nameof(GamingViewModel.IsEnabled)) { _navigation[0].IsEnabled=Gaming.IsEnabled; RefreshCommand.Refresh(); Notify(nameof(FooterStatusText)); }
         if (e.PropertyName != nameof(GamingViewModel.IsFavorite)) return;
         if (Gaming.IsFavorite) _favoriteIds.Add("screen-lens"); else _favoriteIds.Remove("screen-lens");
         if (!_favoritesStore.Save(_favoriteIds)) Notice="收藏未能保存，退出后会丢失。";

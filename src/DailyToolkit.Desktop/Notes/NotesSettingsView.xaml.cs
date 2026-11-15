@@ -154,7 +154,7 @@ public partial class NotesSettingsView : UserControl
     }
     private async void SaveNow(object sender, RoutedEventArgs e)
     {
-        if (_model is null || _model.HasColorChanges && !await _model.SaveColorDraftAsync()) return;
+        if (_model is null || _model.IsEnabled && _model.HasColorChanges && !await _model.SaveColorDraftAsync()) return;
         if (await _model.FlushAsync()) _model.Notice = "";
     }
     private async void ExportText(object sender, RoutedEventArgs e)

@@ -87,6 +87,7 @@ internal static partial class Program
             model.Page = "screen-lens"; await LayoutAsync();
             model.Page = "file-pack"; await LayoutAsync();
             Require(ReferenceEquals(packHost.Content, pack), "Revisiting FilePack recreated its settings session");
+            await CheckDisabledToolSettingsAsync(model, window, notes, clipboard!, pack);
             Console.WriteLine("PASS Unvisited settings remain unconstructed without disabled database initialization; first navigation, layout and repeated input/palette/scroll sessions survive hide and return");
         }
         finally
