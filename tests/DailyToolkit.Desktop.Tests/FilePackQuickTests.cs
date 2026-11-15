@@ -356,7 +356,7 @@ internal static partial class Program
     private static void CheckFilePackSettingsTheme(FilePackSettingsView view, ThemePalette palette)
     {
         var scroll = (ScrollViewer)view.Content;
-        var card = FilePackDescendants(view).OfType<Border>().First(value => ReferenceEquals(value.Style, view.FindResource("Card")));
+        var card = FilePackDescendants(view).OfType<Border>().First(value => ReferenceEquals(value.Style, view.FindResource("FeatureSettingsCard")));
         Require((scroll.Background is null || scroll.Background == Brushes.Transparent) &&
             ((SolidColorBrush)card.Background).Color == (Color)ColorConverter.ConvertFromString(palette.Surface) &&
             ((SolidColorBrush)view.Foreground).Color == (Color)ColorConverter.ConvertFromString(palette.Text),

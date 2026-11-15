@@ -64,8 +64,12 @@ internal static partial class Program
         foreach (var page in pages)
         {
             model.Page = page.Id; await LayoutAsync();
-            Require(SettingsControls(page.View, page.Data).All(control => !control.IsEnabled),
-                $"Disabled {page.Id} still allowed editing through a setting, shortcut or preset");
+            var editable = SettingsControls(page.View, page.Data).Where(control => control.IsEnabled).ToArray();
+            Require(editable.Length == 0,
+                $"Disabled {page.Id} still allowed editing: {string.Join(", ", editable.Select(control => $"{control.GetType().Name}/{control.Name}"))}");
+            if (page.View is not Border)
+                Require(FilePackDescendants(page.View).OfType<ScrollViewer>().First().IsEnabled,
+                    $"Disabled {page.Id} blocked page scrolling");
             Require(FilePackDescendants((ItemsControl)window.FindName("NavigationList")).OfType<FeatureSwitch>()
                 .Where(control => control.DataContext is NavigationItem { CanToggle: true }).All(control => control.IsEnabled) &&
                 ((Button)window.FindName("ToolFavoriteButton")).IsEnabled, "Disabling settings blocked re-enabling or favorites");
@@ -163,6 +167,9 @@ internal static partial class Program
     private static IEnumerable<Control> SettingsControls(DependencyObject view, DependencyObject? data)
     {
         var excluded = data is null ? new HashSet<DependencyObject>() : FilePackDescendants(data).ToHashSet();
+        // Scrollbar arrows remain available for navigating disabled settings.
+        foreach (var scrollbar in FilePackDescendants(view).OfType<ScrollBar>())
+            excluded.UnionWith(FilePackDescendants(scrollbar));
         return FilePackDescendants(view).OfType<Control>()
             .Where(control => !excluded.Contains(control) && control is ButtonBase or TextBox or Selector or Slider);
     }
