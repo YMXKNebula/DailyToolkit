@@ -17,7 +17,7 @@
  <Grid x:Name="SettingsLayout" SizeChanged="SettingsSizeChanged" IsEnabled="{Binding IsLoaded}">
   <ScrollViewer x:Name="SettingsScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
    <StackPanel Margin="0,0,8,0">
-    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+    <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
      <Grid>
       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -41,7 +41,7 @@
      </WrapPanel>
      <TextBlock Text="{Binding Status}" Foreground="{DynamicResource MutedBrush}"/>
     </StackPanel></Border>
-    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+    <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
      <TextBlock Text="位置" FontWeight="SemiBold" Margin="0,0,0,10"/>
      <WrapPanel Margin="0,0,0,12">
       <RadioButton x:Name="NotesFixedMode" Content="固定" GroupName="NotesMovement" IsChecked="{Binding IsFixedMode, Mode=TwoWay}" Margin="0,0,18,0"/>
@@ -56,7 +56,7 @@
      <Button Content="重置位置" Click="ResetPosition" HorizontalAlignment="Left"/>
      <TextBlock Text="宽高填写整数。" Style="{StaticResource MutedText}" Margin="0,12,0,0"/>
     </StackPanel></Border>
-    <Border x:Name="AppearanceCard" Style="{StaticResource Card}" Margin="0,0,0,12">
+    <Border x:Name="AppearanceCard" Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12">
      <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
       <TextBlock Text="外观" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14"/>
       <Grid x:Name="AppearanceLayout" Grid.Row="1" SizeChanged="AppearanceSizeChanged">
@@ -123,10 +123,10 @@
       </Grid>
      </Grid>
     </Border>
-    <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+    <Border x:Name="DataManagementCard" Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
      <TextBlock Text="数据管理" FontWeight="SemiBold" Margin="0,0,0,12"/>
      <WrapPanel><Button Content="立即保存" Click="SaveNow" Margin="0,0,8,8"/><Button Content="导出文本" Click="ExportText" Margin="0,0,8,8"/>
-      <Button Content="打开数据目录" Click="OpenDirectory" Margin="0,0,8,8"/><Button Content="恢复默认设置" Click="ResetSettings" Margin="0,0,8,8"/></WrapPanel>
+      <Button Content="打开数据目录" Click="OpenDirectory" Margin="0,0,8,8"/><Button Content="恢复默认设置" Click="ResetSettings" IsEnabled="{Binding IsEnabled}" Margin="0,0,8,8"/></WrapPanel>
      <TextBlock Text="恢复设置保留正文。" Style="{StaticResource MutedText}"/>
      <TextBlock Text="{Binding Notice}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" Margin="0,12,0,0"/>
     </StackPanel></Border>

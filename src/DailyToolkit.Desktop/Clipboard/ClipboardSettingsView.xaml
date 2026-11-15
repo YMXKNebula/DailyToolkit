@@ -10,7 +10,7 @@
  </UserControl.Resources>
  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
   <StackPanel Margin="0,0,8,0" IsEnabled="{Binding IsLoaded}">
-   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+   <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="剪贴回溯" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
     <TextBlock Text="开启后自动记录剪贴板。" Style="{StaticResource MutedText}"/>
     <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" Margin="0,8,0,0"/>
@@ -26,7 +26,7 @@
     <CheckBox Content="重新复制时加入 Win+V 历史" IsChecked="{Binding IncludeRestoredInWindowsHistory}" Margin="0,16,0,0"/>
     <TextBlock Text="是否收录取决于 Windows；不允许云同步。" Style="{StaticResource MutedText}" Margin="0,8,0,0"/>
    </StackPanel></Border>
-   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+   <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="历史面板配色" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
     <TextBlock Text="自定义颜色保存后应用。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
     <ItemsControl ItemsSource="{Binding AppearancePresets}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -58,7 +58,7 @@
      </Grid></DataTemplate></ItemsControl.ItemTemplate>
     </ItemsControl></Expander>
    </StackPanel></Border>
-   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+   <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="普通历史容量" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
     <WrapPanel><StackPanel Margin="0,0,16,12"><TextBlock Text="最多条数"/><TextBox Text="{Binding MaximumRecords, UpdateSourceTrigger=LostFocus}" Width="100" Margin="0,6,0,0"/></StackPanel>
      <StackPanel Margin="0,0,16,12"><TextBlock Text="保留天数"/><TextBox Text="{Binding RetentionDays, UpdateSourceTrigger=LostFocus}" Width="100" Margin="0,6,0,0"/></StackPanel>
@@ -68,7 +68,7 @@
     </WrapPanel>
     <TextBlock Text="永久保存项不自动清理，置顶项仍会清理。" Style="{StaticResource MutedText}"/>
    </StackPanel></Border>
-   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+   <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="文件夹缓存" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
     <DockPanel>
      <controls:FeatureSwitch x:Name="FileCacheSwitch" DockPanel.Dock="Right" IsOn="{Binding UseCachedFiles, Mode=TwoWay}"
@@ -84,7 +84,7 @@
     </WrapPanel>
     <TextBlock Text="缓存加密保存，复制时生成未加密副本。最后使用满 24 小时后，运行期间清理。关闭开关保留已有缓存。" Style="{StaticResource MutedText}"/>
    </StackPanel></Border>
-   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+   <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="隐私与排除应用" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
     <CheckBox Content="暂停监听" IsChecked="{Binding IsPaused}" IsEnabled="{Binding IsEnabled}" Margin="0,0,0,12"/>
     <TextBlock Text="排除应用：每行一个进程名，如 KeePass.exe。来源不明时无法排除。" Style="{StaticResource MutedText}" Margin="0,0,0,8"/>
@@ -104,7 +104,7 @@
        <Separator/>
        <MenuItem Header="打开数据目录" Click="OpenDirectory"/><MenuItem Header="创建加密备份" Click="Backup"/><MenuItem Header="恢复最近备份" Click="RestoreBackup"/>
        <Separator/>
-       <MenuItem Header="重试保存设置" Click="SaveSettings"/><MenuItem Header="恢复默认设置" Click="ResetSettings"/>
+       <MenuItem Header="重试保存设置" Click="SaveSettings"/><MenuItem Header="恢复默认设置" Click="ResetSettings" IsEnabled="{Binding IsEnabled}"/>
       </ContextMenu></Button.ContextMenu>
      </Button>
     </WrapPanel>

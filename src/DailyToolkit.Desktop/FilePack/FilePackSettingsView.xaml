@@ -7,7 +7,7 @@
  </UserControl.Resources>
  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
   <StackPanel Margin="0,0,8,0" IsEnabled="{Binding SettingsLoaded}">
-   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+   <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="文件集装箱" Style="{StaticResource SectionTitle}"/>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <TextBlock Text="打开窗口快捷键" VerticalAlignment="Center"/>
@@ -22,7 +22,7 @@
     </WrapPanel>
     <WrapPanel Margin="0,12,0,0"><Button Content="快速装载" Command="{Binding OpenQuickWindowCommand}" Margin="0,0,8,8"/><Button Content="详细打包" Command="{Binding OpenPackWindowCommand}" Margin="0,0,0,8"/></WrapPanel>
    </StackPanel></Border>
-   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+   <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="快捷打包" Style="{StaticResource SectionTitle}"/>
     <WrapPanel>
      <StackPanel Margin="0,0,16,12"><TextBlock Text="文件名"/><TextBox Text="{Binding QuickArchiveName, UpdateSourceTrigger=LostFocus}" Width="200" Margin="0,6,0,0"/></StackPanel>
@@ -32,12 +32,12 @@
     <TextBlock Text="保存位置"/><Grid Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding QuickOutputDirectory, UpdateSourceTrigger=LostFocus}"/><Button Grid.Column="1" Content="选择" Command="{Binding BrowseQuickOutputCommand}" Margin="8,0,0,0"/></Grid>
     <TextBlock Text="默认按压缩完成时间命名，精确到分钟。同名文件自动更名。" Style="{StaticResource MutedText}" Margin="0,8,0,0"/>
    </StackPanel></Border>
-   <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel>
+   <Border Style="{StaticResource FeatureSettingsCard}" Margin="0,0,0,12"><StackPanel>
     <TextBlock Text="右键菜单" Style="{StaticResource SectionTitle}"/>
     <CheckBox x:Name="ContextMenuCheck" Content="加入“显示更多选项”" Click="ChangeContextMenu"/>
     <TextBlock Text="Windows 11 第一层菜单暂不支持。" Style="{StaticResource MutedText}" Margin="0,8,0,0"/>
    </StackPanel></Border>
-   <Border Style="{StaticResource Card}"><StackPanel>
+   <Border Style="{StaticResource FeatureSettingsCard}"><StackPanel>
     <TextBlock Text="窗口配色" Style="{StaticResource SectionTitle}" Margin="0,0,0,6"/>
     <TextBlock Text="快速装载与详细打包共用此配色。" Style="{StaticResource MutedText}" Margin="0,0,0,12"/>
     <StackPanel DataContext="{Binding SelectedAppearance}">

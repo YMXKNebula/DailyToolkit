@@ -40,6 +40,9 @@
       <Setter Property="SnapsToDevicePixels" Value="True" />
       <Setter Property="RenderOptions.ClearTypeHint" Value="Enabled" />
     </Style>
+    <Style x:Key="FeatureSettingsCard" TargetType="Border" BasedOn="{StaticResource Card}">
+      <Setter Property="IsEnabled" Value="{Binding IsEnabled, Mode=OneWay}" />
+    </Style>
     <Style TargetType="Button">
       <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
       <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
@@ -118,6 +121,7 @@
                 <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                 <Setter Property="FontWeight" Value="SemiBold" />
               </Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
